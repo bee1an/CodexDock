@@ -1,5 +1,6 @@
 import { mount } from 'svelte'
 import 'virtual:uno.css'
+import './assets/main.css'
 
 import App from './App.svelte'
 

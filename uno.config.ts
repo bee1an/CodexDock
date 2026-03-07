@@ -14,11 +14,11 @@ export default defineConfig({
   ],
   theme: {
     colors: {
-      paper: '#f6f6f3',
-      ink: '#111111',
-      success: '#1f7a4c',
-      warn: '#9a6a14',
-      danger: '#b42318'
+      paper: 'var(--paper)',
+      ink: 'var(--ink)',
+      success: 'var(--success)',
+      warn: 'var(--warn)',
+      danger: 'var(--danger)'
     },
     fontFamily: {
       ui: '"SF Pro Display","Segoe UI Variable","Avenir Next","PingFang SC","Hiragino Sans GB",sans-serif',

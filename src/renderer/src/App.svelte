@@ -2,6 +2,9 @@
   import { onMount } from 'svelte'
 
   import type {
+    AppLanguage,
+    AppMeta,
+    AppTheme,
     AccountRateLimitEntry,
     AccountRateLimits,
     AccountSummary,
@@ -17,20 +20,127 @@
     loginInProgress: false,
     settings: {
       usagePollingMinutes: 15,
-      statusBarAccountIds: []
+      statusBarAccountIds: [],
+      language: 'zh-CN',
+      theme: 'light'
     },
     usageByAccountId: {}
   }
+  let appMeta: AppMeta = {
+    version: '--',
+    githubUrl: null
+  }
   let loginEvent: LoginEvent | null = null
-  let activeLoginMethod: LoginMethod | null = null
+  let loginStarting = false
   let pageError = ''
   let showSettings = false
   let usageByAccountId: Record<string, AccountRateLimits> = {}
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
   const pollingOptions = [5, 15, 30, 60]
+  const languageOptions: Array<{ value: AppLanguage; label: string }> = [
+    { value: 'zh-CN', label: '中文' },
+    { value: 'en', label: 'English' }
+  ]
+  const messages = {
+    'zh-CN': {
+      unnamedAccount: '未命名账号',
+      actionFailed: '操作失败',
+      startLoginFailed: '无法启动登录流程',
+      readRateLimitFailed: '无法读取账号限额',
+      removeConfirm: (label: string) => `删除 ${label} 的本地保存登录态？`,
+      browserLogin: '浏览器登录',
+      importCurrent: '导入当前登录',
+      switchBest: '切换到最优账号',
+      alreadyBest: '当前已是最优账号',
+      noBestAccount: '暂无可切换账号',
+      switchToAccount: (email: string) => `切换到 ${email}`,
+      settings: '设置',
+      pollingInterval: '额度轮询',
+      minutes: '分钟',
+      browserLoginLink: '浏览器登录链接',
+      copyLink: '复制链接',
+      openBrowser: '打开浏览器',
+      openMainPanel: '打开主面板',
+      waitingCallback: '等待浏览器完成授权并回调本地地址。',
+      statusBarAccountCount: (count: number) => `${count} 个状态栏账号`,
+      noStatusBarAccounts: '还没有可显示的账号。',
+      statusBarDisplayAccounts: '状态栏显示账号',
+      maxFiveAccounts: '最多 5 个',
+      visible: '已显示',
+      hidden: '未显示',
+      accountCount: (count: number) => `${count} 个账号`,
+      active: '当前',
+      sessionQuota: '5小时',
+      weeklyQuota: '周限额',
+      sessionReset: '5小时重置',
+      weeklyReset: '周限额重置',
+      openCodex: '打开 Codex',
+      switchAccount: '切换账号',
+      refreshQuota: '刷新额度',
+      refreshQuotaBlocked: (minutes: number) => `${minutes} 分钟内不重复请求`,
+      deleteSaved: '删除保存',
+      noSavedAccounts: '还没有保存任何账号。先导入当前登录，或者走一次新的浏览器登录。',
+      switchLanguage: '切换语言',
+      switchTheme: (current: string) => `切换主题，当前${current}`,
+      openGithub: '打开 GitHub',
+      githubPending: 'GitHub 链接待配置',
+      lightTheme: '浅色主题',
+      darkTheme: '深色主题',
+      systemTheme: '跟随系统'
+    },
+    en: {
+      unnamedAccount: 'Unnamed account',
+      actionFailed: 'Action failed',
+      startLoginFailed: 'Unable to start login flow',
+      readRateLimitFailed: 'Unable to read account limits',
+      removeConfirm: (label: string) => `Remove the saved local session for ${label}?`,
+      browserLogin: 'Browser login',
+      importCurrent: 'Import current login',
+      switchBest: 'Switch to best account',
+      alreadyBest: 'Already using best account',
+      noBestAccount: 'No account to switch to',
+      switchToAccount: (email: string) => `Switch to ${email}`,
+      settings: 'Settings',
+      pollingInterval: 'Usage polling',
+      minutes: 'min',
+      browserLoginLink: 'Browser login URL',
+      copyLink: 'Copy link',
+      openBrowser: 'Open browser',
+      openMainPanel: 'Open main panel',
+      waitingCallback: 'Waiting for the browser to finish authorization and call back locally.',
+      statusBarAccountCount: (count: number) =>
+        `${count} menu bar account${count === 1 ? '' : 's'}`,
+      noStatusBarAccounts: 'No account selected for the menu bar.',
+      statusBarDisplayAccounts: 'Menu bar accounts',
+      maxFiveAccounts: 'Up to 5 accounts',
+      visible: 'Shown',
+      hidden: 'Hidden',
+      accountCount: (count: number) => `${count} account${count === 1 ? '' : 's'}`,
+      active: 'Active',
+      sessionQuota: 'Session',
+      weeklyQuota: 'Weekly',
+      sessionReset: 'Session resets',
+      weeklyReset: 'Weekly resets',
+      openCodex: 'Open Codex',
+      switchAccount: 'Switch account',
+      refreshQuota: 'Refresh usage',
+      refreshQuotaBlocked: (minutes: number) => `No repeat request within ${minutes} min`,
+      deleteSaved: 'Delete saved login',
+      noSavedAccounts:
+        'No saved accounts yet. Import the current login or start a new browser login.',
+      switchLanguage: 'Switch language',
+      switchTheme: (current: string) => `Switch theme, current ${current}`,
+      openGithub: 'Open GitHub',
+      githubPending: 'GitHub link not configured',
+      lightTheme: 'Light theme',
+      darkTheme: 'Dark theme',
+      systemTheme: 'System theme'
+    }
+  } as const
   const isTrayView =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tray') === '1'
+  let prefersDark = false
   const bodyClasses = [
     'm-0',
     'min-h-screen',
@@ -40,25 +150,78 @@
     'antialiased'
   ]
 
-  const heroClass = 'rounded-[1rem] border border-black/8 bg-white p-4 sm:p-5'
-  const panelClass = 'rounded-[1rem] border border-black/8 bg-white p-5'
+  const heroClass = 'theme-surface rounded-[1rem] border border-black/8 bg-white p-4 sm:p-5'
+  const panelClass = 'theme-surface rounded-[1rem] border border-black/8 bg-white p-5'
   const compactGhostButton =
-    'inline-flex items-center justify-center rounded-md border border-black/10 bg-transparent px-3 py-2 text-sm font-medium text-ink transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
+    'theme-ghost-button inline-flex items-center justify-center rounded-md border border-black/10 bg-transparent px-3 py-2 text-sm font-medium text-ink transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const iconToolbarButton =
-    'inline-flex h-8 w-8 appearance-none items-center justify-center border-0 rounded-md bg-transparent p-0 text-ink outline-none shadow-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
+    'theme-icon-button inline-flex h-8 w-8 appearance-none items-center justify-center border-0 rounded-md bg-transparent p-0 text-ink outline-none shadow-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const iconRowButton =
-    'inline-flex h-7 w-7 appearance-none items-center justify-center border-0 rounded-md bg-transparent p-0 text-black/68 outline-none shadow-none transition-colors duration-140 hover:bg-black/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-40'
+    'theme-row-button inline-flex h-7 w-7 appearance-none items-center justify-center border-0 rounded-md bg-transparent p-0 text-black/68 outline-none shadow-none transition-colors duration-140 hover:bg-black/[0.05] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-40'
   const dragRegionStyle = '-webkit-app-region: drag; app-region: drag;'
+
+  const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
+  const resolvedTheme = (theme: AppTheme): 'light' | 'dark' =>
+    theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme
+
+  const applyTheme = (theme: AppTheme): void => {
+    if (typeof document === 'undefined') {
+      return
+    }
+
+    const nextTheme = resolvedTheme(theme)
+    document.documentElement.dataset.theme = nextTheme
+    document.documentElement.style.colorScheme = nextTheme
+  }
 
   const refreshSnapshot = async (): Promise<void> => {
     applySnapshot(await window.codexApp.getSnapshot())
   }
 
+  const themeIconClass = (theme: AppTheme): string => {
+    switch (theme) {
+      case 'dark':
+        return 'i-lucide-moon-star'
+      case 'system':
+        return 'i-lucide-monitor'
+      default:
+        return 'i-lucide-sun-medium'
+    }
+  }
+
+  const themeTitle = (theme: AppTheme): string => {
+    const copy = copyForLanguage()
+
+    switch (theme) {
+      case 'dark':
+        return copy.darkTheme
+      case 'system':
+        return copy.systemTheme
+      default:
+        return copy.lightTheme
+    }
+  }
+
+  const nextTheme = (theme: AppTheme): AppTheme => {
+    switch (theme) {
+      case 'light':
+        return 'dark'
+      case 'dark':
+        return 'system'
+      default:
+        return 'light'
+    }
+  }
+
+  const refreshAppMeta = async (): Promise<void> => {
+    appMeta = await window.codexApp.getAppMeta()
+  }
+
   const accountLabel = (account: Pick<AccountSummary, 'name' | 'email' | 'accountId'>): string =>
-    account.name ?? account.email ?? account.accountId ?? '未命名账号'
+    account.name ?? account.email ?? account.accountId ?? copyForLanguage().unnamedAccount
 
   const accountEmail = (account: Pick<AccountSummary, 'name' | 'email' | 'accountId'>): string =>
-    account.email ?? account.name ?? account.accountId ?? '未命名账号'
+    account.email ?? account.name ?? account.accountId ?? copyForLanguage().unnamedAccount
 
   const planLabel = (planType?: string | null): string => {
     switch ((planType ?? '').toLowerCase()) {
@@ -82,19 +245,19 @@
   const planTagClass = (planType?: string | null): string => {
     switch ((planType ?? '').toLowerCase()) {
       case 'free':
-        return 'bg-black/[0.05] text-black/55'
+        return 'theme-plan-neutral bg-black/[0.05] text-black/55'
       case 'plus':
-        return 'bg-emerald-500/12 text-emerald-700'
+        return 'theme-plan-plus bg-emerald-500/12 text-emerald-700'
       case 'pro':
-        return 'bg-sky-500/12 text-sky-700'
+        return 'theme-plan-pro bg-sky-500/12 text-sky-700'
       case 'team':
-        return 'bg-amber-500/14 text-amber-700'
+        return 'theme-plan-team bg-amber-500/14 text-amber-700'
       case 'business':
-        return 'bg-violet-500/14 text-violet-700'
+        return 'theme-plan-business bg-violet-500/14 text-violet-700'
       case 'enterprise':
-        return 'bg-rose-500/14 text-rose-700'
+        return 'theme-plan-enterprise bg-rose-500/14 text-rose-700'
       default:
-        return 'bg-black/[0.05] text-black/55'
+        return 'theme-plan-neutral bg-black/[0.05] text-black/55'
     }
   }
 
@@ -111,7 +274,9 @@
   }
 
   const accountCardTone = (active: boolean): string =>
-    active ? 'border-black/20 ring-1 ring-black/5' : 'border-black/8'
+    active
+      ? 'theme-account-card theme-account-card-active border-black/14 bg-black/[0.02]'
+      : 'theme-account-card border-black/8 bg-white'
 
   const progressWidth = (value?: number | null): string => `${remainingPercent(value)}%`
 
@@ -196,6 +361,7 @@
 
   const applySnapshot = (nextSnapshot: AppSnapshot): void => {
     snapshot = nextSnapshot
+    applyTheme(nextSnapshot.settings.theme)
     usageByAccountId = {
       ...nextSnapshot.usageByAccountId
     }
@@ -221,26 +387,26 @@
     try {
       applySnapshot(await task())
     } catch (error) {
-      pageError = error instanceof Error ? error.message : '操作失败'
+      pageError = error instanceof Error ? error.message : copyForLanguage().actionFailed
     }
   }
 
   const startLogin = async (method: LoginMethod): Promise<void> => {
     pageError = ''
     loginEvent = null
-    activeLoginMethod = method
+    loginStarting = true
 
     try {
       await window.codexApp.startLogin(method)
       applySnapshot(await window.codexApp.getSnapshot())
     } catch (error) {
-      activeLoginMethod = null
-      pageError = error instanceof Error ? error.message : '无法启动登录流程'
+      loginStarting = false
+      pageError = error instanceof Error ? error.message : copyForLanguage().startLoginFailed
     }
   }
 
   const removeAccount = async (account: AccountSummary): Promise<void> => {
-    if (!window.confirm(`删除 ${accountLabel(account)} 的本地保存登录态？`)) {
+    if (!window.confirm(copyForLanguage().removeConfirm(accountLabel(account)))) {
       return
     }
 
@@ -255,16 +421,8 @@
     await navigator.clipboard.writeText(value)
   }
 
-  const copyDeviceCode = async (): Promise<void> => {
-    await copyText(loginEvent?.deviceCode)
-  }
-
   const copyAuthUrl = async (): Promise<void> => {
     await copyText(loginEvent?.authUrl)
-  }
-
-  const copyVerificationUrl = async (): Promise<void> => {
-    await copyText(loginEvent?.verificationUrl)
   }
 
   const openExternalLink = (url?: string): void => {
@@ -302,7 +460,7 @@
     } catch (error) {
       usageErrorByAccountId = {
         ...usageErrorByAccountId,
-        [account.id]: error instanceof Error ? error.message : '无法读取账号限额'
+        [account.id]: error instanceof Error ? error.message : copyForLanguage().readRateLimitFailed
       }
     } finally {
       clearUsageLoading(account.id)
@@ -328,6 +486,23 @@
     )
   }
 
+  const updateLanguage = async (language: AppLanguage): Promise<void> => {
+    if (snapshot.settings.language === language) {
+      return
+    }
+
+    await runAction('settings:language', () => window.codexApp.updateSettings({ language }))
+  }
+
+  const updateTheme = async (theme: AppTheme): Promise<void> => {
+    if (snapshot.settings.theme === theme) {
+      return
+    }
+
+    applyTheme(theme)
+    await runAction('settings:theme', () => window.codexApp.updateSettings({ theme }))
+  }
+
   const toggleStatusAccount = async (accountId: string): Promise<void> => {
     const nextIds = snapshot.settings.statusBarAccountIds.includes(accountId)
       ? snapshot.settings.statusBarAccountIds.filter((id) => id !== accountId)
@@ -347,8 +522,19 @@
   }
 
   onMount(() => {
+    const darkMedia = window.matchMedia('(prefers-color-scheme: dark)')
+    prefersDark = darkMedia.matches
     document.body.classList.add(...bodyClasses)
+    applyTheme(snapshot.settings.theme)
     void refreshSnapshot()
+    void refreshAppMeta()
+
+    const handleThemeChange = (event: MediaQueryListEvent): void => {
+      prefersDark = event.matches
+      applyTheme(snapshot.settings.theme)
+    }
+
+    darkMedia.addEventListener('change', handleThemeChange)
 
     const disposeSnapshot = window.codexApp.onSnapshotUpdated((nextSnapshot) => {
       applySnapshot(nextSnapshot)
@@ -356,17 +542,12 @@
 
     const disposeLogin = window.codexApp.onLoginEvent((event) => {
       loginEvent = event
-      const resolvedLoginSurface =
-        (event.method === 'browser' && Boolean(event.authUrl)) ||
-        (event.method === 'device' && Boolean(event.verificationUrl || event.deviceCode))
-
-      activeLoginMethod =
+      loginStarting = !(
         event.phase === 'success' ||
         event.phase === 'error' ||
         event.phase === 'cancelled' ||
-        resolvedLoginSurface
-          ? null
-          : event.method
+        (event.method === 'browser' && Boolean(event.authUrl))
+      )
 
       if (event.snapshot) {
         applySnapshot(event.snapshot)
@@ -378,6 +559,9 @@
 
     return () => {
       document.body.classList.remove(...bodyClasses)
+      delete document.documentElement.dataset.theme
+      document.documentElement.style.removeProperty('color-scheme')
+      darkMedia.removeEventListener('change', handleThemeChange)
       disposeSnapshot()
       disposeLogin()
     }
@@ -388,29 +572,33 @@
   <title>Ilovecodex</title>
 </svelte:head>
 
-<div class={`min-h-screen ${isTrayView ? 'bg-transparent' : 'border-t border-black/5'}`}>
+<div class={`app-shell ${isTrayView ? 'min-h-screen' : 'h-screen overflow-hidden'} flex flex-col`}>
   {#if !isTrayView}
     <div class="h-7 w-full select-none sm:h-8" style={dragRegionStyle} aria-hidden="true"></div>
   {/if}
 
   <div
-    class={`mx-auto grid gap-4 ${isTrayView ? 'max-w-[420px] px-3 pb-3 pt-2' : 'max-w-6xl px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-5 lg:px-8 lg:pb-8'}`}
+    class={`mx-auto ${isTrayView ? 'grid gap-4 max-w-[420px] px-3 pb-3 pt-2' : 'flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-5 lg:px-8 lg:pb-8'}`}
   >
     {#if isTrayView}
       <section
-        class="grid gap-3 overflow-hidden rounded-[1.05rem] border border-black/[0.08] bg-white/66 p-3.5 backdrop-blur-2xl"
+        class="theme-tray-panel grid gap-3 overflow-hidden rounded-[1.05rem] border border-black/[0.08] bg-white/66 p-3.5 backdrop-blur-2xl"
       >
         <div class="flex items-center justify-between gap-3">
           <div class="min-w-0">
             <p class="text-sm font-medium text-ink">Ilovecodex</p>
-            <p class="text-xs text-black/38">{statusBarAccounts().length} 个状态栏账号</p>
+            <p class="text-xs text-faint">
+              {copyForLanguage().statusBarAccountCount(statusBarAccounts().length)}
+            </p>
           </div>
-          <button class={compactGhostButton} on:click={openMainPanel}>打开主面板</button>
+          <button class={compactGhostButton} on:click={openMainPanel}>
+            {copyForLanguage().openMainPanel}
+          </button>
         </div>
 
         {#if pageError}
           <div
-            class="rounded-xl border border-danger/18 bg-danger/4 px-3 py-2.5 text-sm text-danger"
+            class="theme-error-panel rounded-xl border border-danger/18 px-3 py-2.5 text-sm text-danger"
           >
             {pageError}
           </div>
@@ -419,10 +607,10 @@
         <div class="grid gap-2">
           {#if statusBarAccounts().length}
             {#each statusBarAccounts() as account (account.id)}
-              <article class="grid gap-2 rounded-xl bg-black/[0.035] px-3 py-2.5">
+              <article class="theme-soft-panel grid gap-2 rounded-xl bg-black/[0.035] px-3 py-2.5">
                 <div class="flex items-center gap-2">
                   <span
-                    class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'bg-black/14'}`}
+                    class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'theme-status-idle bg-black/14'}`}
                   ></span>
                   <p class="min-w-0 flex-1 truncate text-sm font-medium text-ink">
                     {accountEmail(account)}
@@ -436,18 +624,18 @@
 
                 <div class="grid gap-1.5">
                   <div class="flex items-center gap-2">
-                    <span
-                      class="w-5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/35"
-                    >
-                      5h
+                    <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
+                      {copyForLanguage().sessionQuota}
                     </span>
-                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-black/8">
+                    <div
+                      class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
+                    >
                       <div
-                        class="h-full rounded-full bg-black/70"
+                        class="theme-progress-fill h-full rounded-full bg-black/70"
                         style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
                       ></div>
                     </div>
-                    <span class="w-9 text-right text-[11px] font-medium text-black/62">
+                    <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
                       {usageByAccountId[account.id]?.primary
                         ? `${remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%`
                         : '--'}
@@ -455,18 +643,18 @@
                   </div>
 
                   <div class="flex items-center gap-2">
-                    <span
-                      class="w-5 text-[10px] font-semibold uppercase tracking-[0.12em] text-black/35"
-                    >
-                      w
+                    <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
+                      {copyForLanguage().weeklyQuota}
                     </span>
-                    <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-black/8">
+                    <div
+                      class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
+                    >
                       <div
-                        class="h-full rounded-full bg-black/70"
+                        class="theme-progress-fill h-full rounded-full bg-black/70"
                         style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
                       ></div>
                     </div>
-                    <span class="w-9 text-right text-[11px] font-medium text-black/62">
+                    <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
                       {usageByAccountId[account.id]?.secondary
                         ? `${remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%`
                         : '--'}
@@ -476,31 +664,35 @@
               </article>
             {/each}
           {:else}
-            <div class="rounded-xl bg-black/[0.03] px-3 py-3 text-sm text-black/58">
-              还没有可显示的账号。
+            <div
+              class="theme-soft-panel rounded-xl bg-black/[0.03] px-3 py-3 text-sm text-muted-strong"
+            >
+              {copyForLanguage().noStatusBarAccounts}
             </div>
           {/if}
         </div>
 
         <div class="grid gap-2 border-t border-black/6 pt-3">
           <div class="flex items-center justify-between gap-3">
-            <p class="text-xs text-black/48">状态栏显示账号</p>
-            <p class="text-xs text-black/38">最多 5 个</p>
+            <p class="text-xs text-muted-strong">{copyForLanguage().statusBarDisplayAccounts}</p>
+            <p class="text-xs text-faint">{copyForLanguage().maxFiveAccounts}</p>
           </div>
 
           <div class="grid gap-1">
             {#each snapshot.accounts as account (account.id)}
               <button
-                class={`flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${snapshot.settings.statusBarAccountIds.includes(account.id) ? 'bg-black/[0.05]' : 'bg-transparent hover:bg-black/[0.03]'}`}
+                class={`theme-menu-choice flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${snapshot.settings.statusBarAccountIds.includes(account.id) ? 'theme-menu-choice-active bg-black/[0.05]' : 'bg-transparent hover:bg-black/[0.03]'}`}
                 on:click={() => toggleStatusAccount(account.id)}
                 disabled={!snapshot.settings.statusBarAccountIds.includes(account.id) &&
                   snapshot.settings.statusBarAccountIds.length >= 5}
               >
-                <span class="min-w-0 flex-1 truncate text-sm text-black/72">
+                <span class="min-w-0 flex-1 truncate text-sm text-muted-strong">
                   {accountEmail(account)}
                 </span>
-                <span class="text-xs text-black/40">
-                  {snapshot.settings.statusBarAccountIds.includes(account.id) ? '已显示' : '未显示'}
+                <span class="text-xs text-faint">
+                  {snapshot.settings.statusBarAccountIds.includes(account.id)
+                    ? copyForLanguage().visible
+                    : copyForLanguage().hidden}
                 </span>
               </button>
             {/each}
@@ -508,15 +700,15 @@
         </div>
 
         <div class="flex items-center justify-between gap-3 border-t border-black/6 pt-3">
-          <span class="text-xs text-black/48">额度轮询</span>
+          <span class="text-xs text-muted-strong">{copyForLanguage().pollingInterval}</span>
           <select
-            class="h-8 rounded-md border border-black/8 bg-white/88 px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+            class="theme-select h-8 rounded-md border border-black/8 bg-white/88 px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
             value={snapshot.settings.usagePollingMinutes}
             on:change={(event) =>
               updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
           >
             {#each pollingOptions as option (option)}
-              <option value={option}>{option} 分钟</option>
+              <option value={option}>{option} {copyForLanguage().minutes}</option>
             {/each}
           </select>
         </div>
@@ -525,9 +717,7 @@
       <section class={heroClass}>
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex min-w-0 items-center gap-3">
-            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-black/38">
-              Ilovecodex
-            </p>
+            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-faint">Ilovecodex</p>
             {#if loginEvent}
               <p class={`truncate text-sm ${loginTone(loginEvent.phase)}`} aria-live="polite">
                 {loginEvent.message}
@@ -536,32 +726,24 @@
           </div>
 
           <div
-            class="inline-flex min-w-[140px] items-center gap-0.5 rounded-lg bg-black/[0.03] p-1"
+            class="theme-toolbar inline-flex min-w-[140px] items-center gap-0.5 rounded-lg bg-black/[0.03] p-1"
           >
             <button
               class={iconToolbarButton}
               on:click={() => startLogin('browser')}
-              aria-label="浏览器登录"
-              title="浏览器登录"
-            >
-              <span class="i-lucide-log-in h-4.5 w-4.5"></span>
-            </button>
-            <button
-              class={iconToolbarButton}
-              on:click={() => startLogin('device')}
-              aria-label="设备码登录"
-              title="设备码登录"
+              aria-label={copyForLanguage().browserLogin}
+              title={copyForLanguage().browserLogin}
             >
               <span
-                class={`${activeLoginMethod === 'device' ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-smartphone'} h-4.5 w-4.5`}
+                class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
               ></span>
             </button>
             <button
               class={iconToolbarButton}
               on:click={() => runAction('import', () => window.codexApp.importCurrentAccount())}
               disabled={snapshot.loginInProgress}
-              aria-label="导入当前登录"
-              title="导入当前登录"
+              aria-label={copyForLanguage().importCurrent}
+              title={copyForLanguage().importCurrent}
             >
               <span class="i-lucide-plus h-4.5 w-4.5"></span>
             </button>
@@ -571,12 +753,12 @@
               disabled={snapshot.loginInProgress ||
                 !bestAccount() ||
                 bestAccount()?.id === snapshot.activeAccountId}
-              aria-label="切换到最优账号"
+              aria-label={copyForLanguage().switchBest}
               title={bestAccount()
                 ? bestAccount()?.id === snapshot.activeAccountId
-                  ? '当前已是最优账号'
-                  : `切换到 ${accountEmail(bestAccount()!)}`
-                : '暂无可切换账号'}
+                  ? copyForLanguage().alreadyBest
+                  : copyForLanguage().switchToAccount(accountEmail(bestAccount()!))
+                : copyForLanguage().noBestAccount}
             >
               <span class="i-lucide-sparkles h-4.5 w-4.5"></span>
             </button>
@@ -585,8 +767,8 @@
               on:click={() => {
                 showSettings = !showSettings
               }}
-              aria-label="设置"
-              title="设置"
+              aria-label={copyForLanguage().settings}
+              title={copyForLanguage().settings}
             >
               <span class="i-lucide-settings-2 h-4.5 w-4.5"></span>
             </button>
@@ -595,107 +777,51 @@
 
         {#if showSettings}
           <div class="mt-3 flex items-center gap-3 border-t border-black/6 pt-3">
-            <span class="text-xs text-black/48">额度轮询</span>
+            <span class="text-xs text-muted-strong">{copyForLanguage().pollingInterval}</span>
             <select
-              class="h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               value={snapshot.settings.usagePollingMinutes}
               on:change={(event) =>
                 updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
             >
               {#each pollingOptions as option (option)}
-                <option value={option}>{option} 分钟</option>
+                <option value={option}>{option} {copyForLanguage().minutes}</option>
               {/each}
             </select>
           </div>
         {/if}
 
-        {#if loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.verificationUrl || loginEvent?.deviceCode || loginEvent?.rawOutput}
+        {#if loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput}
           <div class="mt-3 grid gap-2 border-t border-black/6 pt-3">
             {#if loginEvent.method === 'browser' && loginEvent.authUrl}
-              <div class="grid gap-2 rounded-lg bg-black/[0.03] p-3">
-                <p class="text-sm text-black/58">浏览器登录链接</p>
-                <code class="overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black">
+              <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+                <p class="text-sm text-muted-strong">{copyForLanguage().browserLoginLink}</p>
+                <code
+                  class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+                >
                   {loginEvent.authUrl}
                 </code>
                 <div class="flex flex-wrap items-center gap-2">
-                  <button class={compactGhostButton} on:click={copyAuthUrl}>复制链接</button>
+                  <button class={compactGhostButton} on:click={copyAuthUrl}>
+                    {copyForLanguage().copyLink}
+                  </button>
                   <button
                     class={compactGhostButton}
                     on:click={() => openExternalLink(loginEvent.authUrl)}
                   >
-                    打开浏览器
+                    {copyForLanguage().openBrowser}
                   </button>
                 </div>
               </div>
             {/if}
 
             {#if loginEvent.method === 'browser' && loginEvent.localCallbackUrl}
-              <p class="text-sm text-ink/62">等待浏览器完成授权并回调本地地址。</p>
-            {/if}
-
-            {#if loginEvent.method === 'device' && loginEvent.verificationUrl}
-              <div class="grid gap-3 rounded-lg bg-black/[0.03] p-3">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <p class="text-sm font-medium text-black/72">设备码登录</p>
-                  <span class="text-xs text-black/45">按步骤完成授权</span>
-                </div>
-
-                <div class="grid gap-2 sm:grid-cols-3">
-                  <div class="rounded-md bg-white px-3 py-2">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/35">
-                      01
-                    </p>
-                    <p class="mt-1 text-sm text-black/72">打开设备授权页面</p>
-                  </div>
-                  <div class="rounded-md bg-white px-3 py-2">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/35">
-                      02
-                    </p>
-                    <p class="mt-1 text-sm text-black/72">输入下面的设备码</p>
-                  </div>
-                  <div class="rounded-md bg-white px-3 py-2">
-                    <p class="text-[10px] font-semibold uppercase tracking-[0.12em] text-black/35">
-                      03
-                    </p>
-                    <p class="mt-1 text-sm text-black/72">确认后返回这里等待同步</p>
-                  </div>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-2 rounded-md bg-white px-3 py-2">
-                  <code class="min-w-0 flex-1 overflow-x-auto text-sm text-black/72">
-                    {loginEvent.verificationUrl}
-                  </code>
-                  <button class={compactGhostButton} on:click={copyVerificationUrl}>
-                    复制链接
-                  </button>
-                  <button
-                    class={compactGhostButton}
-                    on:click={() => openExternalLink(loginEvent.verificationUrl)}
-                  >
-                    打开页面
-                  </button>
-                </div>
-
-                {#if loginEvent.deviceCode}
-                  <div
-                    class="flex flex-wrap items-center gap-3 rounded-md border border-black/8 bg-white px-3 py-3"
-                  >
-                    <div class="flex min-w-0 flex-1 items-center gap-3">
-                      <span class="text-xs uppercase tracking-[0.12em] text-black/42">Code</span>
-                      <code class="text-xl tracking-widest text-black">{loginEvent.deviceCode}</code
-                      >
-                    </div>
-                    <button class={compactGhostButton} on:click={copyDeviceCode}>
-                      复制设备码
-                    </button>
-                  </div>
-                {/if}
-              </div>
+              <p class="text-sm text-muted-strong">{copyForLanguage().waitingCallback}</p>
             {/if}
 
             {#if loginEvent.phase === 'error' && loginEvent.rawOutput}
               <pre
-                class="m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
+                class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
             {/if}
           </div>
         {/if}
@@ -703,26 +829,35 @@
 
       {#if pageError}
         <section
-          class="rounded-[1rem] border border-danger/18 bg-white px-4 py-4 text-base text-danger"
+          class="theme-surface theme-error-panel rounded-[1rem] border border-danger/18 bg-white px-4 py-4 text-base text-danger"
         >
           {pageError}
         </section>
       {/if}
 
-      <section class={`${panelClass} grid gap-4`}>
-        <div class="text-sm text-black/42">{snapshot.accounts.length} 个账号</div>
+      <section class={`${panelClass} flex min-h-0 flex-1 flex-col gap-4 overflow-hidden`}>
+        <div class="text-sm text-faint">
+          {copyForLanguage().accountCount(snapshot.accounts.length)}
+        </div>
 
         {#if snapshot.accounts.length}
-          <div class="grid gap-2">
+          <div class="grid min-h-0 gap-2 overflow-y-auto pr-1">
             {#each snapshot.accounts as account (account.id)}
               <article
-                class={`grid items-center gap-3 rounded-[0.875rem] border bg-white px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)_auto] ${accountCardTone(snapshot.activeAccountId === account.id)}`}
+                class={`grid items-center gap-3 rounded-[0.875rem] border px-3 py-2.5 md:grid-cols-[minmax(0,1fr)_minmax(0,380px)_auto] ${accountCardTone(snapshot.activeAccountId === account.id)}`}
               >
                 <div class="flex min-w-0 items-center gap-2">
                   <span
-                    class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'bg-black/14'}`}
+                    class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
                   ></span>
                   <p class="truncate text-sm font-medium">{accountEmail(account)}</p>
+                  {#if snapshot.activeAccountId === account.id}
+                    <span
+                      class="theme-active-pill inline-flex flex-none items-center rounded-full bg-black px-2 py-0.75 text-[10px] font-medium text-white/88"
+                    >
+                      {copyForLanguage().active}
+                    </span>
+                  {/if}
                   <span
                     class={`inline-flex flex-none items-center rounded-full px-2 py-0.75 text-[10px] font-medium ${planTagClass(usageByAccountId[account.id]?.planType)}`}
                   >
@@ -730,70 +865,76 @@
                   </span>
                 </div>
 
-                <div class="grid gap-1.5 rounded-md bg-black/[0.03] px-2.5 py-2">
+                <div class="theme-soft-panel grid gap-1.5 rounded-md bg-black/[0.03] px-2.5 py-2">
                   <div class="grid grid-cols-2 gap-2">
                     <div class="flex items-center gap-2">
-                      <span class="w-12 text-[10px] font-semibold tracking-[0.04em] text-black/35">
-                        5小时
+                      <span class="w-12 text-[10px] font-semibold tracking-[0.04em] text-muted">
+                        {copyForLanguage().sessionQuota}
                       </span>
-                      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-black/8">
+                      <div
+                        class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
+                      >
                         <div
-                          class="h-full rounded-full bg-black/70"
+                          class="theme-progress-fill h-full rounded-full bg-black/70"
                           style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
                         ></div>
                       </div>
                       {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                        <span class="w-9 text-right text-[11px] text-black/45">…</span>
+                        <span class="w-9 text-right text-[11px] text-faint">…</span>
                       {:else if usageByAccountId[account.id]?.primary}
-                        <span class="w-9 text-right text-[11px] font-medium text-black/72">
+                        <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
                           {remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%
                         </span>
                       {:else}
-                        <span class="w-9 text-right text-[11px] text-black/40">-</span>
+                        <span class="w-9 text-right text-[11px] text-faint">-</span>
                       {/if}
                     </div>
 
                     <div class="flex items-center gap-2">
-                      <span class="w-12 text-[10px] font-semibold tracking-[0.04em] text-black/35">
-                        周限额
+                      <span class="w-12 text-[10px] font-semibold tracking-[0.04em] text-muted">
+                        {copyForLanguage().weeklyQuota}
                       </span>
-                      <div class="h-1.5 flex-1 overflow-hidden rounded-full bg-black/8">
+                      <div
+                        class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
+                      >
                         <div
-                          class="h-full rounded-full bg-black/70"
+                          class="theme-progress-fill h-full rounded-full bg-black/70"
                           style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
                         ></div>
                       </div>
                       {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                        <span class="w-9 text-right text-[11px] text-black/45">…</span>
+                        <span class="w-9 text-right text-[11px] text-faint">…</span>
                       {:else if usageByAccountId[account.id]?.secondary}
-                        <span class="w-9 text-right text-[11px] font-medium text-black/72">
+                        <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
                           {remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%
                         </span>
                       {:else}
-                        <span class="w-9 text-right text-[11px] text-black/40">-</span>
+                        <span class="w-9 text-right text-[11px] text-faint">-</span>
                       {/if}
                     </div>
                   </div>
 
-                  <div class="grid grid-cols-2 gap-2 text-[10px] text-black/42">
+                  <div class="grid grid-cols-2 gap-2 text-[10px] text-faint">
                     <div class="truncate">
-                      5小时重置 {formatRelativeReset(
-                        usageByAccountId[account.id]?.primary?.resetsAt
+                      {copyForLanguage().sessionReset} · {formatRelativeReset(
+                        usageByAccountId[account.id]?.primary?.resetsAt,
+                        snapshot.settings.language
                       )}
                     </div>
                     <div class="truncate">
-                      周限额重置 {formatRelativeReset(
-                        usageByAccountId[account.id]?.secondary?.resetsAt
+                      {copyForLanguage().weeklyReset} · {formatRelativeReset(
+                        usageByAccountId[account.id]?.secondary?.resetsAt,
+                        snapshot.settings.language
                       )}
                     </div>
                   </div>
                 </div>
 
                 {#if extraLimits(account.id).length}
-                  <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-black/58">
+                  <div class="flex flex-wrap items-center gap-1.5 text-[11px] text-muted-strong">
                     {#each extraLimits(account.id) as limit (`${account.id}:${limit.limitId ?? 'extra'}`)}
                       <div
-                        class="inline-flex items-center gap-1.5 rounded-md bg-black/[0.03] px-2 py-1"
+                        class="theme-soft-panel inline-flex items-center gap-1.5 rounded-md bg-black/[0.03] px-2 py-1"
                       >
                         <span class="font-medium uppercase tracking-[0.08em]">
                           {limitLabel(limit)}
@@ -817,8 +958,8 @@
                         window.codexApp.openAccountInCodex(account.id)
                       )}
                     disabled={snapshot.loginInProgress}
-                    aria-label={`用 ${accountEmail(account)} 打开 Codex`}
-                    title="打开 Codex"
+                    aria-label={`${copyForLanguage().openCodex} · ${accountEmail(account)}`}
+                    title={copyForLanguage().openCodex}
                   >
                     <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
                   </button>
@@ -829,8 +970,8 @@
                         window.codexApp.activateAccount(account.id)
                       )}
                     disabled={snapshot.loginInProgress || snapshot.activeAccountId === account.id}
-                    aria-label={`切换到 ${accountEmail(account)}`}
-                    title="切换账号"
+                    aria-label={`${copyForLanguage().switchAccount} · ${accountEmail(account)}`}
+                    title={copyForLanguage().switchAccount}
                   >
                     <span class="i-lucide-repeat-2 h-4 w-4"></span>
                   </button>
@@ -840,10 +981,12 @@
                     disabled={snapshot.loginInProgress ||
                       usageLoadingByAccountId[account.id] ||
                       !canPollUsage(account.id)}
-                    aria-label={`刷新 ${accountEmail(account)} 的额度`}
+                    aria-label={`${copyForLanguage().refreshQuota} · ${accountEmail(account)}`}
                     title={canPollUsage(account.id)
-                      ? '刷新额度'
-                      : `${snapshot.settings.usagePollingMinutes} 分钟内不重复请求`}
+                      ? copyForLanguage().refreshQuota
+                      : copyForLanguage().refreshQuotaBlocked(
+                          snapshot.settings.usagePollingMinutes
+                        )}
                   >
                     <span class="i-lucide-refresh-cw h-4 w-4"></span>
                   </button>
@@ -851,8 +994,8 @@
                     class={iconRowButton}
                     on:click={() => removeAccount(account)}
                     disabled={snapshot.loginInProgress}
-                    aria-label={`删除 ${accountEmail(account)} 的保存`}
-                    title="删除保存"
+                    aria-label={`${copyForLanguage().deleteSaved} · ${accountEmail(account)}`}
+                    title={copyForLanguage().deleteSaved}
                   >
                     <span class="i-lucide-trash-2 h-4 w-4"></span>
                   </button>
@@ -861,11 +1004,224 @@
             {/each}
           </div>
         {:else}
-          <p class="text-base text-ink/72">
-            还没有保存任何账号。先导入当前登录，或者走一次新的浏览器/设备码登录。
-          </p>
+          <p class="text-base text-muted-strong">{copyForLanguage().noSavedAccounts}</p>
         {/if}
+      </section>
+
+      <section class="theme-surface rounded-[1rem] border border-black/8 bg-white px-3 py-2.5">
+        <div class="flex flex-wrap items-center justify-between gap-2.5">
+          <div class="flex items-center gap-2 text-sm text-faint">
+            <span
+              class="theme-version-pill rounded-full bg-black/[0.04] px-2 py-1 text-[11px] text-black/62"
+            >
+              v{appMeta.version}
+            </span>
+          </div>
+
+          <div
+            class="theme-toolbar inline-flex items-center gap-0.5 rounded-lg bg-black/[0.03] p-1"
+          >
+            <div class="relative">
+              <span
+                class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-languages"
+              ></span>
+              <select
+                class="theme-select h-8 appearance-none rounded-md border-0 bg-transparent py-0 pl-8 pr-7 text-sm text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                aria-label={copyForLanguage().switchLanguage}
+                value={snapshot.settings.language}
+                on:change={(event) =>
+                  updateLanguage((event.currentTarget as HTMLSelectElement).value as AppLanguage)}
+              >
+                {#each languageOptions as option (option.value)}
+                  <option value={option.value}>{option.label}</option>
+                {/each}
+              </select>
+              <span
+                class="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-chevron-down"
+              ></span>
+            </div>
+
+            <button
+              class={iconToolbarButton}
+              on:click={() => updateTheme(nextTheme(snapshot.settings.theme))}
+              aria-label={copyForLanguage().switchTheme(themeTitle(snapshot.settings.theme))}
+              title={copyForLanguage().switchTheme(themeTitle(snapshot.settings.theme))}
+            >
+              <span class={`${themeIconClass(snapshot.settings.theme)} h-4.5 w-4.5`}></span>
+            </button>
+
+            <button
+              class={iconToolbarButton}
+              on:click={() => openExternalLink(appMeta.githubUrl ?? undefined)}
+              disabled={!appMeta.githubUrl}
+              aria-label="GitHub"
+              title={appMeta.githubUrl
+                ? copyForLanguage().openGithub
+                : copyForLanguage().githubPending}
+            >
+              <span class="i-lucide-github h-4.5 w-4.5"></span>
+            </button>
+          </div>
+        </div>
       </section>
     {/if}
   </div>
 </div>
+
+<style>
+  .text-muted {
+    color: var(--ink-soft);
+  }
+
+  .text-muted-strong {
+    color: var(--ink-soft-strong);
+  }
+
+  .text-faint {
+    color: var(--ink-faint);
+  }
+
+  .border-soft {
+    border-color: var(--line);
+  }
+
+  :global(html[data-theme='dark']) .theme-surface {
+    border-color: var(--line-strong) !important;
+    background: var(--panel-strong) !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.08) inset,
+      0 18px 44px color-mix(in srgb, var(--paper-shadow) 55%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-tray-panel {
+    border-color: var(--line-strong) !important;
+    background: var(--panel) !important;
+    box-shadow: 0 18px 48px var(--paper-shadow) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-soft-panel,
+  :global(html[data-theme='dark']) .theme-toolbar,
+  :global(html[data-theme='dark']) .theme-version-pill,
+  :global(html[data-theme='dark']) .theme-plan-neutral,
+  :global(html[data-theme='dark']) .theme-menu-choice-active {
+    background: var(--surface-soft) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-soft-panel {
+    border-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-version-pill,
+  :global(html[data-theme='dark']) .theme-plan-neutral {
+    color: var(--ink-soft) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-plan-plus {
+    background: rgb(16 185 129 / 0.18) !important;
+    color: rgb(110 231 183) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-plan-pro {
+    background: rgb(14 165 233 / 0.18) !important;
+    color: rgb(125 211 252) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-plan-team {
+    background: rgb(245 158 11 / 0.18) !important;
+    color: rgb(253 224 71) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-plan-business {
+    background: rgb(139 92 246 / 0.2) !important;
+    color: rgb(196 181 253) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-plan-enterprise {
+    background: rgb(244 63 94 / 0.18) !important;
+    color: rgb(253 164 175) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-ghost-button,
+  :global(html[data-theme='dark']) .theme-icon-button,
+  :global(html[data-theme='dark']) .theme-row-button,
+  :global(html[data-theme='dark']) .theme-menu-choice,
+  :global(html[data-theme='dark']) .theme-select {
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-ghost-button:hover,
+  :global(html[data-theme='dark']) .theme-icon-button:hover,
+  :global(html[data-theme='dark']) .theme-row-button:hover,
+  :global(html[data-theme='dark']) .theme-menu-choice:hover,
+  :global(html[data-theme='dark']) .theme-select:hover {
+    background: var(--surface-hover) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-ghost-button:focus-visible,
+  :global(html[data-theme='dark']) .theme-icon-button:focus-visible,
+  :global(html[data-theme='dark']) .theme-row-button:focus-visible,
+  :global(html[data-theme='dark']) .theme-menu-choice:focus-visible,
+  :global(html[data-theme='dark']) .theme-select:focus-visible {
+    box-shadow: 0 0 0 2px var(--ring) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-select {
+    border-color: var(--line) !important;
+    background: var(--panel-strong) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-select option {
+    color: var(--ink);
+    background: var(--panel-strong);
+  }
+
+  :global(html[data-theme='dark']) .theme-inline-code {
+    background: var(--panel-strong) !important;
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-code-surface {
+    border-color: var(--line) !important;
+    background: var(--code-bg) !important;
+    color: var(--code-ink) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-error-panel {
+    border-color: color-mix(in srgb, var(--danger) 22%, transparent) !important;
+    background: color-mix(in srgb, var(--danger) 6%, var(--panel-strong)) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-account-card {
+    border-color: var(--line) !important;
+    background: var(--panel-strong) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-account-card-active {
+    border-color: var(--line-strong) !important;
+    background: color-mix(in srgb, var(--surface-soft) 66%, var(--panel-strong)) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-progress-track {
+    background: var(--progress-track) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-progress-fill {
+    background: var(--progress-fill) !important;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--progress-fill) 45%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-active-pill {
+    background: var(--ink) !important;
+    color: var(--paper) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-status-active {
+    background: var(--success) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-status-idle {
+    background: var(--dot-idle) !important;
+  }
+</style>

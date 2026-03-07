@@ -1,19 +1,57 @@
 :root {
-  --paper: #f5efe3;
-  --paper-shadow: rgba(15, 23, 42, 0.12);
-  --ink: #102033;
-  --ink-soft: rgba(16, 32, 51, 0.72);
-  --ink-faint: rgba(16, 32, 51, 0.44);
-  --panel: rgba(255, 250, 242, 0.76);
-  --panel-strong: rgba(255, 251, 245, 0.92);
-  --line: rgba(16, 32, 51, 0.1);
-  --accent: #0d6b63;
-  --accent-deep: #0a4d47;
-  --accent-warm: #d46a2e;
-  --success: #0a7a62;
-  --warn: #a45a19;
-  --danger: #ad3d37;
+  --paper: #f3f3f1;
+  --paper-shadow: rgba(15, 23, 42, 0.08);
+  --ink: #18181b;
+  --ink-soft: rgba(24, 24, 27, 0.72);
+  --ink-soft-strong: rgba(24, 24, 27, 0.82);
+  --ink-faint: rgba(24, 24, 27, 0.46);
+  --panel: rgba(255, 255, 255, 0.86);
+  --panel-strong: rgba(255, 255, 255, 0.96);
+  --line: rgba(24, 24, 27, 0.1);
+  --line-strong: rgba(24, 24, 27, 0.16);
+  --accent: #18181b;
+  --accent-deep: #18181b;
+  --accent-warm: #52525b;
+  --success: #0f766e;
+  --warn: #a16207;
+  --danger: #b91c1c;
   --code-bg: rgba(11, 21, 33, 0.92);
+  --code-ink: rgba(245, 245, 245, 0.98);
+  --surface-soft: rgba(24, 24, 27, 0.05);
+  --surface-hover: rgba(24, 24, 27, 0.07);
+  --surface-selected: rgba(24, 24, 27, 0.1);
+  --progress-track: rgba(24, 24, 27, 0.1);
+  --progress-fill: rgba(24, 24, 27, 0.72);
+  --dot-idle: rgba(24, 24, 27, 0.14);
+  --ring: rgba(24, 24, 27, 0.16);
+}
+
+[data-theme='dark'] {
+  --paper: #0f1115;
+  --paper-shadow: rgba(0, 0, 0, 0.3);
+  --ink: #f4f4f5;
+  --ink-soft: rgba(244, 244, 245, 0.72);
+  --ink-soft-strong: rgba(244, 244, 245, 0.84);
+  --ink-faint: rgba(244, 244, 245, 0.46);
+  --panel: rgba(24, 24, 27, 0.88);
+  --panel-strong: rgba(24, 24, 27, 0.96);
+  --line: rgba(244, 244, 245, 0.12);
+  --line-strong: rgba(244, 244, 245, 0.18);
+  --accent: #f4f4f5;
+  --accent-deep: #f4f4f5;
+  --accent-warm: #d4d4d8;
+  --success: #5eead4;
+  --warn: #facc15;
+  --danger: #fca5a5;
+  --code-bg: rgba(5, 9, 14, 0.96);
+  --code-ink: rgba(242, 246, 250, 0.96);
+  --surface-soft: rgba(244, 244, 245, 0.06);
+  --surface-hover: rgba(244, 244, 245, 0.08);
+  --surface-selected: rgba(244, 244, 245, 0.1);
+  --progress-track: rgba(244, 244, 245, 0.14);
+  --progress-fill: rgba(244, 244, 245, 0.84);
+  --dot-idle: rgba(244, 244, 245, 0.18);
+  --ring: rgba(244, 244, 245, 0.18);
 }
 
 *,
@@ -31,19 +69,16 @@ ul {
 body {
   min-height: 100vh;
   color: var(--ink);
-  background:
-    radial-gradient(circle at top left, rgba(238, 187, 120, 0.35), transparent 24%),
-    radial-gradient(circle at top right, rgba(54, 129, 118, 0.26), transparent 30%),
-    linear-gradient(135deg, #f7f0e4 0%, #f2e7d6 48%, #ebdfd0 100%);
+  background: var(--paper);
   line-height: 1.6;
   font-family:
-    'SF Pro Display',
-    'Segoe UI Variable',
-    'Avenir Next',
-    'PingFang SC',
-    'Hiragino Sans GB',
+    'SF Pro Display', 'Segoe UI Variable', 'Avenir Next', 'PingFang SC', 'Hiragino Sans GB',
     sans-serif;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+[data-theme='dark'] body {
+  background: var(--paper);
 }
