@@ -6,7 +6,8 @@ import type {
   AccountSummary,
   LoginEvent
 } from '../../../shared/codex'
-import { remainingPercent, type AppSettings } from '../../../shared/codex'
+import { remainingPercent } from '../../../shared/codex'
+export { statusBarAccounts } from '../../../shared/codex'
 
 export const pollingOptions = [5, 15, 30, 60] as const
 
@@ -271,30 +272,6 @@ export function nextTheme(theme: AppTheme): AppTheme {
     default:
       return 'light'
   }
-}
-
-export function statusBarAccounts(
-  settings: AppSettings,
-  accounts: AccountSummary[],
-  activeAccountId?: string
-): AccountSummary[] {
-  const selectedIds = settings.statusBarAccountIds
-    .map((accountId) => accounts.find((account) => account.id === accountId))
-    .filter((account): account is AccountSummary => Boolean(account))
-    .slice(0, 5)
-
-  if (selectedIds.length) {
-    return selectedIds
-  }
-
-  if (activeAccountId) {
-    const activeAccount = accounts.find((account) => account.id === activeAccountId)
-    if (activeAccount) {
-      return [activeAccount]
-    }
-  }
-
-  return accounts.slice(0, 1)
 }
 
 export function extraLimits(

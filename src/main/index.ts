@@ -19,6 +19,7 @@ import { runCli } from '../cli/run-cli'
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
+import { buildTrayUsageMenuItems } from './tray-menu'
 import {
   formatRelativeReset,
   remainingPercent,
@@ -155,23 +156,8 @@ function loadRendererWindow(
   return window.loadURL(buildRendererUrl(query))
 }
 
-function resolveTrayAccounts(snapshot: AppSnapshot): AccountSummary[] {
-  if (!snapshot.accounts.length) {
-    return []
-  }
-
-  const activeAccount = snapshot.activeAccountId
-    ? snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
-    : undefined
-  const remainingAccounts = snapshot.accounts.filter((account) => account.id !== activeAccount?.id)
-
-  return [activeAccount, ...remainingAccounts]
-    .filter((account): account is AccountSummary => Boolean(account))
-    .slice(0, 5)
-}
-
 function buildTrayTitle(snapshot: AppSnapshot): string {
-  const account = resolveTrayAccounts(snapshot)[0]
+  const account = resolveCurrentAccount(snapshot)
   if (!account) {
     return 'Ilovecodex'
   }
@@ -184,7 +170,7 @@ function buildTrayTitle(snapshot: AppSnapshot): string {
 }
 
 function buildTrayTooltip(snapshot: AppSnapshot): string {
-  const account = resolveTrayAccounts(snapshot)[0]
+  const account = resolveCurrentAccount(snapshot)
   const text = localeText(snapshot.settings.language)
   if (!account) {
     return 'Ilovecodex'
@@ -287,26 +273,17 @@ function buildCurrentUsageMenu(snapshot: AppSnapshot): MenuItemConstructorOption
 }
 
 function buildTrayUsageMenu(snapshot: AppSnapshot): MenuItemConstructorOptions[] {
-  const accounts = resolveTrayAccounts(snapshot)
   const text = localeText(snapshot.settings.language)
 
-  if (!accounts.length) {
-    return [{ label: text.noVisibleAccount, enabled: false }]
-  }
-
-  return accounts.map((account) => {
-    const limits = snapshot.usageByAccountId[account.id]
-    const hourRemaining = limits?.primary
-      ? `${remainingPercent(limits.primary.usedPercent)}%`
-      : '--'
-    const weekRemaining = limits?.secondary
-      ? `${remainingPercent(limits.secondary.usedPercent)}%`
-      : '--'
-    const prefix = account.id === snapshot.activeAccountId ? text.activePrefix : ''
-
-    return {
-      label: `${prefix}${accountLabel(account, snapshot.settings.language)}  h${hourRemaining}  w${weekRemaining}`,
-      click: () => showMainWindow()
+  return buildTrayUsageMenuItems(snapshot, {
+    activePrefix: text.activePrefix,
+    noVisibleAccount: text.noVisibleAccount,
+    language: snapshot.settings.language,
+    accountLabel,
+    openAccount: (accountId) => {
+      void codexServices.codex.open(accountId).then(() => {
+        void refreshTrayTitle()
+      })
     }
   })
 }
@@ -363,7 +340,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
           return
         }
 
-        void codexServices.accounts.activate(bestAccount.id).then(() => {
+        void codexServices.codex.open(bestAccount.id).then(() => {
           void refreshTrayTitle()
         })
       }
@@ -499,7 +476,7 @@ function buildTrayPng(hourPercent: number, weekPercent: number, scaleFactor: num
 }
 
 function buildTrayImage(snapshot: AppSnapshot): Electron.NativeImage {
-  const account = resolveTrayAccounts(snapshot)[0]
+  const account = resolveCurrentAccount(snapshot)
   const hourPercent = account
     ? remainingPercent(snapshot.usageByAccountId[account.id]?.primary?.usedPercent)
     : 0

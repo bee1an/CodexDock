@@ -238,3 +238,27 @@ export function resolveBestAccount(
     )
   })[0]
 }
+
+export function statusBarAccounts(
+  settings: AppSettings,
+  accounts: AccountSummary[],
+  activeAccountId?: string
+): AccountSummary[] {
+  const selectedIds = settings.statusBarAccountIds
+    .map((accountId) => accounts.find((account) => account.id === accountId))
+    .filter((account): account is AccountSummary => Boolean(account))
+    .slice(0, 5)
+
+  if (selectedIds.length) {
+    return selectedIds
+  }
+
+  if (activeAccountId) {
+    const activeAccount = accounts.find((account) => account.id === activeAccountId)
+    if (activeAccount) {
+      return [activeAccount]
+    }
+  }
+
+  return accounts.slice(0, 1)
+}

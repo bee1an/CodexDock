@@ -1,6 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { formatRelativeReset, remainingPercent, resolveBestAccount, type AccountRateLimits, type AccountSummary } from './codex'
+import {
+  formatRelativeReset,
+  remainingPercent,
+  resolveBestAccount,
+  statusBarAccounts,
+  type AccountRateLimits,
+  type AccountSummary
+} from './codex'
 
 function createAccount(id: string, overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
@@ -72,5 +79,26 @@ describe('codex shared helpers', () => {
     }
 
     expect(resolveBestAccount(accounts, usageByAccountId, 'a')?.id).toBe('a')
+  })
+
+  it('resolves menu bar accounts from configured ids before falling back', () => {
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' }),
+      createAccount('c', { email: 'c@example.com' })
+    ]
+
+    expect(
+      statusBarAccounts(
+        {
+          usagePollingMinutes: 15,
+          statusBarAccountIds: ['c', 'b'],
+          language: 'zh-CN',
+          theme: 'light'
+        },
+        accounts,
+        'a'
+      ).map((account) => account.id)
+    ).toEqual(['c', 'b'])
   })
 })
