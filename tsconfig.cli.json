@@ -1,0 +1,17 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
+  "include": [
+    "src/cli/**/*",
+    "src/shared/**/*",
+    "src/main/codex-*.ts",
+    "src/main/electron-platform.ts"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "outDir": "out/cli",
+    "rootDir": "src",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "types": ["node", "electron"]
+  }
+}

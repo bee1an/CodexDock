@@ -1,6 +1,6 @@
 {
   "name": "ilovecodex",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "description": "Ilovecodex desktop account manager for Codex sessions",
   "main": "./out/main/index.js",
   "author": "bee1an",
@@ -12,12 +12,17 @@
   "scripts": {
     "format": "prettier --plugin prettier-plugin-svelte --write .",
     "lint": "eslint --cache .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
+    "typecheck:cli": "tsc --noEmit -p tsconfig.cli.json",
     "svelte-check": "svelte-check --tsconfig ./tsconfig.json",
-    "typecheck": "npm run typecheck:node && npm run svelte-check",
+    "typecheck": "npm run typecheck:node && npm run typecheck:cli && npm run svelte-check",
+    "build:cli": "tsc -p tsconfig.cli.json",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
-    "build": "npm run typecheck && electron-vite build",
+    "ilc": "npm run build:cli && electron ./out/cli/cli/index.js",
+    "build": "npm run typecheck && npm run build:cli && electron-vite build",
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
@@ -49,7 +54,8 @@
     "svelte-check": "^4.3.4",
     "typescript": "^5.9.3",
     "unocss": "^66.6.6",
-    "vite": "^7.2.6"
+    "vite": "^7.2.6",
+    "vitest": "^4.0.18"
   },
   "pnpm": {
     "onlyBuiltDependencies": [

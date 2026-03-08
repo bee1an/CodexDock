@@ -1,7 +1,6 @@
-import { net } from 'electron'
-
 import type { CodexAuthPayload } from './codex-auth'
 import type { AccountRateLimitEntry, AccountRateLimits, CreditsSnapshot } from '../shared/codex'
+import type { CodexPlatformAdapter } from '../shared/codex-platform'
 
 interface RateLimitWindowApiPayload {
   used_percent: number
@@ -236,7 +235,10 @@ function isRateLimitStatusPayload(value: unknown): value is RateLimitStatusPaylo
   return Boolean(value && typeof value === 'object')
 }
 
-export async function readAccountRateLimits(auth: CodexAuthPayload): Promise<AccountRateLimits> {
+export async function readAccountRateLimits(
+  auth: CodexAuthPayload,
+  platform: Pick<CodexPlatformAdapter, 'fetch'>
+): Promise<AccountRateLimits> {
   const accessToken = auth.tokens?.access_token
   const chatgptAccountId = extractChatGptAccountId(auth)
 
@@ -249,7 +251,7 @@ export async function readAccountRateLimits(auth: CodexAuthPayload): Promise<Acc
   }
 
   const url = resolveUsageUrl()
-  const response = await net.fetch(url, {
+  const response = await platform.fetch(url, {
     method: 'GET',
     headers: {
       authorization: `Bearer ${accessToken}`,

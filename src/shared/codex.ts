@@ -95,6 +95,32 @@ export interface LoginEvent {
   snapshot?: AppSnapshot
 }
 
+export type CliSettingsKey = keyof AppSettings
+
+export interface CliError {
+  code: number
+  message: string
+}
+
+export interface CliResult<T> {
+  ok: boolean
+  data: T | null
+  error: CliError | null
+}
+
+export interface CliAccountListPayload {
+  accounts: AccountSummary[]
+  activeAccountId?: string
+  currentSession: CurrentSessionSummary | null
+}
+
+export interface CliLoginResult {
+  attemptId: string
+  method: LoginMethod
+  phase: LoginEvent['phase']
+  snapshot: AppSnapshot | null
+}
+
 export function remainingPercent(value?: number | null): number {
   return Math.max(0, Math.min(100, 100 - (value ?? 0)))
 }

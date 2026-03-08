@@ -5,7 +5,6 @@ import { createServer, type Server } from 'node:http'
 import { promisify } from 'node:util'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { net, safeStorage } from 'electron'
 
 import type {
   AccountRateLimits,
@@ -18,6 +17,7 @@ import type {
   LoginMethod,
   PortOccupant
 } from '../shared/codex'
+import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
 
 export interface CodexAuthPayload {
   auth_mode?: string
@@ -29,11 +29,6 @@ export interface CodexAuthPayload {
     id_token?: string
     account_id?: string
   }
-}
-
-interface ProtectedPayload {
-  mode: 'safeStorage' | 'plain'
-  value: string
 }
 
 interface PersistedAccount extends AccountSummary {
@@ -247,6 +242,7 @@ function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexA
 
 export async function refreshCodexAuthPayload(
   auth: CodexAuthPayload,
+  platform: CodexPlatformAdapter,
   signal?: AbortSignal
 ): Promise<CodexAuthPayload> {
   const refreshToken = auth.tokens?.refresh_token
@@ -262,7 +258,7 @@ export async function refreshCodexAuthPayload(
     .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
     .join('&')
 
-  const response = await net.fetch(OPENAI_TOKEN_URL, {
+  const response = await platform.fetch(OPENAI_TOKEN_URL, {
     method: 'POST',
     headers: {
       'content-type': 'application/x-www-form-urlencoded'
@@ -385,7 +381,10 @@ export class CodexAccountStore {
   private readonly stateFile: string
   private readonly codexAuthFile: string
 
-  constructor(userDataPath: string) {
+  constructor(
+    userDataPath: string,
+    private readonly platform: CodexPlatformAdapter
+  ) {
     this.stateFile = join(userDataPath, 'codex-accounts.json')
     this.codexAuthFile = join(homedir(), '.codex', 'auth.json')
   }
@@ -585,25 +584,11 @@ export class CodexAccountStore {
   }
 
   private protect(value: string): ProtectedPayload {
-    if (safeStorage.isEncryptionAvailable()) {
-      return {
-        mode: 'safeStorage',
-        value: safeStorage.encryptString(value).toString('base64')
-      }
-    }
-
-    return {
-      mode: 'plain',
-      value: Buffer.from(value, 'utf8').toString('base64')
-    }
+    return this.platform.protect(value)
   }
 
   private unprotect(payload: ProtectedPayload): string {
-    if (payload.mode === 'safeStorage') {
-      return safeStorage.decryptString(Buffer.from(payload.value, 'base64'))
-    }
-
-    return Buffer.from(payload.value, 'base64').toString('utf8')
+    return this.platform.unprotect(payload)
   }
 
   private async readCodexAuthFile(): Promise<CodexAuthPayload> {
@@ -659,7 +644,8 @@ export class CodexLoginCoordinator {
 
   constructor(
     private readonly store: CodexAccountStore,
-    private readonly emit: (event: LoginEvent) => void
+    private readonly emit: (event: LoginEvent) => void,
+    private readonly platform: CodexPlatformAdapter
   ) {}
 
   isRunning(): boolean {
@@ -1003,7 +989,7 @@ export class CodexLoginCoordinator {
       .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
       .join('&')
 
-    const response = await net.fetch(OPENAI_TOKEN_URL, {
+    const response = await this.platform.fetch(OPENAI_TOKEN_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
@@ -1029,7 +1015,7 @@ export class CodexLoginCoordinator {
     verificationUrl: string
     intervalSeconds: number
   }> {
-    const response = await net.fetch(OPENAI_DEVICE_CODE_URL, {
+    const response = await this.platform.fetch(OPENAI_DEVICE_CODE_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -1110,7 +1096,7 @@ export class CodexLoginCoordinator {
     signal: AbortSignal
   ): Promise<{ authorizationCode: string; codeVerifier: string }> {
     while (!signal.aborted) {
-      const response = await net.fetch(OPENAI_DEVICE_TOKEN_URL, {
+      const response = await this.platform.fetch(OPENAI_DEVICE_TOKEN_URL, {
         method: 'POST',
         headers: {
           'content-type': 'application/json',
@@ -1177,7 +1163,7 @@ export class CodexLoginCoordinator {
       .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
       .join('&')
 
-    const response = await net.fetch(OPENAI_TOKEN_URL, {
+    const response = await this.platform.fetch(OPENAI_TOKEN_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
