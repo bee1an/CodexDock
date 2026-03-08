@@ -1,10 +1,11 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
+import { execFile as execFileCallback } from 'node:child_process'
 import { promises as fs } from 'node:fs'
 import { createServer, type Server } from 'node:http'
+import { promisify } from 'node:util'
 import { homedir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { AddressInfo } from 'node:net'
-import { safeStorage } from 'electron'
+import { net, safeStorage } from 'electron'
 
 import type {
   AccountRateLimits,
@@ -14,10 +15,12 @@ import type {
   CurrentSessionSummary,
   LoginAttempt,
   LoginEvent,
-  LoginMethod
+  LoginMethod,
+  PortOccupant
 } from '../shared/codex'
 
-interface CodexAuthPayload {
+export interface CodexAuthPayload {
+  auth_mode?: string
   OPENAI_API_KEY?: string | null
   last_refresh?: string
   tokens?: {
@@ -69,13 +72,24 @@ interface LoginSession {
   abortController?: AbortController
   rawOutput: string
   cancelled: boolean
+  authUrl?: string
+  redirectUri?: string
+  verificationUrl?: string
+  userCode?: string
 }
 
+const OPENAI_AUTH_ISSUER = 'https://auth.openai.com'
 const OPENAI_OAUTH_CLIENT_ID = 'app_EMoamEEZ73f0CkXaXp7hrann'
 const OPENAI_OAUTH_SCOPE =
   'openid profile email offline_access api.connectors.read api.connectors.invoke'
-const OPENAI_AUTHORIZE_URL = 'https://auth.openai.com/oauth/authorize'
-const OPENAI_TOKEN_URL = 'https://auth.openai.com/oauth/token'
+const OPENAI_AUTHORIZE_URL = `${OPENAI_AUTH_ISSUER}/oauth/authorize`
+const OPENAI_TOKEN_URL = `${OPENAI_AUTH_ISSUER}/oauth/token`
+const OPENAI_DEVICE_CODE_URL = `${OPENAI_AUTH_ISSUER}/api/accounts/deviceauth/usercode`
+const OPENAI_DEVICE_TOKEN_URL = `${OPENAI_AUTH_ISSUER}/api/accounts/deviceauth/token`
+const OPENAI_DEVICE_VERIFICATION_URL = `${OPENAI_AUTH_ISSUER}/codex/device`
+const OPENAI_DEVICE_REDIRECT_URI = `${OPENAI_AUTH_ISSUER}/deviceauth/callback`
+const OPENAI_CALLBACK_PORT = 1455
+const execFile = promisify(execFileCallback)
 
 function defaultState(): PersistedState {
   return {
@@ -96,6 +110,48 @@ function createPkceVerifier(): string {
 
 function createPkceChallenge(verifier: string): string {
   return base64UrlEncode(createHash('sha256').update(verifier).digest())
+}
+
+function encodeFormComponent(value: string): string {
+  return encodeURIComponent(value)
+}
+
+function buildAuthorizeUrl(redirectUri: string, codeChallenge: string, state: string): string {
+  const query = [
+    ['response_type', 'code'],
+    ['client_id', OPENAI_OAUTH_CLIENT_ID],
+    ['redirect_uri', redirectUri],
+    ['scope', OPENAI_OAUTH_SCOPE],
+    ['code_challenge', codeChallenge],
+    ['code_challenge_method', 'S256'],
+    ['id_token_add_organizations', 'true'],
+    ['codex_cli_simplified_flow', 'true'],
+    ['state', state],
+    ['originator', 'Codex Desktop']
+  ]
+    .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
+    .join('&')
+
+  return `${OPENAI_AUTHORIZE_URL}?${query}`
+}
+
+function parseTokenEndpointError(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as {
+      error?: string
+      error_description?: string
+      message?: string
+    }
+    return parsed.error_description ?? parsed.message ?? parsed.error ?? raw.trim()
+  } catch {
+    return raw.trim()
+  }
+}
+
+interface TokenEndpointPayload {
+  access_token?: string
+  refresh_token?: string
+  id_token?: string
 }
 
 function decodeJwtPayload(token?: string): Record<string, unknown> {
@@ -119,13 +175,124 @@ function decodeJwtPayload(token?: string): Record<string, unknown> {
   }
 }
 
+export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
+  try {
+    const { stdout } = await execFile('lsof', [
+      '-nP',
+      `-iTCP:${OPENAI_CALLBACK_PORT}`,
+      '-sTCP:LISTEN'
+    ])
+    const lines = stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    if (lines.length < 2) {
+      return null
+    }
+
+    const columns = lines[1].split(/\s+/)
+    const command = columns[0]
+    const pid = Number(columns[1])
+    if (!command || Number.isNaN(pid)) {
+      return null
+    }
+
+    return { pid, command }
+  } catch {
+    return null
+  }
+}
+
+export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
+  const occupant = await getOpenAiCallbackPortOccupant()
+  if (!occupant) {
+    return null
+  }
+
+  process.kill(occupant.pid, 'SIGTERM')
+  return occupant
+}
+
+function extractChatGptAccountIdFromTokens(idToken?: string, accessToken?: string): string | undefined {
+  const claims = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
+  for (const payload of claims) {
+    const authClaim = payload['https://api.openai.com/auth']
+    if (
+      authClaim &&
+      typeof authClaim === 'object' &&
+      'chatgpt_account_id' in authClaim &&
+      typeof authClaim.chatgpt_account_id === 'string'
+    ) {
+      return authClaim.chatgpt_account_id
+    }
+  }
+
+  return undefined
+}
+
+function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexAuthPayload {
+  return {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: null,
+    last_refresh: new Date().toISOString(),
+    tokens: {
+      access_token: tokens.access_token,
+      refresh_token: tokens.refresh_token,
+      id_token: tokens.id_token,
+      account_id: extractChatGptAccountIdFromTokens(tokens.id_token, tokens.access_token)
+    }
+  }
+}
+
+export async function refreshCodexAuthPayload(
+  auth: CodexAuthPayload,
+  signal?: AbortSignal
+): Promise<CodexAuthPayload> {
+  const refreshToken = auth.tokens?.refresh_token
+  if (!refreshToken) {
+    throw new Error('Missing refresh token required for token refresh.')
+  }
+
+  const body = [
+    ['grant_type', 'refresh_token'],
+    ['refresh_token', refreshToken],
+    ['client_id', OPENAI_OAUTH_CLIENT_ID]
+  ]
+    .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
+    .join('&')
+
+  const response = await net.fetch(OPENAI_TOKEN_URL, {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded'
+    },
+    body,
+    signal
+  })
+  const raw = await response.text()
+
+  if (!response.ok) {
+    const detail = parseTokenEndpointError(raw)
+    throw new Error(`OpenAI token refresh failed (${response.status}): ${detail}`)
+  }
+
+  const parsed = JSON.parse(raw) as TokenEndpointPayload
+
+  return buildAuthPayloadFromTokenResponse({
+    access_token: parsed.access_token,
+    refresh_token: parsed.refresh_token ?? refreshToken,
+    id_token: parsed.id_token
+  })
+}
+
 function summarizeAuth(
   auth: CodexAuthPayload
 ): Pick<AccountSummary, 'email' | 'name' | 'accountId'> {
   const payload = decodeJwtPayload(auth.tokens?.id_token)
   const email = typeof payload.email === 'string' ? payload.email : undefined
   const name = typeof payload.name === 'string' ? payload.name : undefined
-  const accountId = auth.tokens?.account_id
+  const accountId = extractChatGptAccountId(auth)
 
   return {
     email,
@@ -134,12 +301,72 @@ function summarizeAuth(
   }
 }
 
+function authIdentityFingerprint(auth: CodexAuthPayload): string | undefined {
+  const source =
+    auth.tokens?.refresh_token ?? auth.tokens?.id_token ?? auth.tokens?.access_token ?? undefined
+
+  if (!source) {
+    return undefined
+  }
+
+  return createHash('sha256').update(source).digest('hex').slice(0, 16)
+}
+
+function resolveSubject(auth: CodexAuthPayload): string | undefined {
+  const identityPayloads = [decodeJwtPayload(auth.tokens?.id_token), decodeJwtPayload(auth.tokens?.access_token)]
+  return identityPayloads
+    .map((payload) => (typeof payload.sub === 'string' ? payload.sub : undefined))
+    .find(Boolean)
+}
+
 function resolveAccountId(auth: CodexAuthPayload): string {
   const summary = summarizeAuth(auth)
-  const payload = decodeJwtPayload(auth.tokens?.id_token)
-  const subject = typeof payload.sub === 'string' ? payload.sub : undefined
+  const subject = resolveSubject(auth)
+  const fingerprint = authIdentityFingerprint(auth)
 
-  return summary.accountId ?? summary.email ?? subject ?? randomUUID()
+  if (subject && summary.accountId) {
+    return `${subject}:${summary.accountId}`
+  }
+
+  return summary.accountId ?? subject ?? fingerprint ?? randomUUID()
+}
+
+function extractChatGptAccountId(auth: CodexAuthPayload): string | undefined {
+  if (auth.tokens?.account_id) {
+    return auth.tokens.account_id
+  }
+
+  return extractChatGptAccountIdFromTokens(auth.tokens?.id_token, auth.tokens?.access_token)
+}
+
+function findMatchingAccount(
+  accounts: PersistedAccount[],
+  auth: CodexAuthPayload
+): PersistedAccount | undefined {
+  const summary = summarizeAuth(auth)
+  const identity = resolveAccountId(auth)
+  const subject = resolveSubject(auth)
+
+  return accounts.find((account) => {
+    if (account.id === identity) {
+      return true
+    }
+
+    // Legacy compatibility: older entries may have used account_id or sub alone.
+    if (summary.email && summary.accountId) {
+      return (
+        account.id === summary.accountId &&
+        account.accountId === summary.accountId &&
+        account.email === summary.email
+      )
+    }
+
+    if (summary.email && subject) {
+      return account.id === subject && account.email === summary.email
+    }
+
+    return false
+  })
 }
 
 function toAccountSummary(account: PersistedAccount): AccountSummary {
@@ -157,7 +384,6 @@ function toAccountSummary(account: PersistedAccount): AccountSummary {
 export class CodexAccountStore {
   private readonly stateFile: string
   private readonly codexAuthFile: string
-  private authFileQueue: Promise<void> = Promise.resolve()
 
   constructor(userDataPath: string) {
     this.stateFile = join(userDataPath, 'codex-accounts.json')
@@ -215,9 +441,8 @@ export class CodexAccountStore {
     await this.upsertAccount(auth, true)
   }
 
-  async importAuthPayload(auth: CodexAuthPayload): Promise<void> {
-    await this.upsertAccount(auth, true)
-    await this.writeCodexAuthFile(auth)
+  async importAuthPayload(auth: CodexAuthPayload): Promise<AccountSummary> {
+    return this.upsertAccount(auth, false)
   }
 
   async activateAccount(accountId: string): Promise<void> {
@@ -248,6 +473,21 @@ export class CodexAccountStore {
     await this.writeState(state)
   }
 
+  async getStoredAuthPayload(accountId: string): Promise<CodexAuthPayload> {
+    return this.getStoredAuth(accountId)
+  }
+
+  async getAccountSummary(accountId: string): Promise<AccountSummary> {
+    const state = await this.readState()
+    const account = state.accounts.find((item) => item.id === accountId)
+
+    if (!account) {
+      throw new Error('Account not found.')
+    }
+
+    return toAccountSummary(account)
+  }
+
   async removeAccount(accountId: string): Promise<void> {
     const state = await this.readState()
     state.accounts = state.accounts.filter((item) => item.id !== accountId)
@@ -259,30 +499,11 @@ export class CodexAccountStore {
     await this.writeState(state)
   }
 
-  async queryAccount<T>(accountId: string, task: () => Promise<T>): Promise<T> {
-    return this.withAuthFileLock(async () => {
-      const previousRawAuth = await this.readRawCodexAuthFile()
-      const nextAuth = await this.getStoredAuth(accountId)
-
-      await this.writeCodexAuthFile(nextAuth)
-
-      try {
-        const result = await task()
-        const refreshedAuth = await this.readCodexAuthFile()
-        await this.upsertAccount(refreshedAuth, false)
-        return result
-      } finally {
-        await this.restoreRawCodexAuth(previousRawAuth)
-      }
-    })
-  }
-
   private async getCurrentSession(state: PersistedState): Promise<CurrentSessionSummary | null> {
     try {
       const auth = await this.readCodexAuthFile()
       const summary = summarizeAuth(auth)
-      const accountId = resolveAccountId(auth)
-      const storedAccountId = state.accounts.find((item) => item.id === accountId)?.id
+      const storedAccountId = findMatchingAccount(state.accounts, auth)?.id
 
       return {
         email: summary.email,
@@ -296,15 +517,38 @@ export class CodexAccountStore {
     }
   }
 
-  private async upsertAccount(auth: CodexAuthPayload, makeActive: boolean): Promise<void> {
+  private async upsertAccount(
+    auth: CodexAuthPayload,
+    makeActive: boolean
+  ): Promise<AccountSummary> {
     const state = await this.readState()
     const identity = resolveAccountId(auth)
     const summary = summarizeAuth(auth)
     const now = new Date().toISOString()
     const payload = this.protect(JSON.stringify(auth))
-    const existing = state.accounts.find((item) => item.id === identity)
+    const existing = findMatchingAccount(state.accounts, auth)
 
     if (existing) {
+      const previousId = existing.id
+      if (previousId !== identity) {
+        if (state.activeAccountId === previousId) {
+          state.activeAccountId = identity
+        }
+
+        state.settings.statusBarAccountIds = state.settings.statusBarAccountIds.map((accountId) =>
+          accountId === previousId ? identity : accountId
+        )
+
+        if (state.usageByAccountId[previousId]) {
+          state.usageByAccountId = {
+            ...state.usageByAccountId,
+            [identity]: state.usageByAccountId[previousId]
+          }
+          delete state.usageByAccountId[previousId]
+        }
+      }
+
+      existing.id = identity
       existing.email = summary.email
       existing.name = summary.name
       existing.accountId = summary.accountId
@@ -331,6 +575,13 @@ export class CodexAccountStore {
     }
 
     await this.writeState(state)
+    const persistedAccount =
+      existing ?? state.accounts.find((account) => account.id === identity) ?? null
+    if (!persistedAccount) {
+      throw new Error('Failed to persist account.')
+    }
+
+    return toAccountSummary(persistedAccount)
   }
 
   private protect(value: string): ProtectedPayload {
@@ -358,14 +609,6 @@ export class CodexAccountStore {
   private async readCodexAuthFile(): Promise<CodexAuthPayload> {
     const raw = await fs.readFile(this.codexAuthFile, 'utf8')
     return JSON.parse(raw) as CodexAuthPayload
-  }
-
-  private async readRawCodexAuthFile(): Promise<string | null> {
-    try {
-      return await fs.readFile(this.codexAuthFile, 'utf8')
-    } catch {
-      return null
-    }
   }
 
   private async getStoredAuth(accountId: string): Promise<CodexAuthPayload> {
@@ -409,32 +652,6 @@ export class CodexAccountStore {
     await fs.mkdir(join(homedir(), '.codex'), { recursive: true })
     await fs.writeFile(this.codexAuthFile, `${JSON.stringify(auth, null, 2)}\n`, 'utf8')
   }
-
-  private async restoreRawCodexAuth(rawAuth: string | null): Promise<void> {
-    if (rawAuth === null) {
-      await fs.rm(this.codexAuthFile, { force: true })
-      return
-    }
-
-    await fs.mkdir(join(homedir(), '.codex'), { recursive: true })
-    await fs.writeFile(this.codexAuthFile, rawAuth, 'utf8')
-  }
-
-  private async withAuthFileLock<T>(task: () => Promise<T>): Promise<T> {
-    const previous = this.authFileQueue
-    let release: (() => void) | undefined
-    this.authFileQueue = new Promise((resolve) => {
-      release = resolve
-    })
-
-    await previous.catch(() => undefined)
-
-    try {
-      return await task()
-    } finally {
-      release?.()
-    }
-  }
 }
 
 export class CodexLoginCoordinator {
@@ -449,21 +666,20 @@ export class CodexLoginCoordinator {
     return Boolean(this.currentSession)
   }
 
-  async start(_method: LoginMethod): Promise<LoginAttempt> {
-    void _method
-
+  async start(method: LoginMethod): Promise<LoginAttempt> {
     if (this.currentSession) {
-      if (this.currentSession.method === 'browser') {
+      if (this.currentSession.method === method) {
+        this.emitCurrentSession(this.currentSession)
         return {
           attemptId: this.currentSession.attemptId,
-          method: 'browser'
+          method
         }
       }
 
       await this.cancelAndWait()
     }
 
-    return this.startBrowserLogin()
+    return method === 'device' ? this.startDeviceLogin() : this.startBrowserLogin()
   }
 
   async cancel(): Promise<void> {
@@ -477,8 +693,35 @@ export class CodexLoginCoordinator {
 
     if (session.server) {
       await this.closeServer(session.server)
-      this.currentSession = undefined
     }
+
+    this.currentSession = undefined
+  }
+
+  private emitCurrentSession(session: LoginSession): void {
+    const phase =
+      session.authUrl || session.redirectUri || session.verificationUrl || session.userCode
+        ? 'waiting'
+        : 'starting'
+
+    this.emit({
+      attemptId: session.attemptId,
+      method: session.method,
+      phase,
+      message:
+        phase === 'waiting'
+          ? session.method === 'device'
+            ? 'Open the verification page and enter the device code.'
+            : 'Browser login is waiting for the OpenAI callback.'
+          : session.method === 'device'
+            ? 'Started device code login.'
+            : 'Started browser callback login.',
+      authUrl: session.authUrl,
+      localCallbackUrl: session.redirectUri,
+      verificationUrl: session.verificationUrl,
+      userCode: session.userCode,
+      rawOutput: session.rawOutput
+    })
   }
 
   private async startBrowserLogin(): Promise<LoginAttempt> {
@@ -513,7 +756,7 @@ export class CodexLoginCoordinator {
           return
         }
 
-        const callbackUrl = new URL(request.url, 'http://127.0.0.1')
+        const callbackUrl = new URL(request.url, 'http://localhost')
         if (callbackUrl.pathname !== '/auth/callback') {
           response.writeHead(404, { 'content-type': 'text/plain; charset=utf-8' })
           response.end('Not found.')
@@ -560,7 +803,7 @@ export class CodexLoginCoordinator {
     try {
       await new Promise<void>((resolve, reject) => {
         server.once('error', reject)
-        server.listen(0, '127.0.0.1', () => resolve())
+        server.listen(OPENAI_CALLBACK_PORT, '127.0.0.1', () => resolve())
       })
 
       const address = server.address()
@@ -568,26 +811,18 @@ export class CodexLoginCoordinator {
         throw new Error('Failed to start the local OAuth callback server.')
       }
 
-      const localCallbackUrl = `http://127.0.0.1:${(address as AddressInfo).port}/auth/callback`
-      const authUrl = new URL(OPENAI_AUTHORIZE_URL)
-      authUrl.searchParams.set('response_type', 'code')
-      authUrl.searchParams.set('client_id', OPENAI_OAUTH_CLIENT_ID)
-      authUrl.searchParams.set('redirect_uri', localCallbackUrl)
-      authUrl.searchParams.set('scope', OPENAI_OAUTH_SCOPE)
-      authUrl.searchParams.set('code_challenge', codeChallenge)
-      authUrl.searchParams.set('code_challenge_method', 'S256')
-      authUrl.searchParams.set('id_token_add_organizations', 'true')
-      authUrl.searchParams.set('codex_cli_simplified_flow', 'true')
-      authUrl.searchParams.set('state', state)
-      authUrl.searchParams.set('originator', 'Ilovecodex')
+      const localCallbackUrl = `http://localhost:${OPENAI_CALLBACK_PORT}/auth/callback`
+      const authUrl = buildAuthorizeUrl(localCallbackUrl, codeChallenge, state)
+      session.authUrl = authUrl
+      session.redirectUri = localCallbackUrl
 
-      session.rawOutput = `${authUrl.toString()}\n${localCallbackUrl}\n`
+      session.rawOutput = `${authUrl}\n${localCallbackUrl}\n`
       this.emit({
         attemptId,
         method: 'browser',
         phase: 'waiting',
         message: 'Browser login is waiting for the OpenAI callback.',
-        authUrl: authUrl.toString(),
+        authUrl,
         localCallbackUrl,
         rawOutput: session.rawOutput
       })
@@ -597,6 +832,16 @@ export class CodexLoginCoordinator {
       }
       if (server.listening) {
         await this.closeServer(server)
+      }
+      if ((error as NodeJS.ErrnoException | undefined)?.code === 'EADDRINUSE') {
+        const occupant = await getOpenAiCallbackPortOccupant()
+        if (occupant) {
+          throw new Error(
+            `1455 端口已被 ${occupant.command} (${occupant.pid}) 占用，请先结束该进程。`
+          )
+        }
+
+        throw new Error('1455 端口已被占用，请先释放后再发起浏览器登录。')
       }
       throw error
     }
@@ -624,6 +869,77 @@ export class CodexLoginCoordinator {
 
     return { attemptId, method: 'browser' }
   }
+
+  private async startDeviceLogin(): Promise<LoginAttempt> {
+    const attemptId = randomUUID()
+    const abortController = new AbortController()
+    const session: LoginSession = {
+      attemptId,
+      method: 'device',
+      abortController,
+      rawOutput: '',
+      cancelled: false
+    }
+
+    this.currentSession = session
+    this.emit({
+      attemptId,
+      method: 'device',
+      phase: 'starting',
+      message: 'Started device code login.'
+    })
+
+    try {
+      const challenge = await this.requestDeviceCode(abortController.signal)
+      if (this.currentSession?.attemptId !== attemptId) {
+        return { attemptId, method: 'device' }
+      }
+
+      session.verificationUrl = challenge.verificationUrl
+      session.userCode = challenge.userCode
+      session.rawOutput = `${challenge.verificationUrl}\n${challenge.userCode}\n`
+
+      this.emit({
+        attemptId,
+        method: 'device',
+        phase: 'waiting',
+        message: 'Open the verification page and enter the device code.',
+        verificationUrl: challenge.verificationUrl,
+        userCode: challenge.userCode,
+        rawOutput: session.rawOutput
+      })
+
+      void this.finishDeviceLogin(attemptId, challenge, abortController.signal).catch(async (error) => {
+        if (this.currentSession?.attemptId !== attemptId) {
+          return
+        }
+
+        this.currentSession = undefined
+        this.emit({
+          attemptId,
+          method: 'device',
+          phase: session.cancelled ? 'cancelled' : 'error',
+          message: session.cancelled
+            ? 'Cancelled login flow.'
+            : error instanceof Error
+              ? error.message
+              : 'Device code login failed.',
+          verificationUrl: session.verificationUrl,
+          userCode: session.userCode,
+          rawOutput: session.rawOutput,
+          snapshot: await this.store.getSnapshot(false)
+        })
+      })
+    } catch (error) {
+      if (this.currentSession?.attemptId === attemptId) {
+        this.currentSession = undefined
+      }
+      throw error
+    }
+
+    return { attemptId, method: 'device' }
+  }
+
   private async cancelAndWait(): Promise<void> {
     const session = this.currentSession
     if (!session) {
@@ -635,8 +951,9 @@ export class CodexLoginCoordinator {
 
     if (session.server) {
       await this.closeServer(session.server)
-      this.currentSession = undefined
     }
+
+    this.currentSession = undefined
   }
 
   private async finishBrowserLogin(
@@ -651,13 +968,11 @@ export class CodexLoginCoordinator {
     }
 
     const server = session.server
-    const address = server?.address()
-    if (!server || !address || typeof address === 'string') {
+    if (!server || !session.redirectUri) {
       throw new Error('The local OAuth callback server is unavailable.')
     }
 
-    const redirectUri = `http://127.0.0.1:${(address as AddressInfo).port}/auth/callback`
-    const auth = await this.exchangeBrowserCode(code, codeVerifier, redirectUri, signal)
+    const auth = await this.exchangeBrowserCode(code, codeVerifier, session.redirectUri, signal)
     await this.store.importAuthPayload(auth)
 
     this.currentSession = undefined
@@ -666,7 +981,7 @@ export class CodexLoginCoordinator {
       attemptId,
       method: 'browser',
       phase: 'success',
-      message: 'Imported the new browser login into the local account vault.',
+      message: 'Saved the new browser login to the local account vault.',
       rawOutput: session.rawOutput,
       snapshot: await this.store.getSnapshot(false)
     })
@@ -678,14 +993,17 @@ export class CodexLoginCoordinator {
     redirectUri: string,
     signal: AbortSignal
   ): Promise<CodexAuthPayload> {
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: OPENAI_OAUTH_CLIENT_ID,
-      code,
-      redirect_uri: redirectUri,
-      code_verifier: codeVerifier
-    })
-    const response = await fetch(OPENAI_TOKEN_URL, {
+    const body = [
+      ['grant_type', 'authorization_code'],
+      ['code', code],
+      ['redirect_uri', redirectUri],
+      ['client_id', OPENAI_OAUTH_CLIENT_ID],
+      ['code_verifier', codeVerifier]
+    ]
+      .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
+      .join('&')
+
+    const response = await net.fetch(OPENAI_TOKEN_URL, {
       method: 'POST',
       headers: {
         'content-type': 'application/x-www-form-urlencoded'
@@ -696,42 +1014,185 @@ export class CodexLoginCoordinator {
     const raw = await response.text()
 
     if (!response.ok) {
-      throw new Error(`OpenAI token exchange failed (${response.status}).`)
+      const detail = parseTokenEndpointError(raw)
+      throw new Error(`OpenAI token exchange failed (${response.status}): ${detail}`)
+    }
+
+    return buildAuthPayloadFromTokenResponse(JSON.parse(raw) as TokenEndpointPayload)
+  }
+
+  private async requestDeviceCode(
+    signal: AbortSignal
+  ): Promise<{
+    deviceAuthId: string
+    userCode: string
+    verificationUrl: string
+    intervalSeconds: number
+  }> {
+    const response = await net.fetch(OPENAI_DEVICE_CODE_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: OPENAI_OAUTH_CLIENT_ID
+      }),
+      signal
+    })
+    const raw = await response.text()
+
+    if (!response.ok) {
+      const detail = parseTokenEndpointError(raw)
+      throw new Error(`OpenAI device code request failed (${response.status}): ${detail}`)
     }
 
     const parsed = JSON.parse(raw) as {
-      access_token?: string
-      refresh_token?: string
-      id_token?: string
+      device_auth_id?: string
+      user_code?: string
+      interval?: number
+    }
+
+    if (!parsed.device_auth_id || !parsed.user_code) {
+      throw new Error('OpenAI device code response is missing required fields.')
     }
 
     return {
-      OPENAI_API_KEY: null,
-      last_refresh: new Date().toISOString(),
-      tokens: {
-        access_token: parsed.access_token,
-        refresh_token: parsed.refresh_token,
-        id_token: parsed.id_token,
-        account_id: this.extractChatGptAccountId(parsed.id_token, parsed.access_token)
-      }
+      deviceAuthId: parsed.device_auth_id,
+      userCode: parsed.user_code,
+      verificationUrl: OPENAI_DEVICE_VERIFICATION_URL,
+      intervalSeconds: Math.max(1, parsed.interval ?? 5)
     }
   }
 
-  private extractChatGptAccountId(idToken?: string, accessToken?: string): string | undefined {
-    const claims = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
-    for (const payload of claims) {
-      const authClaim = payload['https://api.openai.com/auth']
-      if (
-        authClaim &&
-        typeof authClaim === 'object' &&
-        'chatgpt_account_id' in authClaim &&
-        typeof authClaim.chatgpt_account_id === 'string'
-      ) {
-        return authClaim.chatgpt_account_id
-      }
+  private async finishDeviceLogin(
+    attemptId: string,
+    challenge: {
+      deviceAuthId: string
+      userCode: string
+      verificationUrl: string
+      intervalSeconds: number
+    },
+    signal: AbortSignal
+  ): Promise<void> {
+    const session = this.currentSession
+    if (!session || session.attemptId !== attemptId) {
+      return
     }
 
-    return undefined
+    const tokenExchange = await this.pollDeviceAuthorization(challenge, signal)
+    const auth = await this.exchangeDeviceCode(
+      tokenExchange.authorizationCode,
+      tokenExchange.codeVerifier,
+      signal
+    )
+    await this.store.importAuthPayload(auth)
+
+    this.currentSession = undefined
+    this.emit({
+      attemptId,
+      method: 'device',
+      phase: 'success',
+      message: 'Saved the new device code login to the local account vault.',
+      verificationUrl: session.verificationUrl,
+      userCode: session.userCode,
+      rawOutput: session.rawOutput,
+      snapshot: await this.store.getSnapshot(false)
+    })
+  }
+
+  private async pollDeviceAuthorization(
+    challenge: {
+      deviceAuthId: string
+      userCode: string
+      intervalSeconds: number
+    },
+    signal: AbortSignal
+  ): Promise<{ authorizationCode: string; codeVerifier: string }> {
+    while (!signal.aborted) {
+      const response = await net.fetch(OPENAI_DEVICE_TOKEN_URL, {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          accept: 'application/json'
+        },
+        body: JSON.stringify({
+          device_auth_id: challenge.deviceAuthId,
+          user_code: challenge.userCode
+        }),
+        signal
+      })
+      const raw = await response.text()
+
+      if (response.ok) {
+        const parsed = JSON.parse(raw) as {
+          authorization_code?: string
+          code_verifier?: string
+        }
+
+        if (!parsed.authorization_code || !parsed.code_verifier) {
+          throw new Error('OpenAI device token response is missing required fields.')
+        }
+
+        return {
+          authorizationCode: parsed.authorization_code,
+          codeVerifier: parsed.code_verifier
+        }
+      }
+
+      if ([400, 403, 404, 428].includes(response.status)) {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(resolve, challenge.intervalSeconds * 1000)
+          signal.addEventListener(
+            'abort',
+            () => {
+              clearTimeout(timeout)
+              reject(new Error('Cancelled login flow.'))
+            },
+            { once: true }
+          )
+        })
+        continue
+      }
+
+      const detail = parseTokenEndpointError(raw)
+      throw new Error(`OpenAI device token polling failed (${response.status}): ${detail}`)
+    }
+
+    throw new Error('Cancelled login flow.')
+  }
+
+  private async exchangeDeviceCode(
+    code: string,
+    codeVerifier: string,
+    signal: AbortSignal
+  ): Promise<CodexAuthPayload> {
+    const body = [
+      ['grant_type', 'authorization_code'],
+      ['code', code],
+      ['redirect_uri', OPENAI_DEVICE_REDIRECT_URI],
+      ['client_id', OPENAI_OAUTH_CLIENT_ID],
+      ['code_verifier', codeVerifier]
+    ]
+      .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
+      .join('&')
+
+    const response = await net.fetch(OPENAI_TOKEN_URL, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/x-www-form-urlencoded'
+      },
+      body,
+      signal
+    })
+    const raw = await response.text()
+
+    if (!response.ok) {
+      const detail = parseTokenEndpointError(raw)
+      throw new Error(`OpenAI token exchange failed (${response.status}): ${detail}`)
+    }
+
+    return buildAuthPayloadFromTokenResponse(JSON.parse(raw) as TokenEndpointPayload)
   }
 
   private async closeServer(server: Server): Promise<void> {

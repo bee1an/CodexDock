@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte'
+  import brandMark from './assets/brand-mark.png'
 
   import type {
     AppLanguage,
@@ -10,7 +11,8 @@
     AccountSummary,
     AppSnapshot,
     LoginEvent,
-    LoginMethod
+    LoginMethod,
+    PortOccupant
   } from '../../shared/codex'
   import { formatRelativeReset, remainingPercent, resolveBestAccount } from '../../shared/codex'
 
@@ -32,8 +34,12 @@
   }
   let loginEvent: LoginEvent | null = null
   let loginStarting = false
+  let showDeviceLoginDetails = true
+  let refreshingAllUsage = false
   let pageError = ''
   let showSettings = false
+  let loginPortOccupant: PortOccupant | null = null
+  let killingLoginPortOccupant = false
   let usageByAccountId: Record<string, AccountRateLimits> = {}
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
@@ -50,6 +56,7 @@
       readRateLimitFailed: '无法读取账号限额',
       removeConfirm: (label: string) => `删除 ${label} 的本地保存登录态？`,
       browserLogin: '浏览器登录',
+      deviceLogin: '设备码登录',
       importCurrent: '导入当前登录',
       switchBest: '切换到最优账号',
       alreadyBest: '当前已是最优账号',
@@ -59,10 +66,14 @@
       pollingInterval: '额度轮询',
       minutes: '分钟',
       browserLoginLink: '浏览器登录链接',
+      deviceLoginLink: '设备验证页面',
+      deviceCode: '设备码',
       copyLink: '复制链接',
+      copyCode: '复制设备码',
       openBrowser: '打开浏览器',
       openMainPanel: '打开主面板',
       waitingCallback: '等待浏览器完成授权并回调本地地址。',
+      waitingDeviceCode: '在浏览器里完成授权后，这里会自动继续。',
       statusBarAccountCount: (count: number) => `${count} 个状态栏账号`,
       noStatusBarAccounts: '还没有可显示的账号。',
       statusBarDisplayAccounts: '状态栏显示账号',
@@ -78,6 +89,7 @@
       openCodex: '打开 Codex',
       switchAccount: '切换账号',
       refreshQuota: '刷新额度',
+      refreshAllQuota: '刷新全部额度',
       refreshQuotaBlocked: (minutes: number) => `${minutes} 分钟内不重复请求`,
       deleteSaved: '删除保存',
       noSavedAccounts: '还没有保存任何账号。先导入当前登录，或者走一次新的浏览器登录。',
@@ -87,7 +99,18 @@
       githubPending: 'GitHub 链接待配置',
       lightTheme: '浅色主题',
       darkTheme: '深色主题',
-      systemTheme: '跟随系统'
+      systemTheme: '跟随系统',
+      portOccupied: (command: string, pid: number) => `1455 端口当前被 ${command} (${pid}) 占用`,
+      killPortOccupant: '结束占用进程',
+      killPortOccupantFailed: '无法结束占用 1455 端口的进程',
+      emptyStateTitle: '还没有账号',
+      emptyStateDescription: '导入当前登录，或者新建一次浏览器登录。',
+      importCurrentHint: '导入当前登录',
+      importCurrentDetail: '适合你已经在本机 Codex 里登录过账号的情况。',
+      browserLoginHint: '新建浏览器登录',
+      browserLoginDetail: '适合补充新账号，或者把别的付费账号接进来。',
+      deviceLoginHint: '设备码登录',
+      deviceLoginDetail: '适合在别的设备或浏览器里完成授权，再回到这里自动导入。'
     },
     en: {
       unnamedAccount: 'Unnamed account',
@@ -96,6 +119,7 @@
       readRateLimitFailed: 'Unable to read account limits',
       removeConfirm: (label: string) => `Remove the saved local session for ${label}?`,
       browserLogin: 'Browser login',
+      deviceLogin: 'Device code login',
       importCurrent: 'Import current login',
       switchBest: 'Switch to best account',
       alreadyBest: 'Already using best account',
@@ -105,10 +129,15 @@
       pollingInterval: 'Usage polling',
       minutes: 'min',
       browserLoginLink: 'Browser login URL',
+      deviceLoginLink: 'Device verification URL',
+      deviceCode: 'Device code',
       copyLink: 'Copy link',
+      copyCode: 'Copy code',
       openBrowser: 'Open browser',
       openMainPanel: 'Open main panel',
       waitingCallback: 'Waiting for the browser to finish authorization and call back locally.',
+      waitingDeviceCode:
+        'Finish authorization in the browser and Ilovecodex will continue automatically.',
       statusBarAccountCount: (count: number) =>
         `${count} menu bar account${count === 1 ? '' : 's'}`,
       noStatusBarAccounts: 'No account selected for the menu bar.',
@@ -125,6 +154,7 @@
       openCodex: 'Open Codex',
       switchAccount: 'Switch account',
       refreshQuota: 'Refresh usage',
+      refreshAllQuota: 'Refresh all usage',
       refreshQuotaBlocked: (minutes: number) => `No repeat request within ${minutes} min`,
       deleteSaved: 'Delete saved login',
       noSavedAccounts:
@@ -135,7 +165,22 @@
       githubPending: 'GitHub link not configured',
       lightTheme: 'Light theme',
       darkTheme: 'Dark theme',
-      systemTheme: 'System theme'
+      systemTheme: 'System theme',
+      portOccupied: (command: string, pid: number) =>
+        `Port 1455 is currently in use by ${command} (${pid})`,
+      killPortOccupant: 'Kill occupying process',
+      killPortOccupantFailed: 'Unable to terminate the process using port 1455',
+      emptyStateTitle: 'No accounts yet',
+      emptyStateDescription: 'Import the current login or start a browser login.',
+      importCurrentHint: 'Import current login',
+      importCurrentDetail:
+        'Best when this machine is already signed in through Codex and you want to pull it in immediately.',
+      browserLoginHint: 'Start browser login',
+      browserLoginDetail:
+        'Best when you want to add another account or connect a different paid workspace.',
+      deviceLoginHint: 'Use device code',
+      deviceLoginDetail:
+        'Best when you want to approve the login on another browser or device and let Ilovecodex poll automatically.'
     }
   } as const
   const isTrayView =
@@ -152,6 +197,8 @@
 
   const heroClass = 'theme-surface rounded-[1rem] border border-black/8 bg-white p-4 sm:p-5'
   const panelClass = 'theme-surface rounded-[1rem] border border-black/8 bg-white p-5'
+  const primaryActionButton =
+    'inline-flex items-center justify-center gap-2 rounded-xl bg-black px-4 py-3 text-sm font-medium text-white transition-colors duration-140 hover:bg-black/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const compactGhostButton =
     'theme-ghost-button inline-flex items-center justify-center rounded-md border border-black/10 bg-transparent px-3 py-2 text-sm font-medium text-ink transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const iconToolbarButton =
@@ -176,6 +223,15 @@
 
   const refreshSnapshot = async (): Promise<void> => {
     applySnapshot(await window.codexApp.getSnapshot())
+  }
+
+  const hasLoginPortConflict = (): boolean => {
+    const message = `${pageError}\n${loginEvent?.message ?? ''}`.toLowerCase()
+    return message.includes('1455') && (message.includes('占用') || message.includes('in use'))
+  }
+
+  const refreshLoginPortOccupant = async (): Promise<void> => {
+    loginPortOccupant = await window.codexApp.getLoginPortOccupant()
   }
 
   const themeIconClass = (theme: AppTheme): string => {
@@ -305,7 +361,7 @@
   const bestAccount = (): AccountSummary | null =>
     resolveBestAccount(snapshot.accounts, usageByAccountId, snapshot.activeAccountId)
 
-  const canPollUsage = (accountId: string): boolean => {
+  const canAutoPollUsage = (accountId: string): boolean => {
     if (usageErrorByAccountId[accountId]) {
       return true
     }
@@ -392,9 +448,19 @@
   }
 
   const startLogin = async (method: LoginMethod): Promise<void> => {
+    if (method === 'device' && loginEvent?.method === 'device' && loginEvent.phase === 'waiting') {
+      showDeviceLoginDetails = !showDeviceLoginDetails
+      return
+    }
+
     pageError = ''
     loginEvent = null
+    loginPortOccupant = null
     loginStarting = true
+
+    if (method === 'device') {
+      showDeviceLoginDetails = true
+    }
 
     try {
       await window.codexApp.startLogin(method)
@@ -402,6 +468,23 @@
     } catch (error) {
       loginStarting = false
       pageError = error instanceof Error ? error.message : copyForLanguage().startLoginFailed
+      if (hasLoginPortConflict()) {
+        await refreshLoginPortOccupant()
+      }
+    }
+  }
+
+  const killLoginPortOccupant = async (): Promise<void> => {
+    pageError = ''
+    killingLoginPortOccupant = true
+
+    try {
+      loginPortOccupant = await window.codexApp.killLoginPortOccupant()
+      await refreshLoginPortOccupant()
+    } catch (error) {
+      pageError = error instanceof Error ? error.message : copyForLanguage().killPortOccupantFailed
+    } finally {
+      killingLoginPortOccupant = false
     }
   }
 
@@ -422,7 +505,11 @@
   }
 
   const copyAuthUrl = async (): Promise<void> => {
-    await copyText(loginEvent?.authUrl)
+    await copyText(loginEvent?.verificationUrl ?? loginEvent?.authUrl)
+  }
+
+  const copyDeviceCode = async (): Promise<void> => {
+    await copyText(loginEvent?.userCode)
   }
 
   const openExternalLink = (url?: string): void => {
@@ -433,8 +520,11 @@
     window.open(url, '_blank', 'noopener,noreferrer')
   }
 
-  const readRateLimits = async (account: AccountSummary): Promise<void> => {
-    if (usageLoadingByAccountId[account.id] || !canPollUsage(account.id)) {
+  const readRateLimits = async (
+    account: AccountSummary,
+    options: { force?: boolean } = {}
+  ): Promise<void> => {
+    if (usageLoadingByAccountId[account.id] || (!options.force && !canAutoPollUsage(account.id))) {
       return
     }
 
@@ -471,7 +561,7 @@
     for (const account of accounts) {
       if (
         usageLoadingByAccountId[account.id] ||
-        (usageByAccountId[account.id] && !canPollUsage(account.id))
+        (usageByAccountId[account.id] && !canAutoPollUsage(account.id))
       ) {
         continue
       }
@@ -521,6 +611,22 @@
     await runAction('activate:best', () => window.codexApp.activateBestAccount())
   }
 
+  const refreshAllRateLimits = async (): Promise<void> => {
+    if (!snapshot.accounts.length || refreshingAllUsage) {
+      return
+    }
+
+    refreshingAllUsage = true
+
+    try {
+      for (const account of snapshot.accounts) {
+        await readRateLimits(account, { force: true })
+      }
+    } finally {
+      refreshingAllUsage = false
+    }
+  }
+
   onMount(() => {
     const darkMedia = window.matchMedia('(prefers-color-scheme: dark)')
     prefersDark = darkMedia.matches
@@ -542,16 +648,23 @@
 
     const disposeLogin = window.codexApp.onLoginEvent((event) => {
       loginEvent = event
-      loginStarting = !(
-        event.phase === 'success' ||
-        event.phase === 'error' ||
-        event.phase === 'cancelled' ||
-        (event.method === 'browser' && Boolean(event.authUrl))
-      )
+      loginStarting = event.phase === 'starting'
+
+      if (event.method === 'device' && event.phase === 'waiting') {
+        showDeviceLoginDetails = true
+      }
+
+      if (event.method === 'device' && event.phase === 'success') {
+        showDeviceLoginDetails = false
+      }
 
       if (event.snapshot) {
         applySnapshot(event.snapshot)
         return
+      }
+
+      if (event.phase === 'error' && hasLoginPortConflict()) {
+        void refreshLoginPortOccupant()
       }
 
       void refreshSnapshot()
@@ -585,11 +698,18 @@
         class="theme-tray-panel grid gap-3 overflow-hidden rounded-[1.05rem] border border-black/[0.08] bg-white/66 p-3.5 backdrop-blur-2xl"
       >
         <div class="flex items-center justify-between gap-3">
-          <div class="min-w-0">
-            <p class="text-sm font-medium text-ink">Ilovecodex</p>
-            <p class="text-xs text-faint">
-              {copyForLanguage().statusBarAccountCount(statusBarAccounts().length)}
-            </p>
+          <div class="flex min-w-0 items-center gap-2.5">
+            <img
+              src={brandMark}
+              alt=""
+              class="h-9 w-9 flex-none rounded-[0.95rem] border border-black/[0.05] shadow-[0_10px_24px_rgba(24,24,27,0.08)]"
+            />
+            <div class="min-w-0">
+              <p class="text-sm font-medium text-ink">Ilovecodex</p>
+              <p class="text-xs text-faint">
+                {copyForLanguage().statusBarAccountCount(statusBarAccounts().length)}
+              </p>
+            </div>
           </div>
           <button class={compactGhostButton} on:click={openMainPanel}>
             {copyForLanguage().openMainPanel}
@@ -716,13 +836,22 @@
     {:else}
       <section class={heroClass}>
         <div class="flex flex-wrap items-center justify-between gap-3">
-          <div class="flex min-w-0 items-center gap-3">
-            <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-faint">Ilovecodex</p>
-            {#if loginEvent}
-              <p class={`truncate text-sm ${loginTone(loginEvent.phase)}`} aria-live="polite">
-                {loginEvent.message}
+          <div class="flex min-w-0 items-center gap-3.5">
+            <img
+              src={brandMark}
+              alt=""
+              class="h-12 w-12 flex-none rounded-[1.15rem] border border-black/[0.05] shadow-[0_16px_36px_rgba(24,24,27,0.1)]"
+            />
+            <div class="min-w-0">
+              <p class="text-[11px] font-medium uppercase tracking-[0.18em] text-faint">
+                Ilovecodex
               </p>
-            {/if}
+              {#if loginEvent}
+                <p class={`truncate text-sm ${loginTone(loginEvent.phase)}`} aria-live="polite">
+                  {loginEvent.message}
+                </p>
+              {/if}
+            </div>
           </div>
 
           <div
@@ -740,12 +869,31 @@
             </button>
             <button
               class={iconToolbarButton}
+              on:click={() => startLogin('device')}
+              aria-label={copyForLanguage().deviceLogin}
+              title={copyForLanguage().deviceLogin}
+            >
+              <span class="i-lucide-key-round h-4.5 w-4.5"></span>
+            </button>
+            <button
+              class={iconToolbarButton}
               on:click={() => runAction('import', () => window.codexApp.importCurrentAccount())}
               disabled={snapshot.loginInProgress}
               aria-label={copyForLanguage().importCurrent}
               title={copyForLanguage().importCurrent}
             >
               <span class="i-lucide-plus h-4.5 w-4.5"></span>
+            </button>
+            <button
+              class={iconToolbarButton}
+              on:click={refreshAllRateLimits}
+              disabled={snapshot.loginInProgress || refreshingAllUsage || !snapshot.accounts.length}
+              aria-label={copyForLanguage().refreshAllQuota}
+              title={copyForLanguage().refreshAllQuota}
+            >
+              <span
+                class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-4.5 w-4.5`}
+              ></span>
             </button>
             <button
               class={iconToolbarButton}
@@ -791,7 +939,7 @@
           </div>
         {/if}
 
-        {#if loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput}
+        {#if loginEvent?.authUrl || loginEvent?.localCallbackUrl || (showDeviceLoginDetails && loginEvent?.method === 'device' && (loginEvent?.verificationUrl || loginEvent?.userCode)) || (loginEvent?.phase === 'error' && loginEvent?.rawOutput)}
           <div class="mt-3 grid gap-2 border-t border-black/6 pt-3">
             {#if loginEvent.method === 'browser' && loginEvent.authUrl}
               <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
@@ -819,6 +967,47 @@
               <p class="text-sm text-muted-strong">{copyForLanguage().waitingCallback}</p>
             {/if}
 
+            {#if showDeviceLoginDetails && loginEvent.method === 'device' && loginEvent.verificationUrl}
+              <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+                <p class="text-sm text-muted-strong">{copyForLanguage().deviceLoginLink}</p>
+                <code
+                  class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+                >
+                  {loginEvent.verificationUrl}
+                </code>
+                {#if loginEvent.userCode}
+                  <div class="grid gap-1">
+                    <p class="text-sm text-muted-strong">{copyForLanguage().deviceCode}</p>
+                    <code
+                      class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
+                    >
+                      {loginEvent.userCode}
+                    </code>
+                  </div>
+                {/if}
+                <div class="flex flex-wrap items-center gap-2">
+                  <button class={compactGhostButton} on:click={copyAuthUrl}>
+                    {copyForLanguage().copyLink}
+                  </button>
+                  {#if loginEvent.userCode}
+                    <button class={compactGhostButton} on:click={copyDeviceCode}>
+                      {copyForLanguage().copyCode}
+                    </button>
+                  {/if}
+                  <button
+                    class={compactGhostButton}
+                    on:click={() => openExternalLink(loginEvent.verificationUrl)}
+                  >
+                    {copyForLanguage().openBrowser}
+                  </button>
+                </div>
+              </div>
+            {/if}
+
+            {#if showDeviceLoginDetails && loginEvent.method === 'device' && loginEvent.userCode}
+              <p class="text-sm text-muted-strong">{copyForLanguage().waitingDeviceCode}</p>
+            {/if}
+
             {#if loginEvent.phase === 'error' && loginEvent.rawOutput}
               <pre
                 class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
@@ -831,7 +1020,23 @@
         <section
           class="theme-surface theme-error-panel rounded-[1rem] border border-danger/18 bg-white px-4 py-4 text-base text-danger"
         >
-          {pageError}
+          <div class="grid gap-2">
+            <p>{pageError}</p>
+            {#if loginPortOccupant && hasLoginPortConflict()}
+              <div class="flex flex-wrap items-center gap-2 text-sm text-danger">
+                <span>
+                  {copyForLanguage().portOccupied(loginPortOccupant.command, loginPortOccupant.pid)}
+                </span>
+                <button
+                  class={compactGhostButton}
+                  on:click={killLoginPortOccupant}
+                  disabled={killingLoginPortOccupant}
+                >
+                  {copyForLanguage().killPortOccupant}
+                </button>
+              </div>
+            {/if}
+          </div>
         </section>
       {/if}
 
@@ -977,16 +1182,10 @@
                   </button>
                   <button
                     class={iconRowButton}
-                    on:click={() => readRateLimits(account)}
-                    disabled={snapshot.loginInProgress ||
-                      usageLoadingByAccountId[account.id] ||
-                      !canPollUsage(account.id)}
+                    on:click={() => readRateLimits(account, { force: true })}
+                    disabled={snapshot.loginInProgress || usageLoadingByAccountId[account.id]}
                     aria-label={`${copyForLanguage().refreshQuota} · ${accountEmail(account)}`}
-                    title={canPollUsage(account.id)
-                      ? copyForLanguage().refreshQuota
-                      : copyForLanguage().refreshQuotaBlocked(
-                          snapshot.settings.usagePollingMinutes
-                        )}
+                    title={copyForLanguage().refreshQuota}
                   >
                     <span class="i-lucide-refresh-cw h-4 w-4"></span>
                   </button>
@@ -1004,7 +1203,52 @@
             {/each}
           </div>
         {:else}
-          <p class="text-base text-muted-strong">{copyForLanguage().noSavedAccounts}</p>
+          <div class="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
+            <div class="w-full max-w-xl px-4 py-8 text-center">
+              <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
+                <span class="i-lucide-wallet-minimal h-6 w-6 text-black/72"></span>
+              </div>
+
+              <div class="mx-auto grid max-w-xl gap-2">
+                <h3 class="text-lg font-semibold text-ink sm:text-xl">
+                  {copyForLanguage().emptyStateTitle}
+                </h3>
+                <p class="text-sm leading-6 text-muted-strong">
+                  {copyForLanguage().emptyStateDescription}
+                </p>
+              </div>
+
+              <div class="mt-5 flex flex-wrap items-center justify-center gap-2.5">
+                <button
+                  class={primaryActionButton}
+                  on:click={() => startLogin('browser')}
+                  disabled={snapshot.loginInProgress}
+                >
+                  <span
+                    class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
+                  ></span>
+                  <span>{copyForLanguage().browserLogin}</span>
+                </button>
+
+                <button
+                  class={`${compactGhostButton} px-4 py-3`}
+                  on:click={() => startLogin('device')}
+                >
+                  <span class="i-lucide-key-round h-4.5 w-4.5"></span>
+                  <span>{copyForLanguage().deviceLogin}</span>
+                </button>
+
+                <button
+                  class={`${compactGhostButton} px-4 py-3`}
+                  on:click={() => runAction('import', () => window.codexApp.importCurrentAccount())}
+                  disabled={snapshot.loginInProgress}
+                >
+                  <span class="i-lucide-plus h-4.5 w-4.5"></span>
+                  <span>{copyForLanguage().importCurrent}</span>
+                </button>
+              </div>
+            </div>
+          </div>
         {/if}
       </section>
 

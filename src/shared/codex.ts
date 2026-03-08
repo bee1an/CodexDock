@@ -1,4 +1,4 @@
-export type LoginMethod = 'browser'
+export type LoginMethod = 'browser' | 'device'
 export type AppLanguage = 'zh-CN' | 'en'
 export type AppTheme = 'light' | 'dark' | 'system'
 
@@ -77,6 +77,11 @@ export interface LoginAttempt {
   method: LoginMethod
 }
 
+export interface PortOccupant {
+  pid: number
+  command: string
+}
+
 export interface LoginEvent {
   attemptId: string
   method: LoginMethod
@@ -84,6 +89,8 @@ export interface LoginEvent {
   message: string
   authUrl?: string
   localCallbackUrl?: string
+  verificationUrl?: string
+  userCode?: string
   rawOutput?: string
   snapshot?: AppSnapshot
 }

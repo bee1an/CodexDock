@@ -8,15 +8,23 @@ import {
   Menu,
   type MenuItemConstructorOptions
 } from 'electron'
-import { spawn } from 'node:child_process'
+import { execFile as execFileCallback, spawn } from 'node:child_process'
 import { readFileSync } from 'node:fs'
+import { homedir } from 'node:os'
 import { join } from 'path'
 import { pathToFileURL } from 'node:url'
+import { promisify } from 'node:util'
 import { deflateSync } from 'node:zlib'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
-import { CodexAccountStore, CodexLoginCoordinator } from './codex-auth'
-import { readAccountRateLimits } from './codex-app-server'
+import {
+  CodexAccountStore,
+  CodexLoginCoordinator,
+  getOpenAiCallbackPortOccupant,
+  killOpenAiCallbackPortOccupant,
+  refreshCodexAuthPayload
+} from './codex-auth'
+import { AccountRateLimitLookupError, readAccountRateLimits } from './codex-app-server'
 import {
   formatRelativeReset,
   remainingPercent,
@@ -33,6 +41,9 @@ let tray: Tray | null = null
 let accountStore: CodexAccountStore
 let loginCoordinator: CodexLoginCoordinator
 const defaultWorkspacePath = process.cwd()
+const configuredUserDataPath = join(homedir(), '.config', 'ilovecodex')
+const execFile = promisify(execFileCallback)
+const codexDesktopProcessPattern = '^/Applications/Codex\\.app/'
 const pollingOptions = [5, 15, 30, 60] as const
 const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
 const crcTable = new Uint32Array(256).map((_, index) => {
@@ -111,7 +122,64 @@ function resolveGithubUrl(): string | null {
   return null
 }
 
-function launchCodexDesktop(workspacePath: string): void {
+app.setPath('userData', configuredUserDataPath)
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function listCodexDesktopProcessIds(): Promise<number[]> {
+  try {
+    const { stdout } = await execFile('pgrep', ['-f', codexDesktopProcessPattern])
+    return stdout
+      .split('\n')
+      .map((line) => Number(line.trim()))
+      .filter((pid) => Number.isInteger(pid) && pid > 0)
+  } catch {
+    return []
+  }
+}
+
+async function stopCodexDesktop(): Promise<void> {
+  if (process.platform === 'darwin') {
+    try {
+      await execFile('osascript', ['-e', 'tell application "Codex" to quit'])
+    } catch {
+      // Codex may not be running, or AppleScript may not be available.
+    }
+  }
+
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    if (!(await listCodexDesktopProcessIds()).length) {
+      return
+    }
+    await sleep(300)
+  }
+
+  const remaining = await listCodexDesktopProcessIds()
+  for (const pid of remaining) {
+    try {
+      process.kill(pid, 'SIGTERM')
+    } catch {
+      // Process may already be gone.
+    }
+  }
+
+  await sleep(500)
+
+  const stubborn = await listCodexDesktopProcessIds()
+  for (const pid of stubborn) {
+    try {
+      process.kill(pid, 'SIGKILL')
+    } catch {
+      // Process may already be gone.
+    }
+  }
+}
+
+async function launchCodexDesktop(workspacePath: string): Promise<void> {
+  await stopCodexDesktop()
+
   const child = spawn('codex', ['app', workspacePath], {
     cwd: workspacePath,
     env: process.env,
@@ -120,6 +188,25 @@ function launchCodexDesktop(workspacePath: string): void {
   })
 
   child.unref()
+}
+
+function shouldRefreshStoredAuth(
+  error: unknown,
+  refreshToken?: string
+): boolean {
+  if (!refreshToken || !(error instanceof Error)) {
+    return false
+  }
+
+  if (error.message === 'Missing access token required for rate-limit lookup.') {
+    return true
+  }
+
+  if (!(error instanceof AccountRateLimitLookupError)) {
+    return false
+  }
+
+  return error.status === 401 || error.status === 403
 }
 
 function buildRendererUrl(query: Record<string, string> = {}): string {
@@ -214,6 +301,10 @@ function accountLabel(
     account.email ?? account.name ?? account.accountId ?? localeText(language).unknownAccount
 
   return middleEllipsis(label)
+}
+
+function accountErrorLabel(account: AccountSummary): string {
+  return account.email ?? account.name ?? account.accountId ?? account.id
 }
 
 function resolveCurrentAccount(snapshot: AppSnapshot): AccountSummary | null {
@@ -663,16 +754,40 @@ app.whenReady().then(() => {
   })
   ipcMain.handle('codex:open-account-in-codex', async (_, accountId: string) => {
     await accountStore.activateAccount(accountId)
-    launchCodexDesktop(defaultWorkspacePath)
+    await launchCodexDesktop(defaultWorkspacePath)
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:read-account-rate-limits', async (_, accountId: string) => {
-    const rateLimits = await accountStore.queryAccount(accountId, () => readAccountRateLimits())
-    await accountStore.saveAccountRateLimits(accountId, rateLimits)
-    void refreshTrayTitle()
-    return rateLimits
+    const account = await accountStore.getAccountSummary(accountId)
+    let auth = await accountStore.getStoredAuthPayload(accountId)
+    let targetAccountId = accountId
+    try {
+      let rateLimits: Awaited<ReturnType<typeof readAccountRateLimits>>
+
+      try {
+        rateLimits = await readAccountRateLimits(auth)
+      } catch (error) {
+        if (!shouldRefreshStoredAuth(error, auth.tokens?.refresh_token)) {
+          throw error
+        }
+
+        auth = await refreshCodexAuthPayload(auth)
+        const refreshedAccount = await accountStore.importAuthPayload(auth)
+        targetAccountId = refreshedAccount.id
+        rateLimits = await readAccountRateLimits(auth)
+      }
+
+      await accountStore.saveAccountRateLimits(targetAccountId, rateLimits)
+      void refreshTrayTitle()
+      return rateLimits
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Failed to read account limits.'
+      throw new Error(`${accountErrorLabel(account)}: ${detail}`)
+    }
   })
   ipcMain.handle('codex:start-login', (_, method: LoginMethod) => loginCoordinator.start(method))
+  ipcMain.handle('codex:get-login-port-occupant', () => getOpenAiCallbackPortOccupant())
+  ipcMain.handle('codex:kill-login-port-occupant', () => killOpenAiCallbackPortOccupant())
 
   createWindow()
   if (process.platform === 'darwin') {

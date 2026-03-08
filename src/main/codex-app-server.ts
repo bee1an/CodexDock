@@ -1,20 +1,39 @@
-import { spawn } from 'node:child_process'
-import { createInterface } from 'node:readline'
+import { net } from 'electron'
 
-import type { AccountRateLimitEntry, AccountRateLimits } from '../shared/codex'
+import type { CodexAuthPayload } from './codex-auth'
+import type { AccountRateLimitEntry, AccountRateLimits, CreditsSnapshot } from '../shared/codex'
 
-interface JsonRpcSuccess<T> {
-  id: number
-  result: T
+interface RateLimitWindowApiPayload {
+  used_percent: number
+  limit_window_seconds: number
+  reset_after_seconds: number
+  reset_at: number
 }
 
-interface JsonRpcError {
-  id: number
-  error: {
-    code: number
-    message: string
-    data?: unknown
-  }
+interface RateLimitStatusApiPayload {
+  allowed: boolean
+  limit_reached: boolean
+  primary_window?: RateLimitWindowApiPayload | null
+  secondary_window?: RateLimitWindowApiPayload | null
+}
+
+interface AdditionalRateLimitApiPayload {
+  limit_name: string
+  metered_feature: string
+  rate_limit?: RateLimitStatusApiPayload | null
+}
+
+interface CreditsApiPayload {
+  has_credits: boolean
+  unlimited: boolean
+  balance?: string | null
+}
+
+interface RateLimitStatusPayload {
+  plan_type?: string | null
+  rate_limit?: RateLimitStatusApiPayload | null
+  credits?: CreditsApiPayload | null
+  additional_rate_limits?: AdditionalRateLimitApiPayload[] | null
 }
 
 interface RateLimitWindowPayload {
@@ -23,25 +42,27 @@ interface RateLimitWindowPayload {
   resetsAt: number | null
 }
 
-interface CreditsPayload {
-  hasCredits: boolean
-  unlimited: boolean
-  balance: number | null
-}
-
 interface RateLimitSnapshotPayload {
   limitId: string | null
   limitName: string | null
+  planType: string | null
   primary: RateLimitWindowPayload | null
   secondary: RateLimitWindowPayload | null
-  credits: CreditsPayload | null
-  planType: string | null
+  credits: CreditsSnapshot | null
 }
 
-interface GetAccountRateLimitsResponse {
-  rateLimits: RateLimitSnapshotPayload
-  rateLimitsByLimitId?: Record<string, RateLimitSnapshotPayload>
+export class AccountRateLimitLookupError extends Error {
+  constructor(
+    message: string,
+    readonly status?: number
+  ) {
+    super(message)
+    this.name = 'AccountRateLimitLookupError'
+  }
 }
+
+const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
+const CHATGPT_HOSTS = ['https://chatgpt.com', 'https://chat.openai.com'] as const
 
 function mapRateLimitEntry(payload: RateLimitSnapshotPayload): AccountRateLimitEntry {
   return {
@@ -53,127 +74,215 @@ function mapRateLimitEntry(payload: RateLimitSnapshotPayload): AccountRateLimitE
   }
 }
 
-function mapRateLimits(payload: GetAccountRateLimitsResponse): AccountRateLimits {
-  const limits = Object.values(payload.rateLimitsByLimitId ?? {}).map(mapRateLimitEntry)
+function windowMinutesFromSeconds(seconds?: number | null): number | null {
+  if (!seconds || seconds <= 0) {
+    return null
+  }
+
+  return Math.ceil(seconds / 60)
+}
+
+function mapRateLimitWindow(window?: RateLimitWindowApiPayload | null): RateLimitWindowPayload | null {
+  if (!window) {
+    return null
+  }
 
   return {
-    limitId: payload.rateLimits.limitId,
-    limitName: payload.rateLimits.limitName,
-    planType: payload.rateLimits.planType,
-    primary: payload.rateLimits.primary,
-    secondary: payload.rateLimits.secondary,
-    credits: payload.rateLimits.credits,
+    usedPercent: window.used_percent,
+    windowDurationMins: windowMinutesFromSeconds(window.limit_window_seconds),
+    resetsAt: window.reset_at ?? null
+  }
+}
+
+function mapCredits(credits?: CreditsApiPayload | null): CreditsSnapshot | null {
+  if (!credits) {
+    return null
+  }
+
+  const balance = credits.balance == null ? null : Number(credits.balance)
+
+  return {
+    hasCredits: credits.has_credits,
+    unlimited: credits.unlimited,
+    balance: Number.isFinite(balance) ? balance : null
+  }
+}
+
+function normalizePlanType(planType?: string | null): string | null {
+  switch ((planType ?? '').toLowerCase()) {
+    case 'education':
+      return 'edu'
+    case 'guest':
+    case 'free_workspace':
+    case 'quorum':
+    case 'k12':
+      return 'unknown'
+    default:
+      return planType ?? null
+  }
+}
+
+function mapSnapshot(
+  limitId: string | null,
+  limitName: string | null,
+  planType: string | null,
+  rateLimit?: RateLimitStatusApiPayload | null,
+  credits?: CreditsApiPayload | null
+): RateLimitSnapshotPayload {
+  return {
+    limitId,
+    limitName,
+    planType,
+    primary: mapRateLimitWindow(rateLimit?.primary_window),
+    secondary: mapRateLimitWindow(rateLimit?.secondary_window),
+    credits: mapCredits(credits)
+  }
+}
+
+function mapRateLimits(payload: RateLimitStatusPayload): AccountRateLimits {
+  const planType = normalizePlanType(payload.plan_type)
+  const primary = mapSnapshot('codex', null, planType, payload.rate_limit, payload.credits)
+  const limits = [
+    primary,
+    ...(payload.additional_rate_limits ?? []).map((limit) =>
+      mapSnapshot(
+        limit.metered_feature ?? null,
+        limit.limit_name ?? null,
+        planType,
+        limit.rate_limit
+      )
+    )
+  ].map(mapRateLimitEntry)
+
+  return {
+    limitId: primary.limitId,
+    limitName: primary.limitName,
+    planType: primary.planType,
+    primary: primary.primary,
+    secondary: primary.secondary,
+    credits: primary.credits,
     limits,
     fetchedAt: new Date().toISOString()
   }
 }
 
-export async function readAccountRateLimits(): Promise<AccountRateLimits> {
-  return new Promise((resolve, reject) => {
-    const child = spawn('codex', ['app-server'], {
-      stdio: ['pipe', 'pipe', 'pipe'],
-      env: process.env
-    })
+function decodeJwtPayload(token?: string): Record<string, unknown> {
+  if (!token) {
+    return {}
+  }
 
-    const stdout = createInterface({ input: child.stdout })
-    const stderr = createInterface({ input: child.stderr })
-    let settled = false
-    let initializeCompleted = false
-    const timeout = setTimeout(() => {
-      finish(new Error('Timed out while reading Codex rate limits.'))
-    }, 15000)
+  const parts = token.split('.')
+  if (parts.length < 2) {
+    return {}
+  }
 
-    function cleanup(): void {
-      clearTimeout(timeout)
-      stdout.close()
-      stderr.close()
-      if (!child.killed) {
-        child.kill('SIGTERM')
-      }
+  const payload = parts[1]
+  const padding = '='.repeat((4 - (payload.length % 4)) % 4)
+  const normalized = `${payload}${padding}`.replaceAll('-', '+').replaceAll('_', '/')
+
+  try {
+    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>
+  } catch {
+    return {}
+  }
+}
+
+function extractChatGptAccountId(auth: CodexAuthPayload): string | undefined {
+  if (auth.tokens?.account_id) {
+    return auth.tokens.account_id
+  }
+
+  const claims = [decodeJwtPayload(auth.tokens?.id_token), decodeJwtPayload(auth.tokens?.access_token)]
+  for (const payload of claims) {
+    const authClaim = payload['https://api.openai.com/auth']
+    if (
+      authClaim &&
+      typeof authClaim === 'object' &&
+      'chatgpt_account_id' in authClaim &&
+      typeof authClaim.chatgpt_account_id === 'string'
+    ) {
+      return authClaim.chatgpt_account_id
     }
+  }
 
-    function finish(error?: Error, result?: AccountRateLimits): void {
-      if (settled) {
-        return
-      }
+  return undefined
+}
 
-      settled = true
-      cleanup()
+function normalizeChatGptBaseUrl(baseUrl: string): string {
+  let normalized = baseUrl.trim()
+  while (normalized.endsWith('/')) {
+    normalized = normalized.slice(0, -1)
+  }
 
-      if (error) {
-        reject(error)
-        return
-      }
+  if (CHATGPT_HOSTS.some((host) => normalized.startsWith(host)) && !normalized.includes('/backend-api')) {
+    normalized = `${normalized}/backend-api`
+  }
 
-      resolve(result!)
-    }
+  return normalized
+}
 
-    function sendRequest(id: number, method: string, params?: unknown): void {
-      child.stdin.write(
-        `${JSON.stringify({
-          jsonrpc: '2.0',
-          id,
-          method,
-          ...(params === undefined ? {} : { params })
-        })}\n`
-      )
-    }
+function resolveUsageUrl(): string {
+  const configuredBaseUrl = process.env['ILOVECODEX_CHATGPT_BASE_URL'] ?? DEFAULT_CHATGPT_BASE_URL
+  const baseUrl = normalizeChatGptBaseUrl(configuredBaseUrl)
 
-    stdout.on('line', (line) => {
-      if (!line.trim()) {
-        return
-      }
+  if (baseUrl.includes('/backend-api')) {
+    return `${baseUrl}/wham/usage`
+  }
 
-      try {
-        const message = JSON.parse(line) as
-          | JsonRpcSuccess<GetAccountRateLimitsResponse>
-          | JsonRpcError
+  return `${baseUrl}/api/codex/usage`
+}
 
-        if ('error' in message) {
-          finish(new Error(message.error.message))
-          return
-        }
+function isRateLimitStatusPayload(value: unknown): value is RateLimitStatusPayload {
+  return Boolean(value && typeof value === 'object')
+}
 
-        if (message.id === 1) {
-          initializeCompleted = true
-          sendRequest(2, 'account/rateLimits/read')
-          return
-        }
+export async function readAccountRateLimits(auth: CodexAuthPayload): Promise<AccountRateLimits> {
+  const accessToken = auth.tokens?.access_token
+  const chatgptAccountId = extractChatGptAccountId(auth)
 
-        if (message.id === 2) {
-          finish(undefined, mapRateLimits(message.result))
-        }
-      } catch (error) {
-        finish(
-          error instanceof Error ? error : new Error('Failed to parse Codex app-server response.')
-        )
-      }
-    })
+  if (!accessToken) {
+    throw new Error('Missing access token required for rate-limit lookup.')
+  }
 
-    stderr.on('line', (line) => {
-      if (!line.trim() || initializeCompleted) {
-        return
-      }
+  if (!chatgptAccountId) {
+    throw new Error('Missing ChatGPT account id required for rate-limit lookup.')
+  }
 
-      finish(new Error(line))
-    })
-
-    child.on('error', (error) => finish(error))
-    child.on('exit', (code) => {
-      if (!settled && code !== 0) {
-        finish(new Error(`Codex app-server exited with code ${code}.`))
-      }
-    })
-
-    sendRequest(1, 'initialize', {
-      clientInfo: {
-        name: 'ilovecodex',
-        title: 'Ilovecodex',
-        version: '1.0.0'
-      },
-      capabilities: {
-        experimentalApi: true
-      }
-    })
+  const url = resolveUsageUrl()
+  const response = await net.fetch(url, {
+    method: 'GET',
+    headers: {
+      authorization: `Bearer ${accessToken}`,
+      'chatgpt-account-id': chatgptAccountId,
+      'user-agent': 'ilovecodex'
+    },
+    signal: AbortSignal.timeout(15000)
   })
+
+  const contentType = response.headers.get('content-type') ?? ''
+  const body = await response.text()
+
+  if (!response.ok) {
+    throw new AccountRateLimitLookupError(
+      `GET ${url} failed: ${response.status}; content-type=${contentType}; body=${body}`,
+      response.status
+    )
+  }
+
+  let payload: unknown
+  try {
+    payload = JSON.parse(body)
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Decode error for ${url}: ${error.message}; content-type=${contentType}; body=${body}`
+        : `Decode error for ${url}; content-type=${contentType}; body=${body}`
+    )
+  }
+
+  if (!isRateLimitStatusPayload(payload)) {
+    throw new Error(`Unexpected rate-limit payload from ${url}.`)
+  }
+
+  return mapRateLimits(payload)
 }

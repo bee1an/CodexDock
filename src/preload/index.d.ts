@@ -6,7 +6,8 @@ import type {
   AppSnapshot,
   LoginAttempt,
   LoginEvent,
-  LoginMethod
+  LoginMethod,
+  PortOccupant
 } from '../shared/codex'
 
 interface CodexDesktopApi {
@@ -21,6 +22,8 @@ interface CodexDesktopApi {
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
   readAccountRateLimits: (accountId: string) => Promise<AccountRateLimits>
   startLogin: (method: LoginMethod) => Promise<LoginAttempt>
+  getLoginPortOccupant: () => Promise<PortOccupant | null>
+  killLoginPortOccupant: () => Promise<PortOccupant | null>
   onSnapshotUpdated: (callback: (snapshot: AppSnapshot) => void) => () => void
   onLoginEvent: (callback: (event: LoginEvent) => void) => () => void
 }
