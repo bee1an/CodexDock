@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.2.2 - 2026-03-10
+
+This patch release improves release delivery, update behavior, and login clarity across the desktop app and CLI.
+
+- Added desktop app update support backed by GitHub Releases, including packaged update checks, download progress, and restart-to-install flow.
+- Added a `checkForUpdatesOnStartup` setting and wired it through the desktop UI, tray menu, preload bridge, shared types, and CLI settings commands.
+- Fixed update handling so users can still trigger a manual check when startup checks are disabled and stale error states clear after a later successful background check.
+- Improved desktop update surfaces with tray and footer status messaging for checking, downloading, ready-to-install, and unsupported builds.
+- Renamed browser login wording to callback login across the desktop app and CLI so the local callback-based flow is described more accurately.
+
 ## 0.2.1 - 2026-03-10
 
 This patch release improves menu bar reliability for day-to-day desktop use.
