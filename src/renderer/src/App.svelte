@@ -523,6 +523,7 @@
         loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
         {pollingOptions}
         settings={snapshot.settings}
+        {updateState}
         bestAccount={bestAccount()}
         activeAccountId={snapshot.activeAccountId}
         {startLogin}
@@ -534,6 +535,7 @@
         }}
         {updatePollingInterval}
         {updateCheckForUpdatesOnStartup}
+        {checkForUpdates}
         {copyAuthUrl}
         {copyDeviceCode}
         {openExternalLink}
@@ -603,7 +605,6 @@
         {updateLanguage}
         {updateTheme}
         {openExternalLink}
-        {checkForUpdates}
         {downloadUpdate}
         {installUpdate}
       />

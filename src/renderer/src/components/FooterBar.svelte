@@ -18,16 +18,11 @@
   export let updateLanguage: (language: AppLanguage) => void
   export let updateTheme: (theme: AppTheme) => void
   export let openExternalLink: (url?: string) => void
-  export let checkForUpdates: () => void
   export let downloadUpdate: () => void
   export let installUpdate: () => void
 
   const updateActionLabel = (): string | null => {
     switch (updateState.status) {
-      case 'idle':
-      case 'up-to-date':
-      case 'error':
-        return copy.checkUpdates
       case 'available':
         return copy.downloadUpdate(updateState.availableVersion)
       case 'downloaded':
@@ -39,10 +34,6 @@
 
   const updateAction = (): (() => void) | null => {
     switch (updateState.status) {
-      case 'idle':
-      case 'up-to-date':
-      case 'error':
-        return checkForUpdates
       case 'available':
         return downloadUpdate
       case 'downloaded':

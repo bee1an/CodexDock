@@ -1,5 +1,11 @@
 <script lang="ts">
-  import type { AccountSummary, AppSettings, LoginEvent, LoginMethod } from '../../../shared/codex'
+  import type {
+    AccountSummary,
+    AppSettings,
+    AppUpdateState,
+    LoginEvent,
+    LoginMethod
+  } from '../../../shared/codex'
   import { accountEmail, loginTone, type LocalizedCopy } from './app-view'
 
   export let brandMark: string
@@ -16,6 +22,7 @@
   export let loginActionBusy: boolean
   export let pollingOptions: readonly number[]
   export let settings: AppSettings
+  export let updateState: AppUpdateState
   export let bestAccount: AccountSummary | null = null
   export let activeAccountId: string | undefined
   export let startLogin: (method: LoginMethod) => void
@@ -25,9 +32,17 @@
   export let toggleSettings: () => void
   export let updatePollingInterval: (minutes: number) => void
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void
+  export let checkForUpdates: () => void
   export let copyAuthUrl: () => void
   export let copyDeviceCode: () => void
   export let openExternalLink: (url?: string) => void
+
+  const canCheckForUpdates = (): boolean =>
+    updateState.status !== 'checking' &&
+    updateState.status !== 'downloading' &&
+    updateState.status !== 'available' &&
+    updateState.status !== 'downloaded' &&
+    updateState.status !== 'unsupported'
 </script>
 
 <section class={heroClass}>
@@ -137,6 +152,15 @@
         />
         <span>{copy.autoCheckUpdates}</span>
       </label>
+
+      <button
+        class={compactGhostButton}
+        type="button"
+        on:click={checkForUpdates}
+        disabled={!canCheckForUpdates()}
+      >
+        {updateState.status === 'checking' ? copy.checkingUpdates : copy.checkUpdates}
+      </button>
     </div>
   {/if}
 
