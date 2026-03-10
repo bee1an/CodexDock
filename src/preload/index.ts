@@ -4,6 +4,7 @@ import type {
   AppMeta,
   AppSettings,
   AppSnapshot,
+  AppUpdateState,
   LoginEvent,
   LoginMethod,
   PortOccupant
@@ -13,13 +14,15 @@ import type {
 const codexApp = {
   getSnapshot: () => ipcRenderer.invoke('codex:get-snapshot'),
   getAppMeta: (): Promise<AppMeta> => ipcRenderer.invoke('codex:get-app-meta'),
+  getUpdateState: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:get-update-state'),
   updateSettings: (nextSettings: Partial<AppSettings>) =>
     ipcRenderer.invoke('codex:update-settings', nextSettings),
   openMainWindow: () => ipcRenderer.invoke('codex:open-main-window'),
   importCurrentAccount: () => ipcRenderer.invoke('codex:import-current-account'),
   activateAccount: (accountId: string) => ipcRenderer.invoke('codex:activate-account', accountId),
   activateBestAccount: () => ipcRenderer.invoke('codex:activate-best-account'),
-  reorderAccounts: (accountIds: string[]) => ipcRenderer.invoke('codex:reorder-accounts', accountIds),
+  reorderAccounts: (accountIds: string[]) =>
+    ipcRenderer.invoke('codex:reorder-accounts', accountIds),
   removeAccount: (accountId: string) => ipcRenderer.invoke('codex:remove-account', accountId),
   updateAccountTags: (accountId: string, tagIds: string[]) =>
     ipcRenderer.invoke('codex:update-account-tags', accountId, tagIds),
@@ -30,6 +33,9 @@ const codexApp = {
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),
   readAccountRateLimits: (accountId: string) =>
     ipcRenderer.invoke('codex:read-account-rate-limits', accountId),
+  checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
+  downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
+  installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),
   startLogin: (method: LoginMethod) => ipcRenderer.invoke('codex:start-login', method),
   getLoginPortOccupant: (): Promise<PortOccupant | null> =>
     ipcRenderer.invoke('codex:get-login-port-occupant'),
@@ -42,6 +48,15 @@ const codexApp = {
 
     return (): void => {
       ipcRenderer.removeListener('codex:snapshot-updated', listener)
+    }
+  },
+  onUpdateState: (callback: (state: AppUpdateState) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: AppUpdateState): void =>
+      callback(payload)
+    ipcRenderer.on('codex:update-state', listener)
+
+    return (): void => {
+      ipcRenderer.removeListener('codex:update-state', listener)
     }
   },
   onLoginEvent: (callback: (event: LoginEvent) => void) => {

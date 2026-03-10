@@ -11,6 +11,7 @@
     AppLanguage,
     AppMeta,
     AppTheme,
+    AppUpdateState,
     AccountTag,
     AccountRateLimits,
     AccountSummary,
@@ -30,7 +31,8 @@
       usagePollingMinutes: 15,
       statusBarAccountIds: [],
       language: 'zh-CN',
-      theme: 'light'
+      theme: 'light',
+      checkForUpdatesOnStartup: true
     },
     usageByAccountId: {}
   }
@@ -40,13 +42,18 @@
   }
   let loginEvent: LoginEvent | null = null
   let loginStarting = false
-  let showBrowserLoginDetails = true
+  let showCallbackLoginDetails = true
   let showDeviceLoginDetails = true
   let refreshingAllUsage = false
   let pageError = ''
   let showSettings = false
   let loginPortOccupant: PortOccupant | null = null
   let killingLoginPortOccupant = false
+  let updateState: AppUpdateState = {
+    status: 'idle',
+    currentVersion: '--',
+    supported: false
+  }
   let usageByAccountId: Record<string, AccountRateLimits> = {}
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
@@ -105,6 +112,10 @@
 
   const refreshAppMeta = async (): Promise<void> => {
     appMeta = await window.codexApp.getAppMeta()
+  }
+
+  const refreshUpdateState = async (): Promise<void> => {
+    updateState = await window.codexApp.getUpdateState()
   }
 
   const bestAccount = (): AccountSummary | null =>
@@ -168,7 +179,7 @@
       loginEvent?.method === 'browser' &&
       loginEvent.phase === 'waiting'
     ) {
-      showBrowserLoginDetails = !showBrowserLoginDetails
+      showCallbackLoginDetails = !showCallbackLoginDetails
       return
     }
 
@@ -187,7 +198,7 @@
     }
 
     if (method === 'browser') {
-      showBrowserLoginDetails = true
+      showCallbackLoginDetails = true
     }
 
     try {
@@ -346,6 +357,16 @@
     await runAction('settings:theme', () => window.codexApp.updateSettings({ theme }))
   }
 
+  const updateCheckForUpdatesOnStartup = async (enabled: boolean): Promise<void> => {
+    if (snapshot.settings.checkForUpdatesOnStartup === enabled) {
+      return
+    }
+
+    await runAction('settings:update-check', () =>
+      window.codexApp.updateSettings({ checkForUpdatesOnStartup: enabled })
+    )
+  }
+
   const toggleStatusAccount = async (accountId: string): Promise<void> => {
     const nextIds = snapshot.settings.statusBarAccountIds.includes(accountId)
       ? snapshot.settings.statusBarAccountIds.filter((id) => id !== accountId)
@@ -358,6 +379,18 @@
 
   const openMainPanel = async (): Promise<void> => {
     applySnapshot(await window.codexApp.openMainWindow())
+  }
+
+  const downloadUpdate = async (): Promise<void> => {
+    updateState = await window.codexApp.downloadUpdate()
+  }
+
+  const checkForUpdates = async (): Promise<void> => {
+    updateState = await window.codexApp.checkForUpdates()
+  }
+
+  const installUpdate = async (): Promise<void> => {
+    await window.codexApp.installUpdate()
   }
 
   const activateBestAccount = async (): Promise<void> => {
@@ -387,6 +420,7 @@
     applyTheme(snapshot.settings.theme)
     void refreshSnapshot()
     void refreshAppMeta()
+    void refreshUpdateState()
 
     const handleThemeChange = (event: MediaQueryListEvent): void => {
       prefersDark = event.matches
@@ -399,12 +433,16 @@
       applySnapshot(nextSnapshot)
     })
 
+    const disposeUpdateState = window.codexApp.onUpdateState((nextState) => {
+      updateState = nextState
+    })
+
     const disposeLogin = window.codexApp.onLoginEvent((event) => {
       loginEvent = event
       loginStarting = event.phase === 'starting'
 
       if (event.method === 'browser' && event.phase === 'waiting') {
-        showBrowserLoginDetails = true
+        showCallbackLoginDetails = true
       }
 
       if (event.method === 'device' && event.phase === 'waiting') {
@@ -433,6 +471,7 @@
       document.documentElement.style.removeProperty('color-scheme')
       darkMedia.removeEventListener('change', handleThemeChange)
       disposeSnapshot()
+      disposeUpdateState()
       disposeLogin()
     }
   })
@@ -478,7 +517,7 @@
         {loginEvent}
         {loginStarting}
         {showSettings}
-        {showBrowserLoginDetails}
+        {showCallbackLoginDetails}
         {showDeviceLoginDetails}
         {refreshingAllUsage}
         loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
@@ -494,6 +533,7 @@
           showSettings = !showSettings
         }}
         {updatePollingInterval}
+        {updateCheckForUpdatesOnStartup}
         {copyAuthUrl}
         {copyDeviceCode}
         {openExternalLink}
@@ -554,13 +594,18 @@
 
       <FooterBar
         {appMeta}
+        {updateState}
         language={snapshot.settings.language}
         theme={snapshot.settings.theme}
         copy={copyForLanguage()}
+        {compactGhostButton}
         {iconToolbarButton}
         {updateLanguage}
         {updateTheme}
         {openExternalLink}
+        {checkForUpdates}
+        {downloadUpdate}
+        {installUpdate}
       />
     {/if}
   </div>
@@ -609,7 +654,10 @@
     border-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
   }
 
-  :global(html[data-theme='dark'] .theme-version-pill),
+  :global(html[data-theme='dark'] .theme-version-pill) {
+    color: var(--ink-soft-strong) !important;
+  }
+
   :global(html[data-theme='dark'] .theme-plan-neutral) {
     color: var(--ink-soft) !important;
   }

@@ -45,7 +45,8 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       usagePollingMinutes: 15,
       statusBarAccountIds: [],
       language: 'zh-CN',
-      theme: 'light'
+      theme: 'light',
+      checkForUpdatesOnStartup: true
     },
     usageByAccountId: {},
     ...overrides

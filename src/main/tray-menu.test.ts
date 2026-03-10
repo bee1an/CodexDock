@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { buildTrayUsageMenuItems, resolveTrayAccounts } from './tray-menu'
-import type { AccountRateLimits, AccountSummary, AppSnapshot } from '../shared/codex'
+import { buildTrayUpdateMenuItem, buildTrayUsageMenuItems, resolveTrayAccounts } from './tray-menu'
+import type {
+  AccountRateLimits,
+  AccountSummary,
+  AppSnapshot,
+  AppUpdateState
+} from '../shared/codex'
 
 function createAccount(id: string, overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
@@ -50,7 +55,8 @@ function createSnapshot(): AppSnapshot {
       usagePollingMinutes: 15,
       statusBarAccountIds: ['c', 'b'],
       language: 'zh-CN',
-      theme: 'light'
+      theme: 'light',
+      checkForUpdatesOnStartup: true
     },
     usageByAccountId: {
       a: createUsage(),
@@ -107,5 +113,87 @@ describe('tray menu helpers', () => {
 
     items[1].click?.(undefined as never, undefined as never, undefined as never)
     expect(openAccount).toHaveBeenCalledWith('b')
+  })
+
+  it('switches the tray update action based on updater state', () => {
+    const check = vi.fn()
+    const download = vi.fn()
+    const install = vi.fn()
+    const labels = {
+      checkForUpdates: '检查更新',
+      checkingForUpdates: '检查更新中…',
+      downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
+      installUpdate: '重启安装更新',
+      unsupported: '当前构建不支持自动更新',
+      downloadingUpdate: (progress?: number) => `下载更新中 ${progress ?? 0}%`,
+      onCheck: check,
+      onDownload: download,
+      onInstall: install
+    }
+
+    const idleItem = buildTrayUpdateMenuItem(
+      {
+        status: 'idle',
+        currentVersion: '0.2.1',
+        supported: true
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(idleItem).not.toBeNull()
+    if (!idleItem) {
+      throw new Error('idle item should render a manual check action')
+    }
+    expect(idleItem.label).toBe('检查更新')
+    idleItem.click?.(undefined as never, undefined as never, undefined as never)
+    expect(check).toHaveBeenCalledOnce()
+
+    const availableItem = buildTrayUpdateMenuItem(
+      {
+        status: 'available',
+        currentVersion: '0.2.1',
+        availableVersion: '0.2.2',
+        supported: true
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(availableItem).not.toBeNull()
+    if (!availableItem) {
+      throw new Error('available item should be rendered when an update is available')
+    }
+    expect(availableItem.label).toBe('下载更新 v0.2.2')
+    availableItem.click?.(undefined as never, undefined as never, undefined as never)
+    expect(download).toHaveBeenCalledOnce()
+
+    const errorItem = buildTrayUpdateMenuItem(
+      {
+        status: 'error',
+        currentVersion: '0.2.1',
+        supported: true,
+        message: 'network error'
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(errorItem).not.toBeNull()
+    if (!errorItem) {
+      throw new Error('error item should render a retry action')
+    }
+    errorItem.click?.(undefined as never, undefined as never, undefined as never)
+    expect(check).toHaveBeenCalledTimes(2)
+
+    const downloadedItem = buildTrayUpdateMenuItem(
+      {
+        status: 'downloaded',
+        currentVersion: '0.2.1',
+        availableVersion: '0.2.2',
+        supported: true
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(downloadedItem).not.toBeNull()
+    if (!downloadedItem) {
+      throw new Error('downloaded item should be rendered when an update is ready to install')
+    }
+    downloadedItem.click?.(undefined as never, undefined as never, undefined as never)
+    expect(install).toHaveBeenCalledOnce()
   })
 })

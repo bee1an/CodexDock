@@ -23,7 +23,7 @@ export const messages = {
     startLoginFailed: '无法启动登录流程',
     readRateLimitFailed: '无法读取账号限额',
     removeConfirm: (label: string) => `删除 ${label} 的本地保存登录态？`,
-    browserLogin: '浏览器登录',
+    callbackLogin: '回调登录',
     deviceLogin: '设备码登录',
     importCurrent: '导入当前登录',
     switchBest: '切换到最优账号',
@@ -32,15 +32,16 @@ export const messages = {
     switchToAccount: (email: string) => `切换到 ${email}`,
     settings: '设置',
     pollingInterval: '额度轮询',
+    autoCheckUpdates: '启动时检查更新',
     minutes: '分钟',
-    browserLoginLink: '浏览器登录链接',
+    callbackLoginLink: '授权链接',
     deviceLoginLink: '设备验证页面',
     deviceCode: '设备码',
     copyLink: '复制链接',
     copyCode: '复制设备码',
     openBrowser: '打开浏览器',
     openMainPanel: '打开主面板',
-    waitingCallback: '等待浏览器完成授权并回调本地地址。',
+    waitingCallback: '等待在浏览器中完成授权并回调到本地地址。',
     waitingDeviceCode: '在浏览器里完成授权后，这里会自动继续。',
     statusBarAccountCount: (count: number) => `${count} 个状态栏账号`,
     noStatusBarAccounts: '还没有可显示的账号。',
@@ -85,11 +86,22 @@ export const messages = {
     refreshAllQuota: '刷新全部额度',
     refreshQuotaBlocked: (minutes: number) => `${minutes} 分钟内不重复请求`,
     deleteSaved: '删除保存',
-    noSavedAccounts: '还没有保存任何账号。先导入当前登录，或者走一次新的浏览器登录。',
+    noSavedAccounts: '还没有保存任何账号。先导入当前登录，或者走一次新的回调登录。',
     switchLanguage: '切换语言',
     switchTheme: (current: string) => `切换主题，当前${current}`,
     openGithub: '打开 GitHub',
     githubPending: 'GitHub 链接待配置',
+    checkUpdates: '检查更新',
+    checkingUpdates: '检查更新中',
+    downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
+    restartToInstallUpdate: '重启安装更新',
+    updateReady: '更新已下载，重启后安装。',
+    updateUpToDate: '当前已是最新版本。',
+    updateAvailableVersion: (version?: string) =>
+      version ? `发现新版本 v${version}` : '发现新版本',
+    updateDownloadProgress: (progress?: number) => `下载中 ${progress ?? 0}%`,
+    updatesUnsupported: '当前构建不支持自动更新',
+    updateFailed: '检查更新失败',
     lightTheme: '浅色主题',
     darkTheme: '深色主题',
     systemTheme: '跟随系统',
@@ -97,11 +109,11 @@ export const messages = {
     killPortOccupant: '结束占用进程',
     killPortOccupantFailed: '无法结束占用 1455 端口的进程',
     emptyStateTitle: '还没有账号',
-    emptyStateDescription: '导入当前登录，或者新建一次浏览器登录。',
+    emptyStateDescription: '导入当前登录，或者新建一次回调登录。',
     importCurrentHint: '导入当前登录',
     importCurrentDetail: '适合你已经在本机 Codex 里登录过账号的情况。',
-    browserLoginHint: '新建浏览器登录',
-    browserLoginDetail: '适合补充新账号，或者把别的付费账号接进来。',
+    callbackLoginHint: '新建回调登录',
+    callbackLoginDetail: '适合补充新账号，授权完成后会自动回调导入。',
     deviceLoginHint: '设备码登录',
     deviceLoginDetail: '适合在别的设备或浏览器里完成授权，再回到这里自动导入。'
   },
@@ -111,7 +123,7 @@ export const messages = {
     startLoginFailed: 'Unable to start login flow',
     readRateLimitFailed: 'Unable to read account limits',
     removeConfirm: (label: string) => `Remove the saved local session for ${label}?`,
-    browserLogin: 'Browser login',
+    callbackLogin: 'Callback login',
     deviceLogin: 'Device code login',
     importCurrent: 'Import current login',
     switchBest: 'Switch to best account',
@@ -120,15 +132,16 @@ export const messages = {
     switchToAccount: (email: string) => `Switch to ${email}`,
     settings: 'Settings',
     pollingInterval: 'Usage polling',
+    autoCheckUpdates: 'Check updates on startup',
     minutes: 'min',
-    browserLoginLink: 'Browser login URL',
+    callbackLoginLink: 'Authorization URL',
     deviceLoginLink: 'Device verification URL',
     deviceCode: 'Device code',
     copyLink: 'Copy link',
     copyCode: 'Copy code',
     openBrowser: 'Open browser',
     openMainPanel: 'Open main panel',
-    waitingCallback: 'Waiting for the browser to finish authorization and call back locally.',
+    waitingCallback: 'Waiting for authorization in the browser to call back to the local app.',
     waitingDeviceCode:
       'Finish authorization in the browser and Ilovecodex will continue automatically.',
     statusBarAccountCount: (count: number) => `${count} menu bar account${count === 1 ? '' : 's'}`,
@@ -176,11 +189,22 @@ export const messages = {
     refreshQuotaBlocked: (minutes: number) => `No repeat request within ${minutes} min`,
     deleteSaved: 'Delete saved login',
     noSavedAccounts:
-      'No saved accounts yet. Import the current login or start a new browser login.',
+      'No saved accounts yet. Import the current login or start a new callback login.',
     switchLanguage: 'Switch language',
     switchTheme: (current: string) => `Switch theme, current ${current}`,
     openGithub: 'Open GitHub',
     githubPending: 'GitHub link not configured',
+    checkUpdates: 'Check for updates',
+    checkingUpdates: 'Checking for updates',
+    downloadUpdate: (version?: string) => `Download update${version ? ` v${version}` : ''}`,
+    restartToInstallUpdate: 'Restart to install update',
+    updateReady: 'Update downloaded and ready to install.',
+    updateUpToDate: 'Already up to date.',
+    updateAvailableVersion: (version?: string) =>
+      version ? `Update v${version} is available.` : 'An update is available.',
+    updateDownloadProgress: (progress?: number) => `Downloading ${progress ?? 0}%`,
+    updatesUnsupported: 'Automatic updates are not available for this build.',
+    updateFailed: 'Update check failed',
     lightTheme: 'Light theme',
     darkTheme: 'Dark theme',
     systemTheme: 'System theme',
@@ -189,13 +213,13 @@ export const messages = {
     killPortOccupant: 'Kill occupying process',
     killPortOccupantFailed: 'Unable to terminate the process using port 1455',
     emptyStateTitle: 'No accounts yet',
-    emptyStateDescription: 'Import the current login or start a browser login.',
+    emptyStateDescription: 'Import the current login or start a callback login.',
     importCurrentHint: 'Import current login',
     importCurrentDetail:
       'Best when this machine is already signed in through Codex and you want to pull it in immediately.',
-    browserLoginHint: 'Start browser login',
-    browserLoginDetail:
-      'Best when you want to add another account or connect a different paid workspace.',
+    callbackLoginHint: 'Start callback login',
+    callbackLoginDetail:
+      'Best when you want to add another account and let the local callback finish automatically.',
     deviceLoginHint: 'Use device code',
     deviceLoginDetail:
       'Best when you want to approve the login on another browser or device and let Ilovecodex poll automatically.'
@@ -240,7 +264,7 @@ export function planLabel(planType?: string | null): string {
 export function planTagClass(planType?: string | null): string {
   switch ((planType ?? '').toLowerCase()) {
     case 'free':
-      return 'theme-plan-neutral bg-black/[0.05] text-black/55'
+      return 'theme-plan-neutral bg-black/[0.05] text-black/72'
     case 'plus':
       return 'theme-plan-plus bg-emerald-500/12 text-emerald-700'
     case 'pro':
@@ -252,7 +276,7 @@ export function planTagClass(planType?: string | null): string {
     case 'enterprise':
       return 'theme-plan-enterprise bg-rose-500/14 text-rose-700'
     default:
-      return 'theme-plan-neutral bg-black/[0.05] text-black/55'
+      return 'theme-plan-neutral bg-black/[0.05] text-black/72'
   }
 }
 

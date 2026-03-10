@@ -10,7 +10,7 @@
   export let loginEvent: LoginEvent | null = null
   export let loginStarting = false
   export let showSettings = false
-  export let showBrowserLoginDetails = true
+  export let showCallbackLoginDetails = true
   export let showDeviceLoginDetails = true
   export let refreshingAllUsage = false
   export let loginActionBusy: boolean
@@ -24,6 +24,7 @@
   export let activateBestAccount: () => void
   export let toggleSettings: () => void
   export let updatePollingInterval: (minutes: number) => void
+  export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void
   export let copyAuthUrl: () => void
   export let copyDeviceCode: () => void
   export let openExternalLink: (url?: string) => void
@@ -53,8 +54,8 @@
       <button
         class={iconToolbarButton}
         on:click={() => startLogin('browser')}
-        aria-label={copy.browserLogin}
-        title={copy.browserLogin}
+        aria-label={copy.callbackLogin}
+        title={copy.callbackLogin}
       >
         <span
           class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
@@ -113,7 +114,7 @@
   </div>
 
   {#if showSettings}
-    <div class="mt-3 flex items-center gap-3 border-t border-black/6 pt-3">
+    <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-black/6 pt-3">
       <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
       <select
         class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
@@ -125,14 +126,25 @@
           <option value={option}>{option} {copy.minutes}</option>
         {/each}
       </select>
+
+      <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
+        <input
+          type="checkbox"
+          class="h-4 w-4 rounded border border-black/14"
+          checked={settings.checkForUpdatesOnStartup}
+          on:change={(event) =>
+            updateCheckForUpdatesOnStartup((event.currentTarget as HTMLInputElement).checked)}
+        />
+        <span>{copy.autoCheckUpdates}</span>
+      </label>
     </div>
   {/if}
 
-  {#if (showBrowserLoginDetails && loginEvent?.method === 'browser' && (loginEvent?.authUrl || loginEvent?.localCallbackUrl)) || (showDeviceLoginDetails && loginEvent?.method === 'device' && (loginEvent?.verificationUrl || loginEvent?.userCode)) || (loginEvent?.phase === 'error' && loginEvent?.rawOutput)}
+  {#if (showCallbackLoginDetails && loginEvent?.method === 'browser' && (loginEvent?.authUrl || loginEvent?.localCallbackUrl)) || (showDeviceLoginDetails && loginEvent?.method === 'device' && (loginEvent?.verificationUrl || loginEvent?.userCode)) || (loginEvent?.phase === 'error' && loginEvent?.rawOutput)}
     <div class="mt-3 grid gap-2 border-t border-black/6 pt-3">
-      {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
+      {#if showCallbackLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
         <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
-          <p class="text-sm text-muted-strong">{copy.browserLoginLink}</p>
+          <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
           <code
             class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
           >
@@ -150,7 +162,7 @@
         </div>
       {/if}
 
-      {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
+      {#if showCallbackLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
         <p class="text-sm text-muted-strong">{copy.waitingCallback}</p>
       {/if}
 

@@ -21,14 +21,68 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       usagePollingMinutes: 15,
       statusBarAccountIds: [],
       language: 'zh-CN',
-      theme: 'light'
+      theme: 'light',
+      checkForUpdatesOnStartup: true
     },
     usageByAccountId: {},
     ...overrides
   }
 }
 
-function createRuntime() {
+interface CliTestRuntime {
+  platform: {
+    openExternal: ReturnType<typeof vi.fn>
+  }
+  subscribeLoginEvents(listener: (event: LoginEvent) => void): () => boolean
+  emit(event: LoginEvent): void
+  services: {
+    accounts: {
+      list: ReturnType<typeof vi.fn>
+      importCurrent: ReturnType<typeof vi.fn>
+      activate: ReturnType<typeof vi.fn>
+      activateBest: ReturnType<typeof vi.fn>
+      reorder: ReturnType<typeof vi.fn>
+      remove: ReturnType<typeof vi.fn>
+      updateTags: ReturnType<typeof vi.fn>
+      get: ReturnType<typeof vi.fn>
+    }
+    tags: {
+      create: ReturnType<typeof vi.fn>
+      update: ReturnType<typeof vi.fn>
+      remove: ReturnType<typeof vi.fn>
+      getAll: ReturnType<typeof vi.fn>
+    }
+    session: {
+      current: ReturnType<typeof vi.fn>
+    }
+    settings: {
+      get: ReturnType<typeof vi.fn>
+      update: ReturnType<typeof vi.fn>
+    }
+    usage: {
+      read: ReturnType<typeof vi.fn>
+    }
+    login: {
+      start: ReturnType<typeof vi.fn>
+      isRunning: ReturnType<typeof vi.fn>
+      getPortOccupant: ReturnType<typeof vi.fn>
+      killPortOccupant: ReturnType<typeof vi.fn>
+    }
+    codex: {
+      open: ReturnType<typeof vi.fn>
+    }
+    getSnapshot: ReturnType<typeof vi.fn>
+  }
+}
+
+function createRuntime(): {
+  runtime: CliTestRuntime
+  snapshot: AppSnapshot
+  rateLimits: AccountRateLimits
+  settings: AppSettings
+  currentSession: CurrentSessionSummary
+  portOccupant: PortOccupant
+} {
   const listeners = new Set<(event: LoginEvent) => void>()
   const snapshot = createSnapshot({
     accounts: [
@@ -82,7 +136,8 @@ function createRuntime() {
     usagePollingMinutes: 15,
     statusBarAccountIds: [],
     language: 'zh-CN',
-    theme: 'light'
+    theme: 'light',
+    checkForUpdatesOnStartup: true
   }
   const currentSession: CurrentSessionSummary = {
     email: 'one@example.com',
@@ -146,7 +201,7 @@ function createRuntime() {
                   attemptId,
                   method,
                   phase: 'waiting',
-                  message: 'Browser login is waiting for the OpenAI callback.',
+                  message: 'Callback login is waiting for the OpenAI authorization callback.',
                   authUrl: 'https://auth.openai.com/authorize',
                   localCallbackUrl: 'http://localhost:1455/auth/callback'
                 }
@@ -234,7 +289,9 @@ describe('runCli', () => {
     expect(runtime.services.accounts.importCurrent).toHaveBeenCalledOnce()
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['account', 'activate', 'acct_1', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['account', 'activate', 'acct_1', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.accounts.activate).toHaveBeenCalledWith('acct_1')
 
     logSpy.mockClear()
@@ -242,7 +299,9 @@ describe('runCli', () => {
     expect(runtime.services.accounts.activateBest).toHaveBeenCalledOnce()
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['account', 'remove', 'acct_1', '--json'])).resolves.toBe(0)
+    await expect(runCli(runtime as never, ['account', 'remove', 'acct_1', '--json'])).resolves.toBe(
+      0
+    )
     expect(runtime.services.accounts.remove).toHaveBeenCalledWith('acct_1')
   })
 
@@ -308,7 +367,9 @@ describe('runCli', () => {
     })
     runtime.services.tags.update = vi.fn(async () => renamedSnapshot)
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['tag', 'rename', 'tag_a', 'Alpha 2', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['tag', 'rename', 'tag_a', 'Alpha 2', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.tags.update).toHaveBeenCalledWith('tag_a', 'Alpha 2')
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
@@ -338,7 +399,9 @@ describe('runCli', () => {
     })
     runtime.services.accounts.updateTags = vi.fn(async () => assignedSnapshot)
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['tag', 'assign', 'acct_1', 'tag_b', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['tag', 'assign', 'acct_1', 'tag_b', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.accounts.updateTags).toHaveBeenCalledWith('acct_1', ['tag_a', 'tag_b'])
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
@@ -353,7 +416,9 @@ describe('runCli', () => {
     })
     runtime.services.accounts.updateTags = vi.fn(async () => unassignedSnapshot)
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['tag', 'unassign', 'acct_1', 'tag_a', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['tag', 'unassign', 'acct_1', 'tag_a', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.accounts.updateTags).toHaveBeenCalledWith('acct_1', [])
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
@@ -381,7 +446,9 @@ describe('runCli', () => {
 
     logSpy.mockClear()
     runtime.platform.openExternal.mockClear()
-    await expect(runCli(runtime as never, ['login', 'browser', '--json', '--no-open'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['login', 'browser', '--json', '--no-open'])
+    ).resolves.toBe(0)
     expect(runtime.platform.openExternal).not.toHaveBeenCalled()
 
     logSpy.mockClear()
@@ -436,7 +503,9 @@ describe('runCli', () => {
     })
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['settings', 'set', 'statusBarAccountIds', 'a,b,c', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['settings', 'set', 'statusBarAccountIds', 'a,b,c', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.settings.update).toHaveBeenCalledWith({
       statusBarAccountIds: ['a', 'b', 'c']
     })
@@ -446,7 +515,27 @@ describe('runCli', () => {
         usagePollingMinutes: 15,
         statusBarAccountIds: ['a', 'b', 'c'],
         language: 'zh-CN',
-        theme: 'light'
+        theme: 'light',
+        checkForUpdatesOnStartup: true
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['settings', 'set', 'checkForUpdatesOnStartup', 'false', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.settings.update).toHaveBeenCalledWith({
+      checkForUpdatesOnStartup: false
+    })
+    expect(parseJsonLog(logSpy)).toEqual({
+      ok: true,
+      data: {
+        usagePollingMinutes: 15,
+        statusBarAccountIds: [],
+        language: 'zh-CN',
+        theme: 'light',
+        checkForUpdatesOnStartup: false
       },
       error: null
     })
@@ -466,13 +555,28 @@ describe('runCli', () => {
     })
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['settings', 'set', 'theme', 'blue', '--json'])).resolves.toBe(2)
+    await expect(
+      runCli(runtime as never, ['settings', 'set', 'theme', 'blue', '--json'])
+    ).resolves.toBe(2)
     expect(parseJsonLog(logSpy)).toEqual({
       ok: false,
       data: null,
       error: {
         code: 2,
         message: 'theme must be light, dark, or system'
+      }
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['settings', 'set', 'checkForUpdatesOnStartup', 'maybe', '--json'])
+    ).resolves.toBe(2)
+    expect(parseJsonLog(logSpy)).toEqual({
+      ok: false,
+      data: null,
+      error: {
+        code: 2,
+        message: 'checkForUpdatesOnStartup must be true or false'
       }
     })
 

@@ -7,11 +7,32 @@ export interface AppSettings {
   statusBarAccountIds: string[]
   language: AppLanguage
   theme: AppTheme
+  checkForUpdatesOnStartup: boolean
 }
 
 export interface AppMeta {
   version: string
   githubUrl: string | null
+}
+
+export type AppUpdateStatus =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'downloaded'
+  | 'up-to-date'
+  | 'unsupported'
+  | 'error'
+
+export interface AppUpdateState {
+  status: AppUpdateStatus
+  currentVersion: string
+  availableVersion?: string
+  downloadProgress?: number
+  checkedAt?: string
+  message?: string
+  supported: boolean
 }
 
 export interface CreditsSnapshot {

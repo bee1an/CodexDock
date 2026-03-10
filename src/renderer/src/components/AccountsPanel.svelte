@@ -121,6 +121,20 @@
     }
   }
 
+  function stopClickPropagation(node: HTMLElement): { destroy: () => void } {
+    const handler = (event: MouseEvent): void => {
+      event.stopPropagation()
+    }
+
+    node.addEventListener('click', handler)
+
+    return {
+      destroy: () => {
+        node.removeEventListener('click', handler)
+      }
+    }
+  }
+
   function floatingTagPicker(
     node: HTMLElement,
     anchorRect: DOMRect | null
@@ -357,7 +371,10 @@
       <div class="flex flex-wrap items-end justify-between gap-3">
         <p class="text-sm text-muted-strong">
           {tags.length
-            ? copy.tagSummary(tags.length, accounts.filter((account) => account.tagIds.length).length)
+            ? copy.tagSummary(
+                tags.length,
+                accounts.filter((account) => account.tagIds.length).length
+              )
             : copy.noTags}
         </p>
       </div>
@@ -620,7 +637,7 @@
                   </div>
 
                   {#if availableTags(account).length}
-                    <div class="flex-none" onclick={(event) => event.stopPropagation()}>
+                    <div class="flex-none" use:stopClickPropagation>
                       <button
                         class={`theme-tag-add-button inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-[opacity,background-color,border-color,color] duration-140 ${
                           tagPickerAccountId === account.id
@@ -641,8 +658,8 @@
                         <div
                           use:portal
                           use:floatingTagPicker={tagPickerAnchorRect}
+                          use:stopClickPropagation
                           class="theme-tag-picker-surface z-[999] rounded-[0.9rem] border border-black/8 bg-white p-1.5 shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
-                          onclick={(event) => event.stopPropagation()}
                         >
                           <div
                             class="px-2.5 pb-1 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint"
@@ -819,7 +836,7 @@
             <span
               class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
             ></span>
-            <span>{copy.browserLogin}</span>
+            <span>{copy.callbackLogin}</span>
           </button>
 
           <button class={`${compactGhostButton} px-4 py-3`} onclick={() => startLogin('device')}>

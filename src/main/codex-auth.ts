@@ -59,7 +59,8 @@ function defaultSettings(): AppSettings {
     usagePollingMinutes: 15,
     statusBarAccountIds: [],
     language: 'zh-CN',
-    theme: 'light'
+    theme: 'light',
+    checkForUpdatesOnStartup: true
   }
 }
 
@@ -221,7 +222,10 @@ export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | n
   return occupant
 }
 
-function extractChatGptAccountIdFromTokens(idToken?: string, accessToken?: string): string | undefined {
+function extractChatGptAccountIdFromTokens(
+  idToken?: string,
+  accessToken?: string
+): string | undefined {
   const claims = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
   for (const payload of claims) {
     const authClaim = payload['https://api.openai.com/auth']
@@ -321,7 +325,10 @@ function authIdentityFingerprint(auth: CodexAuthPayload): string | undefined {
 }
 
 function resolveSubject(auth: CodexAuthPayload): string | undefined {
-  const identityPayloads = [decodeJwtPayload(auth.tokens?.id_token), decodeJwtPayload(auth.tokens?.access_token)]
+  const identityPayloads = [
+    decodeJwtPayload(auth.tokens?.id_token),
+    decodeJwtPayload(auth.tokens?.access_token)
+  ]
   return identityPayloads
     .map((payload) => (typeof payload.sub === 'string' ? payload.sub : undefined))
     .find(Boolean)
@@ -457,7 +464,11 @@ export class CodexAccountStore {
       throw new Error('Tag name is required.')
     }
 
-    if (state.tags.some((tag) => tag.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0)) {
+    if (
+      state.tags.some(
+        (tag) => tag.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
+      )
+    ) {
       throw new Error('Tag name already exists.')
     }
 
@@ -832,10 +843,10 @@ export class CodexLoginCoordinator {
         phase === 'waiting'
           ? session.method === 'device'
             ? 'Open the verification page and enter the device code.'
-            : 'Browser login is waiting for the OpenAI callback.'
+            : 'Callback login is waiting for the OpenAI authorization callback.'
           : session.method === 'device'
             ? 'Started device code login.'
-            : 'Started browser callback login.',
+            : 'Started callback login.',
       authUrl: session.authUrl,
       localCallbackUrl: session.redirectUri,
       verificationUrl: session.verificationUrl,
@@ -865,7 +876,7 @@ export class CodexLoginCoordinator {
       attemptId,
       method: 'browser',
       phase: 'starting',
-      message: 'Started browser callback login.'
+      message: 'Started callback login.'
     })
 
     const authCompletion = new Promise<void>((resolve, reject) => {
@@ -941,7 +952,7 @@ export class CodexLoginCoordinator {
         attemptId,
         method: 'browser',
         phase: 'waiting',
-        message: 'Browser login is waiting for the OpenAI callback.',
+        message: 'Callback login is waiting for the OpenAI authorization callback.',
         authUrl,
         localCallbackUrl,
         rawOutput: session.rawOutput
@@ -961,7 +972,7 @@ export class CodexLoginCoordinator {
           )
         }
 
-        throw new Error('1455 端口已被占用，请先释放后再发起浏览器登录。')
+        throw new Error('1455 端口已被占用，请先释放后再发起回调登录。')
       }
       throw error
     }
@@ -981,7 +992,7 @@ export class CodexLoginCoordinator {
           ? 'Cancelled login flow.'
           : error instanceof Error
             ? error.message
-            : 'Browser login failed.',
+            : 'Callback login failed.',
         rawOutput: session.rawOutput,
         snapshot: await this.store.getSnapshot(false)
       })
@@ -1029,27 +1040,29 @@ export class CodexLoginCoordinator {
         rawOutput: session.rawOutput
       })
 
-      void this.finishDeviceLogin(attemptId, challenge, abortController.signal).catch(async (error) => {
-        if (this.currentSession?.attemptId !== attemptId) {
-          return
-        }
+      void this.finishDeviceLogin(attemptId, challenge, abortController.signal).catch(
+        async (error) => {
+          if (this.currentSession?.attemptId !== attemptId) {
+            return
+          }
 
-        this.currentSession = undefined
-        this.emit({
-          attemptId,
-          method: 'device',
-          phase: session.cancelled ? 'cancelled' : 'error',
-          message: session.cancelled
-            ? 'Cancelled login flow.'
-            : error instanceof Error
-              ? error.message
-              : 'Device code login failed.',
-          verificationUrl: session.verificationUrl,
-          userCode: session.userCode,
-          rawOutput: session.rawOutput,
-          snapshot: await this.store.getSnapshot(false)
-        })
-      })
+          this.currentSession = undefined
+          this.emit({
+            attemptId,
+            method: 'device',
+            phase: session.cancelled ? 'cancelled' : 'error',
+            message: session.cancelled
+              ? 'Cancelled login flow.'
+              : error instanceof Error
+                ? error.message
+                : 'Device code login failed.',
+            verificationUrl: session.verificationUrl,
+            userCode: session.userCode,
+            rawOutput: session.rawOutput,
+            snapshot: await this.store.getSnapshot(false)
+          })
+        }
+      )
     } catch (error) {
       if (this.currentSession?.attemptId === attemptId) {
         this.currentSession = undefined
@@ -1101,7 +1114,7 @@ export class CodexLoginCoordinator {
       attemptId,
       method: 'browser',
       phase: 'success',
-      message: 'Saved the new browser login to the local account vault.',
+      message: 'Saved the new callback login to the local account vault.',
       rawOutput: session.rawOutput,
       snapshot: await this.store.getSnapshot(false)
     })
@@ -1141,9 +1154,7 @@ export class CodexLoginCoordinator {
     return buildAuthPayloadFromTokenResponse(JSON.parse(raw) as TokenEndpointPayload)
   }
 
-  private async requestDeviceCode(
-    signal: AbortSignal
-  ): Promise<{
+  private async requestDeviceCode(signal: AbortSignal): Promise<{
     deviceAuthId: string
     userCode: string
     verificationUrl: string

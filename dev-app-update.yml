@@ -1,3 +1,5 @@
-provider: generic
-url: https://example.com/auto-updates
+provider: github
+owner: bee1an
+repo: ILoveCodex
+releaseType: release
 updaterCacheDirName: ilovecodex-updater

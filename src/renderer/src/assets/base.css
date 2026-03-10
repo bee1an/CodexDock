@@ -4,7 +4,7 @@
   --ink: #18181b;
   --ink-soft: rgba(24, 24, 27, 0.72);
   --ink-soft-strong: rgba(24, 24, 27, 0.82);
-  --ink-faint: rgba(24, 24, 27, 0.46);
+  --ink-faint: rgba(24, 24, 27, 0.64);
   --panel: rgba(255, 255, 255, 0.86);
   --panel-strong: rgba(255, 255, 255, 0.96);
   --line: rgba(24, 24, 27, 0.1);
@@ -32,7 +32,7 @@
   --ink: #f4f4f5;
   --ink-soft: rgba(244, 244, 245, 0.72);
   --ink-soft-strong: rgba(244, 244, 245, 0.84);
-  --ink-faint: rgba(244, 244, 245, 0.46);
+  --ink-faint: rgba(244, 244, 245, 0.6);
   --panel: rgba(24, 24, 27, 0.88);
   --panel-strong: rgba(24, 24, 27, 0.96);
   --line: rgba(244, 244, 245, 0.12);

@@ -54,7 +54,7 @@
 
 <div class="relative" bind:this={root}>
   <button
-    class={`inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${open ? 'bg-black/[0.05]' : ''}`}
+    class={`theme-compact-select-trigger inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${open ? 'bg-black/[0.05]' : ''}`}
     aria-label={ariaLabel}
     aria-expanded={open}
     aria-haspopup="listbox"
@@ -62,18 +62,18 @@
     on:click={toggle}
   >
     <span class="truncate">{selected?.label ?? value}</span>
-    <span class={`${iconClass} h-4 w-4 flex-none text-black/44`}></span>
+    <span class={`theme-compact-select-icon ${iconClass} h-4 w-4 flex-none text-black/44`}></span>
   </button>
 
   {#if open}
     <div
-      class="absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[9rem] rounded-xl border border-black/8 bg-white p-1 shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
+      class="theme-compact-select-panel absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[9rem] rounded-xl border border-black/8 bg-white p-1 shadow-[0_10px_30px_rgba(0,0,0,0.08)]"
       role="listbox"
       aria-label={ariaLabel}
     >
       {#each options as option (option.value)}
         <button
-          class={`flex h-8 w-full items-center rounded-lg px-2.5 text-left text-sm transition-colors duration-140 ${option.value === value ? 'bg-black text-white' : 'text-black/68 hover:bg-black/[0.04] hover:text-black'}`}
+          class={`theme-compact-select-option flex h-8 w-full items-center rounded-lg px-2.5 text-left text-sm transition-colors duration-140 ${option.value === value ? 'theme-compact-select-option-active bg-black text-white' : 'theme-compact-select-option-idle text-black/68 hover:bg-black/[0.04] hover:text-black'}`}
           type="button"
           role="option"
           aria-selected={option.value === value}
@@ -85,3 +85,39 @@
     </div>
   {/if}
 </div>
+
+<style>
+  :global(html[data-theme='dark'] .theme-compact-select-trigger) {
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-trigger:hover),
+  :global(html[data-theme='dark'] .theme-compact-select-trigger:focus-visible) {
+    background: var(--surface-hover) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-icon) {
+    color: var(--ink-faint) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-panel) {
+    background: var(--panel-strong) !important;
+    border-color: var(--line) !important;
+    box-shadow: 0 18px 44px color-mix(in srgb, var(--paper-shadow) 65%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-option-idle) {
+    color: var(--ink-soft) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-option-idle:hover),
+  :global(html[data-theme='dark'] .theme-compact-select-option-idle:focus-visible) {
+    background: var(--surface-hover) !important;
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-compact-select-option-active) {
+    background: var(--ink) !important;
+    color: var(--paper) !important;
+  }
+</style>

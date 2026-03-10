@@ -4,10 +4,14 @@ import {
   remainingPercent,
   type AccountSummary,
   type AppLanguage,
-  type AppSnapshot
+  type AppSnapshot,
+  type AppUpdateState
 } from '../shared/codex'
 
-function accountUsageLabel(snapshot: AppSnapshot, accountId: string): { hour: string; week: string } {
+function accountUsageLabel(
+  snapshot: AppSnapshot,
+  accountId: string
+): { hour: string; week: string } {
   const limits = snapshot.usageByAccountId[accountId]
 
   return {
@@ -64,4 +68,56 @@ export function buildTrayUsageMenuItems(
       }
     }
   })
+}
+
+export function buildTrayUpdateMenuItem(
+  updateState: AppUpdateState,
+  options: {
+    checkForUpdates: string
+    checkingForUpdates: string
+    downloadUpdate: (version?: string) => string
+    installUpdate: string
+    unsupported: string
+    downloadingUpdate: (progress?: number) => string
+    onCheck: () => void
+    onDownload: () => void
+    onInstall: () => void
+  }
+): MenuItemConstructorOptions | null {
+  switch (updateState.status) {
+    case 'idle':
+    case 'up-to-date':
+    case 'error':
+      return {
+        label: options.checkForUpdates,
+        click: () => options.onCheck()
+      }
+    case 'checking':
+      return {
+        label: options.checkingForUpdates,
+        enabled: false
+      }
+    case 'available':
+      return {
+        label: options.downloadUpdate(updateState.availableVersion),
+        click: () => options.onDownload()
+      }
+    case 'downloading':
+      return {
+        label: options.downloadingUpdate(updateState.downloadProgress),
+        enabled: false
+      }
+    case 'downloaded':
+      return {
+        label: options.installUpdate,
+        click: () => options.onInstall()
+      }
+    case 'unsupported':
+      return {
+        label: options.unsupported,
+        enabled: false
+      }
+    default:
+      return null
+  }
 }

@@ -46,7 +46,8 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'usagePollingMinutes',
   'statusBarAccountIds',
   'language',
-  'theme'
+  'theme',
+  'checkForUpdatesOnStartup'
 ]
 
 function parseFlags(argv: string[]): { flags: CliFlags; positionals: string[] } {
@@ -147,12 +148,14 @@ Usage:
 Global options:
   --json        Output { ok, data, error }
   --quiet       Suppress non-error text output
-  --no-open     Do not auto-open browser for browser login
+  --no-open     Do not auto-open browser for callback login
   --timeout     Fail waiting commands after N seconds
   --help        Show this help`)
 }
 
-function accountLabel(account?: Pick<AccountSummary, 'email' | 'name' | 'accountId' | 'id'> | null): string {
+function accountLabel(
+  account?: Pick<AccountSummary, 'email' | 'name' | 'accountId' | 'id'> | null
+): string {
   if (!account) {
     return 'unknown'
   }
@@ -215,6 +218,11 @@ function parseSettingsValue(key: CliSettingsKey, rawValue: string): AppSettings[
         throw new CliError('theme must be light, dark, or system', EXIT_USAGE)
       }
       return rawValue
+    case 'checkForUpdatesOnStartup':
+      if (rawValue !== 'true' && rawValue !== 'false') {
+        throw new CliError('checkForUpdatesOnStartup must be true or false', EXIT_USAGE)
+      }
+      return rawValue === 'true'
   }
 }
 
@@ -262,7 +270,7 @@ function printUsage(rateLimits: AccountRateLimits, quiet: boolean): void {
   console.log(`Secondary remaining: ${secondary}`)
   if (rateLimits.credits) {
     console.log(
-      `Credits: ${rateLimits.credits.unlimited ? 'unlimited' : rateLimits.credits.balance ?? '--'}`
+      `Credits: ${rateLimits.credits.unlimited ? 'unlimited' : (rateLimits.credits.balance ?? '--')}`
     )
   }
 }
@@ -291,6 +299,7 @@ function printSettings(settings: AppSettings, quiet: boolean): void {
   console.log(`statusBarAccountIds=${settings.statusBarAccountIds.join(',')}`)
   console.log(`language=${settings.language}`)
   console.log(`theme=${settings.theme}`)
+  console.log(`checkForUpdatesOnStartup=${settings.checkForUpdatesOnStartup}`)
 }
 
 async function waitForLoginResult(
@@ -324,7 +333,13 @@ async function waitForLoginResult(
         }
       }
 
-      if (method === 'browser' && flags.openBrowser && event.phase === 'waiting' && event.authUrl && !opened) {
+      if (
+        method === 'browser' &&
+        flags.openBrowser &&
+        event.phase === 'waiting' &&
+        event.authUrl &&
+        !opened
+      ) {
         opened = true
         void runtime.platform.openExternal(event.authUrl).catch((error) => {
           if (!flags.quiet) {
@@ -354,7 +369,9 @@ async function waitForLoginResult(
       reject(
         new CliError(
           event.message,
-          event.message.includes('占用') || event.message.includes('Missing') ? EXIT_ENVIRONMENT : EXIT_FAILURE
+          event.message.includes('占用') || event.message.includes('Missing')
+            ? EXIT_ENVIRONMENT
+            : EXIT_FAILURE
         )
       )
     }
@@ -364,11 +381,16 @@ async function waitForLoginResult(
     if (flags.timeoutSeconds) {
       const timer = setTimeout(() => {
         unsubscribe()
-        reject(new CliError(`Command timed out after ${flags.timeoutSeconds} seconds`, EXIT_FAILURE))
+        reject(
+          new CliError(`Command timed out after ${flags.timeoutSeconds} seconds`, EXIT_FAILURE)
+        )
       }, flags.timeoutSeconds * 1000)
 
       const stop = runtime.subscribeLoginEvents((event) => {
-        if (event.attemptId === attemptId && ['success', 'error', 'cancelled'].includes(event.phase)) {
+        if (
+          event.attemptId === attemptId &&
+          ['success', 'error', 'cancelled'].includes(event.phase)
+        ) {
           clearTimeout(timer)
           stop()
         }
@@ -399,7 +421,10 @@ function getSnapshotTag(snapshot: AppSnapshot, tagId: string): AccountTag {
   return tag
 }
 
-async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: number; payload?: CliResult<unknown> }> {
+async function execute(
+  runtime: CliRuntime,
+  argv: string[]
+): Promise<{ code: number; payload?: CliResult<unknown> }> {
   const { flags, positionals } = parseFlags(argv)
   const silent = flags.quiet || flags.json
 
@@ -425,7 +450,9 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
         }
         case 'import-current': {
           const snapshot = await runtime.services.accounts.importCurrent()
-          const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
+          const active = snapshot.accounts.find(
+            (account) => account.id === snapshot.activeAccountId
+          )
           printIfNeeded(`Imported current Codex account: ${accountLabel(active)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
@@ -435,13 +462,17 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
             throw new CliError('Missing account-id', EXIT_USAGE)
           }
           const snapshot = await runtime.services.accounts.activate(accountId)
-          const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
+          const active = snapshot.accounts.find(
+            (account) => account.id === snapshot.activeAccountId
+          )
           printIfNeeded(`Activated account: ${accountLabel(active)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         case 'best': {
           const snapshot = await runtime.services.accounts.activateBest()
-          const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
+          const active = snapshot.accounts.find(
+            (account) => account.id === snapshot.activeAccountId
+          )
           printIfNeeded(`Best account active: ${accountLabel(active)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
@@ -480,7 +511,8 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
           }
 
           const snapshot = await runtime.services.tags.create(name)
-          const createdTag = snapshot.tags.find((tag) => tag.name === name) ?? snapshot.tags.at(-1) ?? null
+          const createdTag =
+            snapshot.tags.find((tag) => tag.name === name) ?? snapshot.tags.at(-1) ?? null
           printIfNeeded(`Created tag: ${tagLabel(createdTag)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
@@ -534,12 +566,18 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
               : account.tagIds.filter((id) => id !== tagId)
 
           if (subcommand === 'assign' && hasTag) {
-            printIfNeeded(`Tag already assigned: ${tagLabel(tag)} -> ${accountLabel(account)}`, silent)
+            printIfNeeded(
+              `Tag already assigned: ${tagLabel(tag)} -> ${accountLabel(account)}`,
+              silent
+            )
             return { code: EXIT_OK, payload: toCliResult(snapshot) }
           }
 
           if (subcommand === 'unassign' && nextTagIds.length === account.tagIds.length) {
-            printIfNeeded(`Tag already removed: ${tagLabel(tag)} -> ${accountLabel(account)}`, silent)
+            printIfNeeded(
+              `Tag already removed: ${tagLabel(tag)} -> ${accountLabel(account)}`,
+              silent
+            )
             return { code: EXIT_OK, payload: toCliResult(snapshot) }
           }
 
@@ -570,7 +608,9 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
           case 'status': {
             const occupant = await runtime.services.login.getPortOccupant()
             printIfNeeded(
-              occupant ? `1455 occupied by ${occupant.command} (${occupant.pid})` : '1455 is available',
+              occupant
+                ? `1455 occupied by ${occupant.command} (${occupant.pid})`
+                : '1455 is available',
               silent
             )
             return { code: EXIT_OK, payload: toCliResult(occupant) }
@@ -578,7 +618,9 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
           case 'kill': {
             const occupant = await runtime.services.login.killPortOccupant()
             printIfNeeded(
-              occupant ? `Stopped ${occupant.command} (${occupant.pid})` : 'No process was listening on 1455',
+              occupant
+                ? `Stopped ${occupant.command} (${occupant.pid})`
+                : 'No process was listening on 1455',
               silent
             )
             return { code: EXIT_OK, payload: toCliResult(occupant) }
@@ -598,7 +640,13 @@ async function execute(runtime: CliRuntime, argv: string[]): Promise<{ code: num
       })
       const attempt = await runtime.services.login.start(subcommand)
       stopBuffering()
-      const result = await waitForLoginResult(runtime, attempt.attemptId, flags, subcommand, initialEvents)
+      const result = await waitForLoginResult(
+        runtime,
+        attempt.attemptId,
+        flags,
+        subcommand,
+        initialEvents
+      )
       if (!flags.json) {
         printIfNeeded(`Login finished with phase: ${result.phase}`, silent)
       }

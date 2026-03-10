@@ -16,12 +16,14 @@ import { deflateSync } from 'node:zlib'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { runCli } from '../cli/run-cli'
+import { createAppUpdaterService, type AppUpdaterService } from './app-updater'
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
-import { buildTrayUsageMenuItems } from './tray-menu'
+import { buildTrayUpdateMenuItem, buildTrayUsageMenuItems } from './tray-menu'
 import { createUsagePollingController, type UsagePollingController } from './usage-poller'
 import {
+  type AppUpdateState,
   formatRelativeReset,
   remainingPercent,
   resolveBestAccount,
@@ -36,7 +38,9 @@ import {
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let codexServices: CodexServices
+let appUpdaterService: AppUpdaterService | null = null
 let usagePollingController: UsagePollingController | null = null
+let lastSnapshot: AppSnapshot | null = null
 const defaultWorkspacePath = process.cwd()
 const configuredUserDataPath = join(homedir(), '.config', 'ilovecodex')
 const pollingOptions = [5, 15, 30, 60] as const
@@ -62,9 +66,16 @@ function localeText(language: AppSettings['language']): {
   activePrefix: string
   bestAccount: string
   openMainWindow: string
+  checkForUpdates: string
+  checkingForUpdates: string
+  downloadUpdate: (version?: string) => string
+  installUpdate: string
+  downloadingUpdate: (progress?: number) => string
+  updatesUnsupported: string
   pollingInterval: string
   minutes: string
   quit: string
+  autoCheckUpdates: string
   unknownAccount: string
 } {
   return {
@@ -78,9 +89,21 @@ function localeText(language: AppSettings['language']): {
     activePrefix: language === 'en' ? 'Active · ' : '当前 · ',
     bestAccount: language === 'en' ? 'Switch to best account' : '切换到最优账号',
     openMainWindow: language === 'en' ? 'Open main window' : '打开主界面',
+    checkForUpdates: language === 'en' ? 'Check for updates' : '检查更新',
+    checkingForUpdates: language === 'en' ? 'Checking for updates…' : '检查更新中…',
+    downloadUpdate: (version) =>
+      language === 'en'
+        ? `Download update${version ? ` v${version}` : ''}`
+        : `下载更新${version ? ` v${version}` : ''}`,
+    installUpdate: language === 'en' ? 'Restart to install update' : '重启安装更新',
+    downloadingUpdate: (progress) =>
+      language === 'en' ? `Downloading ${progress ?? 0}%` : `下载更新中 ${progress ?? 0}%`,
+    updatesUnsupported:
+      language === 'en' ? 'Automatic updates unavailable for this build' : '当前构建不支持自动更新',
     pollingInterval: language === 'en' ? 'Polling interval' : '轮询间隔',
     minutes: language === 'en' ? 'min' : '分钟',
     quit: language === 'en' ? 'Quit' : '退出',
+    autoCheckUpdates: language === 'en' ? 'Check updates on startup' : '启动时检查更新',
     unknownAccount: language === 'en' ? 'Unnamed account' : '未命名账号'
   }
 }
@@ -319,6 +342,25 @@ function buildTrayPollingMenu(snapshot: AppSnapshot): MenuItemConstructorOptions
   }))
 }
 
+function resolveUpdateState(): AppUpdateState {
+  return (
+    appUpdaterService?.getState() ?? {
+      status: 'unsupported',
+      currentVersion: app.getVersion(),
+      supported: false,
+      message: 'Automatic updates are unavailable.'
+    }
+  )
+}
+
+function requireAppUpdaterService(): AppUpdaterService {
+  if (!appUpdaterService) {
+    throw new Error('App updater is not initialized.')
+  }
+
+  return appUpdaterService
+}
+
 function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromTemplate> {
   const bestAccount = resolveBestAccount(
     snapshot.accounts,
@@ -326,6 +368,23 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     snapshot.activeAccountId
   )
   const text = localeText(snapshot.settings.language)
+  const trayUpdateItem = buildTrayUpdateMenuItem(resolveUpdateState(), {
+    checkForUpdates: text.checkForUpdates,
+    checkingForUpdates: text.checkingForUpdates,
+    downloadUpdate: text.downloadUpdate,
+    installUpdate: text.installUpdate,
+    unsupported: text.updatesUnsupported,
+    downloadingUpdate: text.downloadingUpdate,
+    onCheck: () => {
+      void appUpdaterService?.checkForUpdates()
+    },
+    onDownload: () => {
+      void appUpdaterService?.downloadUpdate()
+    },
+    onInstall: () => {
+      void appUpdaterService?.installUpdate()
+    }
+  })
 
   return Menu.buildFromTemplate([
     ...buildCurrentUsageMenu(snapshot),
@@ -354,7 +413,8 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
       label: text.pollingInterval,
       submenu: buildTrayPollingMenu(snapshot)
     },
-    { type: 'separator' },
+    ...(trayUpdateItem ? [{ type: 'separator' as const }, trayUpdateItem] : []),
+    ...(trayUpdateItem ? [{ type: 'separator' as const }] : []),
     {
       label: text.quit,
       role: 'quit'
@@ -499,6 +559,7 @@ function buildTrayImage(snapshot: AppSnapshot): Electron.NativeImage {
 
 async function refreshTrayTitle(): Promise<AppSnapshot> {
   const snapshot = await codexServices.getSnapshot()
+  lastSnapshot = snapshot
   if (tray) {
     tray.setImage(buildTrayImage(snapshot))
     tray.setToolTip(buildTrayTooltip(snapshot))
@@ -513,6 +574,16 @@ async function refreshTrayTitle(): Promise<AppSnapshot> {
   usagePollingController?.sync(snapshot)
 
   return snapshot
+}
+
+function emitUpdateState(updateState: AppUpdateState): void {
+  if (tray && lastSnapshot) {
+    tray.setContextMenu(buildTrayMenu(lastSnapshot))
+  }
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('codex:update-state', updateState)
+  }
 }
 
 function showMainWindow(): void {
@@ -587,7 +658,8 @@ function createTray(): void {
             usagePollingMinutes: 15,
             statusBarAccountIds: [],
             language: 'zh-CN',
-            theme: 'light'
+            theme: 'light',
+            checkForUpdatesOnStartup: true
           },
           usageByAccountId: {}
         })
@@ -628,15 +700,6 @@ app.whenReady().then(async () => {
       void refreshTrayTitle()
     }
   })
-  usagePollingController = createUsagePollingController({
-    getSnapshot: () => codexServices.getSnapshot(),
-    readAccountRateLimits: (accountId) => codexServices.usage.read(accountId),
-    onSnapshotChanged: () => refreshTrayTitle(),
-    onReadError: (account, error) => {
-      const detail = error instanceof Error ? error.message : 'Unknown error'
-      console.warn(`Failed to poll usage for ${account.email ?? account.id}: ${detail}`)
-    }
-  })
 
   if (cliArgs) {
     const code = await runCli(
@@ -654,6 +717,28 @@ app.whenReady().then(async () => {
     return
   }
 
+  const initialSettings = await codexServices.settings.get()
+  appUpdaterService = createAppUpdaterService({
+    currentVersion: app.getVersion(),
+    initialSettings,
+    isPackaged: app.isPackaged,
+    platform: process.platform,
+    env: process.env
+  })
+  appUpdaterService.subscribe((updateState) => {
+    emitUpdateState(updateState)
+  })
+
+  usagePollingController = createUsagePollingController({
+    getSnapshot: () => codexServices.getSnapshot(),
+    readAccountRateLimits: (accountId) => codexServices.usage.read(accountId),
+    onSnapshotChanged: () => refreshTrayTitle(),
+    onReadError: (account, error) => {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to poll usage for ${account.email ?? account.id}: ${detail}`)
+    }
+  })
+
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
 
@@ -668,9 +753,12 @@ app.whenReady().then(async () => {
   ipcMain.on('ping', () => console.log('pong'))
   ipcMain.handle('codex:get-snapshot', () => refreshTrayTitle())
   ipcMain.handle('codex:get-app-meta', () => getAppMeta())
+  ipcMain.handle('codex:get-update-state', () => resolveUpdateState())
   ipcMain.handle('codex:update-settings', async (_, nextSettings: Partial<AppSettings>) => {
-    await codexServices.settings.update(nextSettings)
-    return refreshTrayTitle()
+    const snapshot = await codexServices.settings.update(nextSettings)
+    appUpdaterService?.syncSettings(snapshot.settings)
+    await refreshTrayTitle()
+    return snapshot
   })
   ipcMain.handle('codex:open-main-window', async () => {
     showMainWindow()
@@ -721,6 +809,9 @@ app.whenReady().then(async () => {
     void refreshTrayTitle()
     return rateLimits
   })
+  ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
+  ipcMain.handle('codex:download-update', () => requireAppUpdaterService().downloadUpdate())
+  ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())
   ipcMain.handle('codex:start-login', (_, method: LoginMethod) => codexServices.login.start(method))
   ipcMain.handle('codex:get-login-port-occupant', () => codexServices.login.getPortOccupant())
   ipcMain.handle('codex:kill-login-port-occupant', () => codexServices.login.killPortOccupant())
@@ -730,6 +821,7 @@ app.whenReady().then(async () => {
     createTray()
   }
   void refreshTrayTitle()
+  appUpdaterService.start()
   usagePollingController.start()
 
   app.on('activate', function () {
@@ -749,6 +841,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  appUpdaterService?.stop()
   usagePollingController?.stop()
   mainWindow = null
   tray = null

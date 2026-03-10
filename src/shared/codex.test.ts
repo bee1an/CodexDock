@@ -113,7 +113,8 @@ describe('codex shared helpers', () => {
           usagePollingMinutes: 15,
           statusBarAccountIds: ['c', 'b'],
           language: 'zh-CN',
-          theme: 'light'
+          theme: 'light',
+          checkForUpdatesOnStartup: true
         },
         accounts,
         'a'
