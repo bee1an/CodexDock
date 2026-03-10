@@ -2,6 +2,13 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.2.1 - 2026-03-10
+
+This patch release improves menu bar reliability for day-to-day desktop use.
+
+- Fixed usage polling so the menu bar keeps refreshing account limits after the main window is closed.
+- Fixed reopening the main window from the menu bar after closing it, preventing a main-process crash caused by a destroyed window reference.
+
 ## 0.2.0 - 2026-03-09
 
 This release expands account management across both the desktop app and CLI.

@@ -134,6 +134,37 @@ export function remainingPercent(value?: number | null): number {
   return Math.max(0, Math.min(100, 100 - (value ?? 0)))
 }
 
+export function usagePollingIntervalMs(usagePollingMinutes: number): number {
+  return Math.max(1, usagePollingMinutes) * 60 * 1000
+}
+
+export function usagePollDueInMs(
+  rateLimits: AccountRateLimits | undefined,
+  usagePollingMinutes: number,
+  now = Date.now()
+): number {
+  const fetchedAt = rateLimits?.fetchedAt
+  if (!fetchedAt) {
+    return 0
+  }
+
+  const fetchedAtMs = Date.parse(fetchedAt)
+  if (Number.isNaN(fetchedAtMs)) {
+    return 0
+  }
+
+  const elapsedMs = Math.max(0, now - fetchedAtMs)
+  return Math.max(0, usagePollingIntervalMs(usagePollingMinutes) - elapsedMs)
+}
+
+export function shouldAutoPollUsage(
+  rateLimits: AccountRateLimits | undefined,
+  usagePollingMinutes: number,
+  now = Date.now()
+): boolean {
+  return usagePollDueInMs(rateLimits, usagePollingMinutes, now) === 0
+}
+
 function normalizeTimestamp(value?: number | null): number | null {
   if (!value) {
     return null

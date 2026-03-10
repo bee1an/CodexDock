@@ -4,7 +4,10 @@ import {
   formatRelativeReset,
   remainingPercent,
   resolveBestAccount,
+  shouldAutoPollUsage,
   statusBarAccounts,
+  usagePollDueInMs,
+  usagePollingIntervalMs,
   type AccountRateLimits,
   type AccountSummary
 } from './codex'
@@ -59,8 +62,23 @@ describe('codex shared helpers', () => {
     expect(remainingPercent(140)).toBe(0)
   })
 
+  it('computes usage polling windows from fetched timestamps', () => {
+    expect(usagePollingIntervalMs(15)).toBe(15 * 60 * 1000)
+    expect(usagePollDueInMs(createUsage(), 15)).toBe(15 * 60 * 1000)
+
+    const freshUsage = createUsage({ fetchedAt: '2026-03-08T00:10:00.000Z' })
+    vi.setSystemTime(new Date('2026-03-08T00:20:00.000Z'))
+
+    expect(usagePollDueInMs(freshUsage, 15)).toBe(5 * 60 * 1000)
+    expect(shouldAutoPollUsage(freshUsage, 15)).toBe(false)
+    expect(shouldAutoPollUsage(freshUsage, 10)).toBe(true)
+  })
+
   it('prefers the account with better remaining usage', () => {
-    const accounts = [createAccount('a', { email: 'a@example.com' }), createAccount('b', { email: 'b@example.com' })]
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' })
+    ]
     const usageByAccountId = {
       a: createUsage({ primary: { usedPercent: 80, windowDurationMins: 300, resetsAt: null } }),
       b: createUsage({ primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: null } })

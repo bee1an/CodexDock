@@ -19,7 +19,7 @@
     LoginMethod,
     PortOccupant
   } from '../../shared/codex'
-  import { resolveBestAccount } from '../../shared/codex'
+  import { resolveBestAccount, shouldAutoPollUsage } from '../../shared/codex'
 
   let snapshot: AppSnapshot = {
     accounts: [],
@@ -115,17 +115,7 @@
       return true
     }
 
-    const fetchedAt = usageByAccountId[accountId]?.fetchedAt
-    if (!fetchedAt) {
-      return true
-    }
-
-    const elapsedMs = Date.now() - Date.parse(fetchedAt)
-    if (Number.isNaN(elapsedMs)) {
-      return true
-    }
-
-    return elapsedMs >= snapshot.settings.usagePollingMinutes * 60 * 1000
+    return shouldAutoPollUsage(usageByAccountId[accountId], snapshot.settings.usagePollingMinutes)
   }
 
   const syncUsageState = (accounts: AccountSummary[]): void => {
@@ -148,7 +138,6 @@
       ...nextSnapshot.usageByAccountId
     }
     syncUsageState(nextSnapshot.accounts)
-    void ensureUsageLoaded(nextSnapshot.accounts)
   }
 
   const clearUsageError = (accountId: string): void => {
@@ -331,19 +320,6 @@
       }
     } finally {
       clearUsageLoading(account.id)
-    }
-  }
-
-  const ensureUsageLoaded = async (accounts: AccountSummary[]): Promise<void> => {
-    for (const account of accounts) {
-      if (
-        usageLoadingByAccountId[account.id] ||
-        (usageByAccountId[account.id] && !canAutoPollUsage(account.id))
-      ) {
-        continue
-      }
-
-      await readRateLimits(account)
     }
   }
 

@@ -20,6 +20,7 @@ import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
 import { buildTrayUsageMenuItems } from './tray-menu'
+import { createUsagePollingController, type UsagePollingController } from './usage-poller'
 import {
   formatRelativeReset,
   remainingPercent,
@@ -35,6 +36,7 @@ import {
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let codexServices: CodexServices
+let usagePollingController: UsagePollingController | null = null
 const defaultWorkspacePath = process.cwd()
 const configuredUserDataPath = join(homedir(), '.config', 'ilovecodex')
 const pollingOptions = [5, 15, 30, 60] as const
@@ -508,11 +510,14 @@ async function refreshTrayTitle(): Promise<AppSnapshot> {
     mainWindow.webContents.send('codex:snapshot-updated', snapshot)
   }
 
+  usagePollingController?.sync(snapshot)
+
   return snapshot
 }
 
 function showMainWindow(): void {
-  if (!mainWindow) {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    mainWindow = null
     createWindow()
     return
   }
@@ -527,7 +532,7 @@ function showMainWindow(): void {
 
 function createWindow(): void {
   // Create the browser window.
-  mainWindow = new BrowserWindow({
+  const window = new BrowserWindow({
     width: 1220,
     height: 860,
     minWidth: 1100,
@@ -546,19 +551,28 @@ function createWindow(): void {
       sandbox: false
     }
   })
+  mainWindow = window
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow?.show()
+  window.on('ready-to-show', () => {
+    if (!window.isDestroyed()) {
+      window.show()
+    }
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  window.on('closed', () => {
+    if (mainWindow === window) {
+      mainWindow = null
+    }
+  })
+
+  window.webContents.setWindowOpenHandler((details) => {
     shell.openExternal(details.url)
     return { action: 'deny' }
   })
 
   // HMR for renderer base on electron-vite cli.
   // Load the remote URL for development or the local html file for production.
-  void loadRendererWindow(mainWindow)
+  void loadRendererWindow(window)
 }
 
 function createTray(): void {
@@ -605,11 +619,22 @@ app.whenReady().then(async () => {
     defaultWorkspacePath,
     platform,
     emitLoginEvent: (event) => {
-      mainWindow?.webContents.send('codex:login-event', event)
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('codex:login-event', event)
+      }
       for (const listener of loginEventListeners) {
         listener(event)
       }
       void refreshTrayTitle()
+    }
+  })
+  usagePollingController = createUsagePollingController({
+    getSnapshot: () => codexServices.getSnapshot(),
+    readAccountRateLimits: (accountId) => codexServices.usage.read(accountId),
+    onSnapshotChanged: () => refreshTrayTitle(),
+    onReadError: (account, error) => {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to poll usage for ${account.email ?? account.id}: ${detail}`)
     }
   })
 
@@ -703,8 +728,9 @@ app.whenReady().then(async () => {
   createWindow()
   if (process.platform === 'darwin') {
     createTray()
-    void refreshTrayTitle()
   }
+  void refreshTrayTitle()
+  usagePollingController.start()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
@@ -723,6 +749,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  usagePollingController?.stop()
   mainWindow = null
   tray = null
 })
