@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.2.4 - 2026-03-10
+
+This patch release refines where manual update actions appear in the desktop interface.
+
+- Moved the manual "Check for updates" action out of the footer so it no longer sits beside the version label.
+- Added the manual update check entry to the desktop settings panel to keep the action available without crowding the footer.
+- Kept footer update status, download, and restart-to-install actions intact so update progress remains visible during active update flows.
+
 ## 0.2.3 - 2026-03-10
 
 This patch release fixes a packaged desktop startup regression in the 0.2.2 release.
