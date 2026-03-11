@@ -5,10 +5,13 @@ import type {
   AppSettings,
   AppSnapshot,
   AppUpdateState,
+  CreateCustomProviderInput,
+  CustomProviderDetail,
   LoginAttempt,
   LoginEvent,
   LoginMethod,
-  PortOccupant
+  PortOccupant,
+  UpdateCustomProviderInput
 } from '../shared/codex'
 
 interface CodexDesktopApi {
@@ -26,7 +29,15 @@ interface CodexDesktopApi {
   createTag: (name: string) => Promise<AppSnapshot>
   updateTag: (tagId: string, name: string) => Promise<AppSnapshot>
   deleteTag: (tagId: string) => Promise<AppSnapshot>
+  listProviders: () => Promise<AppSnapshot['providers']>
+  getProvider: (providerId: string) => Promise<CustomProviderDetail>
+  reorderProviders: (providerIds: string[]) => Promise<AppSnapshot>
+  createProvider: (input: CreateCustomProviderInput) => Promise<AppSnapshot>
+  updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<AppSnapshot>
+  removeProvider: (providerId: string) => Promise<AppSnapshot>
+  openProviderInCodex: (providerId: string) => Promise<AppSnapshot>
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
+  openAccountInIsolatedCodex: (accountId: string) => Promise<AppSnapshot>
   readAccountRateLimits: (accountId: string) => Promise<AccountRateLimits>
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>

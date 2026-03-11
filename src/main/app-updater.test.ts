@@ -22,6 +22,7 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
     language: 'zh-CN',
     theme: 'light',
     checkForUpdatesOnStartup: true,
+    codexDesktopExecutablePath: '',
     ...overrides
   }
 }

@@ -5,6 +5,9 @@ import type {
   AppSettings,
   AppSnapshot,
   AppUpdateState,
+  CreateCustomProviderInput,
+  CustomProviderDetail,
+  UpdateCustomProviderInput,
   LoginEvent,
   LoginMethod,
   PortOccupant
@@ -29,8 +32,19 @@ const codexApp = {
   createTag: (name: string) => ipcRenderer.invoke('codex:create-tag', name),
   updateTag: (tagId: string, name: string) => ipcRenderer.invoke('codex:update-tag', tagId, name),
   deleteTag: (tagId: string) => ipcRenderer.invoke('codex:delete-tag', tagId),
+  listProviders: () => ipcRenderer.invoke('codex:list-providers'),
+  getProvider: (providerId: string): Promise<CustomProviderDetail> =>
+    ipcRenderer.invoke('codex:get-provider', providerId),
+  reorderProviders: (providerIds: string[]) => ipcRenderer.invoke('codex:reorder-providers', providerIds),
+  createProvider: (input: CreateCustomProviderInput) => ipcRenderer.invoke('codex:create-provider', input),
+  updateProvider: (providerId: string, input: UpdateCustomProviderInput) =>
+    ipcRenderer.invoke('codex:update-provider', providerId, input),
+  removeProvider: (providerId: string) => ipcRenderer.invoke('codex:remove-provider', providerId),
+  openProviderInCodex: (providerId: string) => ipcRenderer.invoke('codex:open-provider-in-codex', providerId),
   openAccountInCodex: (accountId: string) =>
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),
+  openAccountInIsolatedCodex: (accountId: string) =>
+    ipcRenderer.invoke('codex:open-account-in-isolated-codex', accountId),
   readAccountRateLimits: (accountId: string) =>
     ipcRenderer.invoke('codex:read-account-rate-limits', accountId),
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),

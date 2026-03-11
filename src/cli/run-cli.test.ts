@@ -13,7 +13,13 @@ import type {
 function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
   return {
     accounts: [],
+    providers: [],
     tags: [],
+    codexInstances: [],
+    codexInstanceDefaults: {
+      rootDir: '/tmp/codex-instance-homes',
+      defaultCodexHome: '/Users/test/.codex'
+    },
     activeAccountId: undefined,
     currentSession: null,
     loginInProgress: false,
@@ -22,7 +28,8 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       statusBarAccountIds: [],
       language: 'zh-CN',
       theme: 'light',
-      checkForUpdatesOnStartup: true
+      checkForUpdatesOnStartup: true,
+      codexDesktopExecutablePath: ''
     },
     usageByAccountId: {},
     ...overrides
@@ -52,6 +59,15 @@ interface CliTestRuntime {
       remove: ReturnType<typeof vi.fn>
       getAll: ReturnType<typeof vi.fn>
     }
+    providers: {
+      list: ReturnType<typeof vi.fn>
+      create: ReturnType<typeof vi.fn>
+      reorder: ReturnType<typeof vi.fn>
+      update: ReturnType<typeof vi.fn>
+      remove: ReturnType<typeof vi.fn>
+      get: ReturnType<typeof vi.fn>
+      open: ReturnType<typeof vi.fn>
+    }
     session: {
       current: ReturnType<typeof vi.fn>
     }
@@ -70,6 +86,16 @@ interface CliTestRuntime {
     }
     codex: {
       open: ReturnType<typeof vi.fn>
+      openIsolated: ReturnType<typeof vi.fn>
+      instances: {
+        list: ReturnType<typeof vi.fn>
+        getDefaults: ReturnType<typeof vi.fn>
+        create: ReturnType<typeof vi.fn>
+        update: ReturnType<typeof vi.fn>
+        remove: ReturnType<typeof vi.fn>
+        start: ReturnType<typeof vi.fn>
+        stop: ReturnType<typeof vi.fn>
+      }
     }
     getSnapshot: ReturnType<typeof vi.fn>
   }
@@ -108,6 +134,17 @@ function createRuntime(): {
         updatedAt: '2026-03-02T00:00:00.000Z'
       }
     ],
+    providers: [
+      {
+        id: 'provider_1',
+        name: 'Bee',
+        baseUrl: 'https://api.bee1an.us.kg/v1',
+        model: '5.4',
+        fastMode: true,
+        createdAt: '2026-03-03T00:00:00.000Z',
+        updatedAt: '2026-03-03T00:00:00.000Z'
+      }
+    ],
     activeAccountId: 'acct_1',
     currentSession: {
       email: 'one@example.com',
@@ -137,7 +174,8 @@ function createRuntime(): {
     statusBarAccountIds: [],
     language: 'zh-CN',
     theme: 'light',
-    checkForUpdatesOnStartup: true
+    checkForUpdatesOnStartup: true,
+    codexDesktopExecutablePath: ''
   }
   const currentSession: CurrentSessionSummary = {
     email: 'one@example.com',
@@ -174,6 +212,15 @@ function createRuntime(): {
         update: vi.fn(async () => snapshot),
         remove: vi.fn(async () => snapshot),
         getAll: vi.fn(async () => snapshot.tags)
+      },
+      providers: {
+        list: vi.fn(async () => snapshot.providers),
+        create: vi.fn(async () => snapshot),
+        reorder: vi.fn(async () => snapshot),
+        update: vi.fn(async () => snapshot),
+        remove: vi.fn(async () => snapshot),
+        get: vi.fn(async () => snapshot.providers[0]),
+        open: vi.fn(async () => snapshot)
       },
       session: {
         current: vi.fn(async () => currentSession)
@@ -232,7 +279,17 @@ function createRuntime(): {
         killPortOccupant: vi.fn(async () => portOccupant)
       },
       codex: {
-        open: vi.fn(async () => snapshot)
+        open: vi.fn(async () => snapshot),
+        openIsolated: vi.fn(async () => snapshot),
+        instances: {
+          list: vi.fn(async () => []),
+          getDefaults: vi.fn(async () => snapshot.codexInstanceDefaults),
+          create: vi.fn(),
+          update: vi.fn(),
+          remove: vi.fn(async () => undefined),
+          start: vi.fn(),
+          stop: vi.fn()
+        }
       },
       getSnapshot: vi.fn(async () => snapshot)
     }
@@ -303,6 +360,72 @@ describe('runCli', () => {
       0
     )
     expect(runtime.services.accounts.remove).toHaveBeenCalledWith('acct_1')
+  })
+
+  it('covers provider commands', async () => {
+    const { runtime } = createRuntime()
+
+    await expect(runCli(runtime as never, ['provider', 'list', '--json'])).resolves.toBe(0)
+    expect(runtime.services.providers.list).toHaveBeenCalledOnce()
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'provider',
+        'create',
+        '--name',
+        'Bee',
+        '--base-url',
+        'https://api.bee1an.us.kg/v1',
+        '--api-key',
+        'secret',
+        '--model',
+        '5.4',
+        '--fast',
+        'true',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.providers.create).toHaveBeenCalledWith({
+      name: 'Bee',
+      baseUrl: 'https://api.bee1an.us.kg/v1',
+      apiKey: 'secret',
+      model: '5.4',
+      fastMode: true
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'provider',
+        'update',
+        'provider_1',
+        '--base-url',
+        'https://api.example.com/v1',
+        '--model',
+        'gpt-5.4',
+        '--fast',
+        'false',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.providers.update).toHaveBeenCalledWith('provider_1', {
+      baseUrl: 'https://api.example.com/v1',
+      model: 'gpt-5.4',
+      fastMode: false
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['provider', 'open', 'provider_1', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.providers.open).toHaveBeenCalledWith('provider_1')
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['provider', 'remove', 'provider_1', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.providers.remove).toHaveBeenCalledWith('provider_1')
   })
 
   it('covers session current and usage read', async () => {
@@ -494,6 +617,12 @@ describe('runCli', () => {
     expect(runtime.services.codex.open).toHaveBeenCalledWith('acct_1')
 
     logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['codex', 'open-isolated', 'acct_1', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.codex.openIsolated).toHaveBeenCalledWith('acct_1')
+
+    logSpy.mockClear()
     await expect(runCli(runtime as never, ['settings', 'get', 'theme', '--json'])).resolves.toBe(0)
     expect(runtime.services.settings.get).toHaveBeenCalled()
     expect(parseJsonLog(logSpy)).toEqual({
@@ -516,7 +645,8 @@ describe('runCli', () => {
         statusBarAccountIds: ['a', 'b', 'c'],
         language: 'zh-CN',
         theme: 'light',
-        checkForUpdatesOnStartup: true
+        checkForUpdatesOnStartup: true,
+        codexDesktopExecutablePath: ''
       },
       error: null
     })
@@ -535,7 +665,34 @@ describe('runCli', () => {
         statusBarAccountIds: [],
         language: 'zh-CN',
         theme: 'light',
-        checkForUpdatesOnStartup: false
+        checkForUpdatesOnStartup: false,
+        codexDesktopExecutablePath: ''
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'settings',
+        'set',
+        'codexDesktopExecutablePath',
+        'C:\\\\Program Files\\\\Codex\\\\Codex.exe',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.settings.update).toHaveBeenCalledWith({
+      codexDesktopExecutablePath: 'C:\\\\Program Files\\\\Codex\\\\Codex.exe'
+    })
+    expect(parseJsonLog(logSpy)).toEqual({
+      ok: true,
+      data: {
+        usagePollingMinutes: 15,
+        statusBarAccountIds: [],
+        language: 'zh-CN',
+        theme: 'light',
+        checkForUpdatesOnStartup: true,
+        codexDesktopExecutablePath: 'C:\\\\Program Files\\\\Codex\\\\Codex.exe'
       },
       error: null
     })

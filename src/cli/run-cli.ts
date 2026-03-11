@@ -8,8 +8,11 @@ import type {
   CliLoginResult,
   CliResult,
   CliSettingsKey,
+  CreateCustomProviderInput,
   CurrentSessionSummary,
-  LoginEvent
+  CustomProviderSummary,
+  LoginEvent,
+  UpdateCustomProviderInput,
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import type { CodexServices } from '../main/codex-services'
@@ -47,7 +50,8 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'statusBarAccountIds',
   'language',
   'theme',
-  'checkForUpdatesOnStartup'
+  'checkForUpdatesOnStartup',
+  'codexDesktopExecutablePath'
 ]
 
 function parseFlags(argv: string[]): { flags: CliFlags; positionals: string[] } {
@@ -58,6 +62,7 @@ function parseFlags(argv: string[]): { flags: CliFlags; positionals: string[] } 
     help: false
   }
   const positionals: string[] = []
+  let seenCommand = false
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -111,10 +116,16 @@ function parseFlags(argv: string[]): { flags: CliFlags; positionals: string[] } 
     }
 
     if (arg.startsWith('--')) {
+      if (seenCommand) {
+        positionals.push(arg)
+        continue
+      }
+
       throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
     }
 
     positionals.push(arg)
+    seenCommand = true
   }
 
   return { flags, positionals }
@@ -129,6 +140,11 @@ Usage:
   ilc account activate <account-id> [--json]
   ilc account best [--json]
   ilc account remove <account-id> [--json]
+  ilc provider list [--json]
+  ilc provider create --base-url <url> --api-key <key> [--name <name>] [--model <model>] [--fast <true|false>] [--json]
+  ilc provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--model <model>] [--fast <true|false>] [--json]
+  ilc provider remove <provider-id> [--json]
+  ilc provider open <provider-id> [--json]
   ilc tag list [--json]
   ilc tag create <name> [--json]
   ilc tag rename <tag-id> <name> [--json]
@@ -142,6 +158,7 @@ Usage:
   ilc login port status [--json]
   ilc login port kill [--json]
   ilc codex open [account-id] [--json]
+  ilc codex open-isolated <account-id> [--json]
   ilc settings get [key] [--json]
   ilc settings set <key> <value> [--json]
 
@@ -177,6 +194,14 @@ function tagLabel(tag?: Pick<AccountTag, 'id' | 'name'> | null): string {
   }
 
   return tag.name || tag.id
+}
+
+function providerLabel(provider?: Pick<CustomProviderSummary, 'id' | 'name' | 'baseUrl'> | null): string {
+  if (!provider) {
+    return 'unknown'
+  }
+
+  return provider.name ?? provider.baseUrl ?? provider.id
 }
 
 function printIfNeeded(message: string, quiet: boolean): void {
@@ -223,6 +248,8 @@ function parseSettingsValue(key: CliSettingsKey, rawValue: string): AppSettings[
         throw new CliError('checkForUpdatesOnStartup must be true or false', EXIT_USAGE)
       }
       return rawValue === 'true'
+    case 'codexDesktopExecutablePath':
+      return rawValue.trim()
   }
 }
 
@@ -290,6 +317,23 @@ function printTags(tags: AccountTag[], quiet: boolean): void {
   }
 }
 
+function printProviders(providers: CustomProviderSummary[], quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!providers.length) {
+    console.log('No custom providers')
+    return
+  }
+
+  for (const provider of providers) {
+    console.log(
+      `${provider.id}  ${providerLabel(provider)}  ${provider.model}  ${provider.fastMode ? 'fast' : 'normal'}`
+    )
+  }
+}
+
 function printSettings(settings: AppSettings, quiet: boolean): void {
   if (quiet) {
     return
@@ -300,6 +344,73 @@ function printSettings(settings: AppSettings, quiet: boolean): void {
   console.log(`language=${settings.language}`)
   console.log(`theme=${settings.theme}`)
   console.log(`checkForUpdatesOnStartup=${settings.checkForUpdatesOnStartup}`)
+  console.log(`codexDesktopExecutablePath=${settings.codexDesktopExecutablePath}`)
+}
+
+function parseProviderOptions(argv: string[]): {
+  input: Partial<CreateCustomProviderInput & UpdateCustomProviderInput>
+  positionals: string[]
+} {
+  const input: Partial<CreateCustomProviderInput & UpdateCustomProviderInput> = {}
+  const positionals: string[] = []
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+
+    if (arg === '--name') {
+      if (!value) {
+        throw new CliError('Missing value for --name', EXIT_USAGE)
+      }
+      input.name = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--base-url') {
+      if (!value) {
+        throw new CliError('Missing value for --base-url', EXIT_USAGE)
+      }
+      input.baseUrl = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--api-key') {
+      if (!value) {
+        throw new CliError('Missing value for --api-key', EXIT_USAGE)
+      }
+      input.apiKey = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--model') {
+      if (!value) {
+        throw new CliError('Missing value for --model', EXIT_USAGE)
+      }
+      input.model = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--fast') {
+      if (!value || (value !== 'true' && value !== 'false')) {
+        throw new CliError('--fast must be true or false', EXIT_USAGE)
+      }
+      input.fastMode = value === 'true'
+      index += 1
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    positionals.push(arg)
+  }
+
+  return { input, positionals }
 }
 
 async function waitForLoginResult(
@@ -489,6 +600,86 @@ async function execute(
           throw new CliError('Unknown account command', EXIT_USAGE)
       }
     }
+    case 'provider': {
+      switch (subcommand) {
+        case 'list': {
+          const providers = await runtime.services.providers.list()
+          printProviders(providers, silent)
+          return { code: EXIT_OK, payload: toCliResult(providers) }
+        }
+        case 'create': {
+          const { input } = parseProviderOptions(rest)
+          if (!input.baseUrl || !input.apiKey) {
+            throw new CliError('Usage: ilc provider create --base-url <url> --api-key <key>', EXIT_USAGE)
+          }
+
+          const snapshot = await runtime.services.providers.create({
+            name: input.name,
+            baseUrl: input.baseUrl,
+            apiKey: input.apiKey,
+            model: input.model ?? '5.4',
+            fastMode: input.fastMode
+          })
+          const created = snapshot.providers[0] ?? null
+          printIfNeeded(`Created provider: ${providerLabel(created)}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        case 'update': {
+          const { input, positionals } = parseProviderOptions(rest)
+          const providerId = positionals[0]
+          if (!providerId) {
+            throw new CliError('Missing provider-id', EXIT_USAGE)
+          }
+
+          const updateInput: UpdateCustomProviderInput = {}
+          if (input.name !== undefined) {
+            updateInput.name = input.name
+          }
+          if (input.baseUrl !== undefined) {
+            updateInput.baseUrl = input.baseUrl
+          }
+          if (input.apiKey !== undefined) {
+            updateInput.apiKey = input.apiKey
+          }
+          if (input.model !== undefined) {
+            updateInput.model = input.model
+          }
+          if (input.fastMode !== undefined) {
+            updateInput.fastMode = input.fastMode
+          }
+          if (!Object.keys(updateInput).length) {
+            throw new CliError('No provider changes provided', EXIT_USAGE)
+          }
+
+          const snapshot = await runtime.services.providers.update(providerId, updateInput)
+          const updated = snapshot.providers.find((provider) => provider.id === providerId) ?? null
+          printIfNeeded(`Updated provider: ${providerLabel(updated)}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        case 'remove': {
+          const providerId = rest[0]
+          if (!providerId) {
+            throw new CliError('Missing provider-id', EXIT_USAGE)
+          }
+
+          const snapshot = await runtime.services.providers.remove(providerId)
+          printIfNeeded(`Removed provider: ${providerId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        case 'open': {
+          const providerId = rest[0]
+          if (!providerId) {
+            throw new CliError('Missing provider-id', EXIT_USAGE)
+          }
+
+          const snapshot = await runtime.services.providers.open(providerId)
+          printIfNeeded(`Opened provider in isolated Codex: ${providerId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        default:
+          throw new CliError('Unknown provider command', EXIT_USAGE)
+      }
+    }
     case 'session': {
       if (subcommand !== 'current') {
         throw new CliError('Unknown session command', EXIT_USAGE)
@@ -653,13 +844,26 @@ async function execute(
       return { code: EXIT_OK, payload: toCliResult(result) }
     }
     case 'codex': {
-      if (subcommand !== 'open') {
-        throw new CliError('Unknown codex command', EXIT_USAGE)
+      if (subcommand === 'open') {
+        const snapshot = await runtime.services.codex.open(rest[0])
+        const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
+        printIfNeeded(
+          `Opened Codex with account: ${accountLabel(active)}`,
+          silent
+        )
+        return { code: EXIT_OK, payload: toCliResult(snapshot) }
       }
-      const snapshot = await runtime.services.codex.open(rest[0])
-      const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
-      printIfNeeded(`Opened Codex with account: ${accountLabel(active)}`, silent)
-      return { code: EXIT_OK, payload: toCliResult(snapshot) }
+      if (subcommand === 'open-isolated') {
+        const accountId = rest[0]
+        if (!accountId) {
+          throw new CliError('Missing account-id', EXIT_USAGE)
+        }
+
+        const snapshot = await runtime.services.codex.openIsolated(accountId)
+        printIfNeeded(`Opened isolated Codex session for account: ${accountId}`, silent)
+        return { code: EXIT_OK, payload: toCliResult(snapshot) }
+      }
+      throw new CliError('Unknown codex command', EXIT_USAGE)
     }
     case 'settings': {
       switch (subcommand) {

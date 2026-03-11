@@ -651,7 +651,13 @@ function createTray(): void {
     process.platform === 'darwin'
       ? buildTrayImage({
           accounts: [],
+          providers: [],
           tags: [],
+          codexInstances: [],
+          codexInstanceDefaults: {
+            rootDir: '',
+            defaultCodexHome: ''
+          },
           currentSession: null,
           loginInProgress: false,
           settings: {
@@ -659,7 +665,8 @@ function createTray(): void {
             statusBarAccountIds: [],
             language: 'zh-CN',
             theme: 'light',
-            checkForUpdatesOnStartup: true
+            checkForUpdatesOnStartup: true,
+            codexDesktopExecutablePath: ''
           },
           usageByAccountId: {}
         })
@@ -800,8 +807,103 @@ app.whenReady().then(async () => {
     await codexServices.tags.remove(tagId)
     return refreshTrayTitle()
   })
+  ipcMain.handle('codex:list-providers', () => codexServices.providers.list())
+  ipcMain.handle('codex:get-provider', (_, providerId: string) => codexServices.providers.get(providerId))
+  ipcMain.handle('codex:reorder-providers', async (_, providerIds: string[]) => {
+    await codexServices.providers.reorder(providerIds)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle(
+    'codex:create-provider',
+    async (
+      _,
+      input: {
+        name?: string
+        baseUrl: string
+        apiKey: string
+        model?: string
+        fastMode?: boolean
+      }
+    ) => {
+      await codexServices.providers.create(input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle(
+    'codex:update-provider',
+    async (
+      _,
+      providerId: string,
+      input: {
+        name?: string
+        baseUrl?: string
+        apiKey?: string
+        model?: string
+        fastMode?: boolean
+      }
+    ) => {
+      await codexServices.providers.update(providerId, input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle('codex:remove-provider', async (_, providerId: string) => {
+    await codexServices.providers.remove(providerId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:open-provider-in-codex', async (_, providerId: string) => {
+    await codexServices.providers.open(providerId)
+    return refreshTrayTitle()
+  })
   ipcMain.handle('codex:open-account-in-codex', async (_, accountId: string) => {
     await codexServices.codex.open(accountId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:open-account-in-isolated-codex', async (_, accountId: string) => {
+    await codexServices.codex.openIsolated(accountId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:list-instances', () => codexServices.codex.instances.list())
+  ipcMain.handle('codex:get-instance-defaults', () => codexServices.codex.instances.getDefaults())
+  ipcMain.handle(
+    'codex:create-instance',
+    async (
+      _,
+      input: {
+        name: string
+        codexHome?: string
+        bindAccountId?: string
+        extraArgs?: string
+      }
+    ) => {
+      await codexServices.codex.instances.create(input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle(
+    'codex:update-instance',
+    async (
+      _,
+      instanceId: string,
+      input: {
+        name?: string
+        bindAccountId?: string | null
+        extraArgs?: string
+      }
+    ) => {
+      await codexServices.codex.instances.update(instanceId, input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle('codex:remove-instance', async (_, instanceId: string) => {
+    await codexServices.codex.instances.remove(instanceId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:start-instance', async (_, instanceId: string) => {
+    await codexServices.codex.instances.start(instanceId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:stop-instance', async (_, instanceId: string) => {
+    await codexServices.codex.instances.stop(instanceId)
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:read-account-rate-limits', async (_, accountId: string) => {

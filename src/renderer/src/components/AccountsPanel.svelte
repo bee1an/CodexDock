@@ -6,7 +6,10 @@
     AccountRateLimits,
     AccountSummary,
     AccountTag,
-    AppLanguage
+    AppLanguage,
+    CustomProviderDetail,
+    CustomProviderSummary,
+    UpdateCustomProviderInput
   } from '../../../shared/codex'
   import { formatRelativeReset, remainingPercent } from '../../../shared/codex'
   import {
@@ -16,6 +19,7 @@
     limitLabel,
     planLabel,
     planTagClass,
+    providerLabel,
     progressWidth,
     type LocalizedCopy
   } from './app-view'
@@ -30,14 +34,25 @@
   export let copy: LocalizedCopy
   export let language: AppLanguage
   export let accounts: AccountSummary[] = []
+  export let providers: CustomProviderSummary[] = []
   export let tags: AccountTag[] = []
   export let activeAccountId: string | undefined
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
   export let loginActionBusy: boolean
   export let loginStarting = false
+  export let openingAccountId = ''
+  export let openingIsolatedAccountId = ''
+  export let activatingAccountId = ''
+  export let openingProviderId = ''
   export let openAccountInCodex: (accountId: string) => void
+  export let openAccountInIsolatedCodex: (accountId: string) => void
+  export let openProviderInCodex: (providerId: string) => Promise<void>
+  export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
   export let activateAccount: (accountId: string) => void
+  export let reorderProviders: (providerIds: string[]) => Promise<void>
+  export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
+  export let removeProvider: (providerId: string) => Promise<void>
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let createTag: (name: string) => Promise<void>
   export let updateTag: (tag: AccountTag, name: string) => Promise<void>
@@ -48,7 +63,7 @@
   export let startLogin: (method: 'browser' | 'device') => void
   export let importCurrent: () => void
 
-  let showTagManager = false
+  let currentView: 'accounts' | 'providers' | 'tags' = 'accounts'
   let activeTagFilter = 'all'
   let newTagName = ''
   let editingTagId: string | null = null
@@ -58,6 +73,14 @@
   let tagPickerAnchorRect: DOMRect | null = null
   let sortableAccounts: AccountSummary[] = []
   let sortInteractionActive = false
+  let sortableProviders: CustomProviderSummary[] = []
+  let providerSortInteractionActive = false
+  let providerMutationBusy = false
+  let editingProviderId = ''
+  let providerDrafts: Record<
+    string,
+    { name: string; baseUrl: string; apiKey: string; model: string; fastMode: boolean }
+  > = {}
 
   $: if (
     activeTagFilter !== 'all' &&
@@ -83,7 +106,25 @@
     sortableAccounts = visibleAccounts
   }
 
-  $: if (showTagManager) {
+  $: if (!providerSortInteractionActive) {
+    sortableProviders = providers
+  }
+
+  $: {
+    const nextDrafts: typeof providerDrafts = {}
+    for (const provider of providers) {
+      nextDrafts[provider.id] = providerDrafts[provider.id] ?? {
+        name: provider.name ?? '',
+        baseUrl: provider.baseUrl,
+        apiKey: '',
+        model: provider.model,
+        fastMode: provider.fastMode
+      }
+    }
+    providerDrafts = nextDrafts
+  }
+
+  $: if (currentView !== 'accounts') {
     tagPickerAccountId = null
   }
 
@@ -109,6 +150,96 @@
 
   function taggedAccountCount(tagId: string): number {
     return accounts.filter((account) => account.tagIds.includes(tagId)).length
+  }
+
+  function accountActionBusy(accountId: string): boolean {
+    return (
+      openingAccountId === accountId ||
+      openingIsolatedAccountId === accountId ||
+      activatingAccountId === accountId
+    )
+  }
+
+  function providerActionBusy(providerId: string): boolean {
+    return openingProviderId === providerId || providerMutationBusy
+  }
+
+  async function runProviderMutation(task: () => Promise<void>): Promise<void> {
+    if (providerMutationBusy || loginActionBusy) {
+      return
+    }
+
+    providerMutationBusy = true
+    try {
+      await task()
+    } finally {
+      providerMutationBusy = false
+    }
+  }
+
+  async function startEditingProvider(provider: CustomProviderSummary): Promise<void> {
+    editingProviderId = provider.id
+    const detail = await getProvider(provider.id)
+    providerDrafts = {
+      ...providerDrafts,
+      [provider.id]: {
+        name: detail.name ?? '',
+        baseUrl: detail.baseUrl,
+        apiKey: detail.apiKey,
+        model: detail.model,
+        fastMode: detail.fastMode
+      }
+    }
+  }
+
+  function cancelEditingProvider(): void {
+    editingProviderId = ''
+  }
+
+  async function saveProvider(provider: CustomProviderSummary): Promise<void> {
+    const draft = providerDrafts[provider.id]
+    if (!draft) {
+      return
+    }
+
+    const input: UpdateCustomProviderInput = {}
+    if ((draft.name.trim() || '') !== (provider.name ?? '')) {
+      input.name = draft.name.trim()
+    }
+    if (draft.baseUrl.trim() !== provider.baseUrl) {
+      input.baseUrl = draft.baseUrl.trim()
+    }
+    if (draft.apiKey.trim()) {
+      input.apiKey = draft.apiKey.trim()
+    }
+    if ((draft.model.trim() || '5.4') !== provider.model) {
+      input.model = draft.model.trim() || '5.4'
+    }
+    if (draft.fastMode !== provider.fastMode) {
+      input.fastMode = draft.fastMode
+    }
+    if (!Object.keys(input).length) {
+      cancelEditingProvider()
+      return
+    }
+
+    await runProviderMutation(async () => {
+      await updateProvider(provider.id, input)
+      cancelEditingProvider()
+    })
+  }
+
+  async function confirmRemoveProvider(provider: CustomProviderSummary): Promise<void> {
+    if (!window.confirm(copy.deleteProviderConfirm(providerLabel(provider, copy)))) {
+      return
+    }
+
+    await runProviderMutation(async () => {
+      await removeProvider(provider.id)
+      if (editingProviderId === provider.id) {
+        cancelEditingProvider()
+      }
+    })
   }
 
   function portal(node: HTMLElement): { destroy: () => void } {
@@ -309,6 +440,23 @@
     }
   }
 
+  function handleProviderSortConsider(event: CustomEvent<SortEvent<CustomProviderSummary>>): void {
+    providerSortInteractionActive = true
+    sortableProviders = event.detail.items
+  }
+
+  async function handleProviderSortFinalize(
+    event: CustomEvent<SortEvent<CustomProviderSummary>>
+  ): Promise<void> {
+    sortableProviders = event.detail.items
+
+    try {
+      await reorderProviders(event.detail.items.map((provider) => provider.id))
+    } finally {
+      providerSortInteractionActive = false
+    }
+  }
+
   onMount(() => {
     const handleScroll = (): void => {
       closeTagPicker()
@@ -327,7 +475,13 @@
 <section class={`${panelClass} flex min-h-0 flex-1 flex-col gap-4 overflow-hidden`}>
   <div class="flex flex-wrap items-center justify-between gap-3">
     <div class="grid gap-1">
-      <div class="text-sm text-faint">{showTagManager ? copy.tagManager : copy.accountList}</div>
+      <div class="text-sm text-faint">
+        {currentView === 'tags'
+          ? copy.tagManager
+          : currentView === 'providers'
+            ? copy.providerList
+            : copy.accountList}
+      </div>
     </div>
 
     <div
@@ -335,13 +489,13 @@
     >
       <button
         class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
-          !showTagManager
+          currentView === 'accounts'
             ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
             : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
         }`}
         type="button"
         onclick={() => {
-          showTagManager = false
+          currentView = 'accounts'
         }}
       >
         <span class="i-lucide-layout-list h-4 w-4"></span>
@@ -349,13 +503,27 @@
       </button>
       <button
         class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
-          showTagManager
+          currentView === 'providers'
             ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
             : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
         }`}
         type="button"
         onclick={() => {
-          showTagManager = true
+          currentView = 'providers'
+        }}
+      >
+        <span class="i-lucide-plug-zap h-4 w-4"></span>
+        <span>{copy.providerCount(providers.length)}</span>
+      </button>
+      <button
+        class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
+          currentView === 'tags'
+            ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
+            : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
+        }`}
+        type="button"
+        onclick={() => {
+          currentView = 'tags'
         }}
       >
         <span class="i-lucide-tags h-4 w-4"></span>
@@ -364,7 +532,7 @@
     </div>
   </div>
 
-  {#if showTagManager}
+  {#if currentView === 'tags'}
     <div
       class="theme-soft-panel theme-tag-manager-panel flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-[1rem] border border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.9),rgba(250,250,250,0.92))] p-4"
     >
@@ -498,7 +666,7 @@
         </div>
       {/if}
     </div>
-  {:else if accounts.length}
+  {:else if currentView === 'accounts'}
     <div class="grid gap-3">
       <div
         class="theme-soft-panel grid gap-2 rounded-[0.95rem] border border-black/8 bg-black/[0.02] p-3"
@@ -551,29 +719,31 @@
     </div>
 
     {#if visibleAccounts.length}
-      <div
-        class="grid min-h-0 gap-2 overflow-y-auto pr-1"
-        use:dragHandleZone={{
-          items: sortableAccounts,
-          flipDurationMs,
-          dragDisabled:
-            loginActionBusy ||
-            tagMutationBusy ||
-            activeTagFilter !== 'all' ||
-            sortableAccounts.length < 2,
-          autoAriaDisabled: false,
-          zoneItemTabIndex: -1,
-          dropTargetStyle: {
-            outline: '2px solid rgba(0,0,0,0.16)',
-            borderRadius: '0.875rem'
-          },
-          delayTouchStart: true
-        }}
-        onconsider={handleSortConsider}
-        onfinalize={(event) => void handleSortFinalize(event)}
-        aria-label={copy.accountCount(sortableAccounts.length)}
-      >
-        {#each sortableAccounts as account (account.id)}
+      <div class="grid min-h-0 gap-2 overflow-y-auto pr-1">
+        <div
+          class="grid gap-2"
+          use:dragHandleZone={{
+            items: sortableAccounts,
+            type: 'accounts',
+            flipDurationMs,
+            dragDisabled:
+              loginActionBusy ||
+              tagMutationBusy ||
+              activeTagFilter !== 'all' ||
+              sortableAccounts.length < 2,
+            autoAriaDisabled: false,
+            zoneItemTabIndex: -1,
+            dropTargetStyle: {
+              outline: '2px solid rgba(0,0,0,0.16)',
+              borderRadius: '0.875rem'
+            },
+            delayTouchStart: true
+          }}
+          onconsider={handleSortConsider}
+          onfinalize={(event) => void handleSortFinalize(event)}
+          aria-label={copy.accountCount(sortableAccounts.length)}
+        >
+          {#each sortableAccounts as account (account.id)}
           <article
             class={`group grid items-center gap-3 rounded-[0.875rem] border px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto] ${accountCardTone(activeAccountId === account.id)}`}
             animate:flip={{ duration: flipDurationMs }}
@@ -771,20 +941,41 @@
               <button
                 class={iconRowButton}
                 onclick={() => openAccountInCodex(account.id)}
-                disabled={loginActionBusy}
+                disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
                 aria-label={`${copy.openCodex} · ${accountEmail(account, copy)}`}
                 title={copy.openCodex}
               >
-                <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
+                {#if openingAccountId === account.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
+                {/if}
+              </button>
+              <button
+                class={iconRowButton}
+                onclick={() => openAccountInIsolatedCodex(account.id)}
+                disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
+                aria-label={`${copy.openCodexIsolated} · ${accountEmail(account, copy)}`}
+                title={copy.openCodexIsolated}
+              >
+                {#if openingIsolatedAccountId === account.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-copy-plus h-4 w-4"></span>
+                {/if}
               </button>
               <button
                 class={iconRowButton}
                 onclick={() => activateAccount(account.id)}
-                disabled={loginActionBusy || activeAccountId === account.id}
+                disabled={loginActionBusy || activeAccountId === account.id || Boolean(accountActionBusy(account.id))}
                 aria-label={`${copy.switchAccount} · ${accountEmail(account, copy)}`}
                 title={copy.switchAccount}
               >
-                <span class="i-lucide-repeat-2 h-4 w-4"></span>
+                {#if activatingAccountId === account.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-repeat-2 h-4 w-4"></span>
+                {/if}
               </button>
               <button
                 class={iconRowButton}
@@ -806,7 +997,8 @@
               </button>
             </div>
           </article>
-        {/each}
+          {/each}
+        </div>
       </div>
     {:else}
       <div
@@ -815,43 +1007,217 @@
         <p class="text-sm text-muted-strong">{copy.noAccountsForFilter}</p>
       </div>
     {/if}
+  {:else if currentView === 'providers'}
+    {#if providers.length}
+      <div class="grid min-h-0 gap-2 overflow-y-auto pr-1">
+        <div
+          class="grid gap-2"
+          use:dragHandleZone={{
+            items: sortableProviders,
+            type: 'providers',
+            flipDurationMs,
+            dragDisabled: loginActionBusy || providerMutationBusy || sortableProviders.length < 2,
+            autoAriaDisabled: false,
+            zoneItemTabIndex: -1,
+            dropTargetStyle: {
+              outline: '2px solid rgba(0,0,0,0.16)',
+              borderRadius: '0.875rem'
+            },
+            delayTouchStart: true
+          }}
+          onconsider={handleProviderSortConsider}
+          onfinalize={(event) => void handleProviderSortFinalize(event)}
+          aria-label={copy.providerCount(sortableProviders.length)}
+        >
+          {#each sortableProviders as provider (provider.id)}
+            <article
+              class="group grid items-center gap-3 rounded-[0.875rem] border border-black/8 bg-white px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+              animate:flip={{ duration: flipDurationMs }}
+              aria-label={providerLabel(provider, copy)}
+            >
+              <button
+                class={`${iconRowButton} h-8 w-8 self-center text-black/42 ${sortableProviders.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                type="button"
+                use:dragHandle
+                aria-label={`${copy.dragSortHandle} · ${providerLabel(provider, copy)}`}
+                title={copy.dragSortHandle}
+                disabled={loginActionBusy || providerMutationBusy || sortableProviders.length < 2}
+              >
+                <span class="i-lucide-grip-vertical h-4 w-4"></span>
+              </button>
+
+              <div class="flex min-w-0 items-center gap-3 overflow-visible">
+                <div class="min-w-0 flex-1">
+                  {#if editingProviderId === provider.id}
+                    <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
+                      <input
+                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        bind:value={providerDrafts[provider.id].name}
+                        placeholder={copy.providerNamePlaceholder}
+                        disabled={loginActionBusy || providerMutationBusy}
+                      />
+                      <input
+                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        bind:value={providerDrafts[provider.id].baseUrl}
+                        placeholder={copy.providerBaseUrlPlaceholder}
+                        disabled={loginActionBusy || providerMutationBusy}
+                      />
+                      <input
+                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        bind:value={providerDrafts[provider.id].model}
+                        placeholder={copy.providerModelPlaceholder}
+                        disabled={loginActionBusy || providerMutationBusy}
+                      />
+                      <input
+                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16 md:col-span-2"
+                        type="password"
+                        bind:value={providerDrafts[provider.id].apiKey}
+                        placeholder={copy.providerApiKeyPlaceholder}
+                        disabled={loginActionBusy || providerMutationBusy}
+                      />
+                    </div>
+                  {:else}
+                    <div class="scroll-row flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
+                      <span class="h-2 w-2 flex-none rounded-full bg-black/14"></span>
+                      <p class="max-w-[220px] truncate text-sm font-medium text-ink">
+                        {providerLabel(provider, copy)}
+                      </p>
+                      <span class="inline-flex flex-none items-center rounded-full bg-black px-2 py-0.75 text-[10px] font-medium text-white/88">
+                        {copy.providerBadge}
+                      </span>
+                      {#if provider.fastMode}
+                        <span class="inline-flex flex-none items-center rounded-full bg-emerald-500/10 px-2 py-0.75 text-[10px] font-medium text-emerald-700">
+                          Fast
+                        </span>
+                      {/if}
+                      <span class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong">
+                        <span class="font-medium uppercase tracking-[0.08em]">Model</span>
+                        <span>{provider.model}</span>
+                      </span>
+                      <span class="theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong">
+                        <span class="font-medium uppercase tracking-[0.08em]">URL</span>
+                        <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
+                      </span>
+                    </div>
+                  {/if}
+                </div>
+              </div>
+
+              <div class="flex items-center justify-end gap-1">
+                {#if editingProviderId === provider.id}
+                  <label class="mr-2 inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink">
+                    <input
+                      type="checkbox"
+                      bind:checked={providerDrafts[provider.id].fastMode}
+                      disabled={loginActionBusy || providerMutationBusy}
+                    />
+                    <span>{copy.providerFastMode}</span>
+                  </label>
+                  <button
+                    class={iconRowButton}
+                    onclick={() => void saveProvider(provider)}
+                    disabled={loginActionBusy || providerMutationBusy}
+                    aria-label={`${copy.saveProvider} · ${providerLabel(provider, copy)}`}
+                    title={copy.saveProvider}
+                  >
+                    <span class="i-lucide-check h-4 w-4"></span>
+                  </button>
+                  <button
+                    class={iconRowButton}
+                    onclick={cancelEditingProvider}
+                    disabled={loginActionBusy || providerMutationBusy}
+                    aria-label={`${copy.cancel} · ${providerLabel(provider, copy)}`}
+                    title={copy.cancel}
+                  >
+                    <span class="i-lucide-x h-4 w-4"></span>
+                  </button>
+                {:else}
+                  <button
+                    class={iconRowButton}
+                    onclick={() => void openProviderInCodex(provider.id)}
+                    disabled={loginActionBusy || providerActionBusy(provider.id)}
+                    aria-label={`${copy.openCustomProvider} · ${providerLabel(provider, copy)}`}
+                    title={copy.openCustomProvider}
+                  >
+                    {#if openingProviderId === provider.id}
+                      <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                    {:else}
+                      <span class="i-lucide-plug-zap h-4 w-4"></span>
+                    {/if}
+                  </button>
+                  <button
+                    class={iconRowButton}
+                    onclick={() => void startEditingProvider(provider)}
+                    disabled={loginActionBusy || providerMutationBusy}
+                    aria-label={`${copy.editProvider} · ${providerLabel(provider, copy)}`}
+                    title={copy.editProvider}
+                  >
+                    <span class="i-lucide-pencil h-4 w-4"></span>
+                  </button>
+                  <button
+                    class={iconRowButton}
+                    onclick={() => void confirmRemoveProvider(provider)}
+                    disabled={loginActionBusy || providerMutationBusy}
+                    aria-label={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
+                    title={copy.deleteProvider}
+                  >
+                    <span class="i-lucide-trash-2 h-4 w-4"></span>
+                  </button>
+                {/if}
+              </div>
+            </article>
+          {/each}
+        </div>
+      </div>
+    {:else}
+      <div
+        class="theme-tag-empty flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.875rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-8 text-center"
+      >
+        <p class="text-sm text-muted-strong">{copy.noProviders}</p>
+      </div>
+    {/if}
   {:else}
     <div class="flex min-h-0 flex-1 items-center justify-center overflow-y-auto">
-      <div class="w-full max-w-xl px-4 py-8 text-center">
+      <div class="w-full max-w-2xl px-4 py-8">
         <div class="mx-auto mb-4 flex h-12 w-12 items-center justify-center">
           <span class="i-lucide-wallet-minimal h-6 w-6 text-muted-strong"></span>
         </div>
 
-        <div class="mx-auto grid max-w-xl gap-2">
+        <div class="mx-auto grid max-w-xl gap-2 text-center">
           <h3 class="text-lg font-semibold text-ink sm:text-xl">{copy.emptyStateTitle}</h3>
           <p class="text-sm leading-6 text-muted-strong">{copy.emptyStateDescription}</p>
         </div>
 
-        <div class="mt-5 flex flex-wrap items-center justify-center gap-2.5">
-          <button
-            class={primaryActionButton}
-            onclick={() => startLogin('browser')}
-            disabled={loginActionBusy}
-          >
-            <span
-              class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
-            ></span>
-            <span>{copy.callbackLogin}</span>
-          </button>
+        <div class="mt-5 grid gap-4">
+          <div class="flex flex-wrap items-center justify-center gap-2.5">
+            <button
+              class={primaryActionButton}
+              onclick={() => startLogin('browser')}
+              disabled={loginActionBusy}
+            >
+              <span
+                class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
+              ></span>
+              <span>{copy.callbackLogin}</span>
+            </button>
 
-          <button class={`${compactGhostButton} px-4 py-3`} onclick={() => startLogin('device')}>
-            <span class="i-lucide-key-round h-4.5 w-4.5"></span>
-            <span>{copy.deviceLogin}</span>
-          </button>
+            <button
+              class={`${compactGhostButton} px-4 py-3`}
+              onclick={() => startLogin('device')}
+            >
+              <span class="i-lucide-key-round h-4.5 w-4.5"></span>
+              <span>{copy.deviceLogin}</span>
+            </button>
 
-          <button
-            class={`${compactGhostButton} px-4 py-3`}
-            onclick={importCurrent}
-            disabled={loginActionBusy}
-          >
-            <span class="i-lucide-plus h-4.5 w-4.5"></span>
-            <span>{copy.importCurrent}</span>
-          </button>
+            <button
+              class={`${compactGhostButton} px-4 py-3`}
+              onclick={importCurrent}
+              disabled={loginActionBusy}
+            >
+              <span class="i-lucide-plus h-4.5 w-4.5"></span>
+              <span>{copy.importCurrent}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

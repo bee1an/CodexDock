@@ -37,7 +37,13 @@ function createUsage(fetchedAt: string): AccountRateLimits {
 function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
   return {
     accounts: [createAccount('a', { email: 'a@example.com' })],
+    providers: [],
     tags: [],
+    codexInstances: [],
+    codexInstanceDefaults: {
+      rootDir: '/tmp/codex-instance-homes',
+      defaultCodexHome: '/Users/test/.codex'
+    },
     activeAccountId: 'a',
     currentSession: null,
     loginInProgress: false,
@@ -46,7 +52,8 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       statusBarAccountIds: [],
       language: 'zh-CN',
       theme: 'light',
-      checkForUpdatesOnStartup: true
+      checkForUpdatesOnStartup: true,
+      codexDesktopExecutablePath: ''
     },
     usageByAccountId: {},
     ...overrides

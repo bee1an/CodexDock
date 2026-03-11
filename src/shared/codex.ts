@@ -8,6 +8,71 @@ export interface AppSettings {
   language: AppLanguage
   theme: AppTheme
   checkForUpdatesOnStartup: boolean
+  codexDesktopExecutablePath: string
+}
+
+export interface CustomProviderSummary {
+  id: string
+  name?: string
+  baseUrl: string
+  model: string
+  fastMode: boolean
+  createdAt: string
+  updatedAt: string
+  lastUsedAt?: string
+}
+
+export interface CustomProviderDetail extends CustomProviderSummary {
+  apiKey: string
+}
+
+export interface CreateCustomProviderInput {
+  name?: string
+  baseUrl: string
+  apiKey: string
+  model?: string
+  fastMode?: boolean
+}
+
+export interface UpdateCustomProviderInput {
+  name?: string
+  baseUrl?: string
+  apiKey?: string
+  model?: string
+  fastMode?: boolean
+}
+
+export interface CodexInstanceDefaults {
+  rootDir: string
+  defaultCodexHome: string
+}
+
+export interface CodexInstanceSummary {
+  id: string
+  name: string
+  codexHome: string
+  bindAccountId?: string
+  extraArgs: string
+  isDefault: boolean
+  createdAt: string
+  updatedAt: string
+  lastLaunchedAt?: string
+  lastPid?: number
+  running: boolean
+  initialized: boolean
+}
+
+export interface CreateCodexInstanceInput {
+  name: string
+  codexHome?: string
+  bindAccountId?: string
+  extraArgs?: string
+}
+
+export interface UpdateCodexInstanceInput {
+  name?: string
+  bindAccountId?: string | null
+  extraArgs?: string
 }
 
 export interface AppMeta {
@@ -94,7 +159,10 @@ export interface CurrentSessionSummary {
 
 export interface AppSnapshot {
   accounts: AccountSummary[]
+  providers: CustomProviderSummary[]
   tags: AccountTag[]
+  codexInstances: CodexInstanceSummary[]
+  codexInstanceDefaults: CodexInstanceDefaults
   activeAccountId?: string
   currentSession: CurrentSessionSummary | null
   loginInProgress: boolean

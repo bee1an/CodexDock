@@ -60,7 +60,8 @@ function defaultSettings(): AppSettings {
     statusBarAccountIds: [],
     language: 'zh-CN',
     theme: 'light',
-    checkForUpdatesOnStartup: true
+    checkForUpdatesOnStartup: true,
+    codexDesktopExecutablePath: ''
   }
 }
 
@@ -421,7 +422,13 @@ export class CodexAccountStore {
 
     return {
       accounts: state.accounts.map(toAccountSummary),
+      providers: [],
       tags: state.tags,
+      codexInstances: [],
+      codexInstanceDefaults: {
+        rootDir: '',
+        defaultCodexHome: join(homedir(), '.codex')
+      },
       activeAccountId: resolvedActiveAccountId,
       currentSession,
       loginInProgress,

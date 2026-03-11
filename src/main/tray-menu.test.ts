@@ -47,7 +47,13 @@ function createSnapshot(): AppSnapshot {
       createAccount('b', { email: 'b@example.com' }),
       createAccount('c', { email: 'c@example.com' })
     ],
+    providers: [],
     tags: [],
+    codexInstances: [],
+    codexInstanceDefaults: {
+      rootDir: '/tmp/codex-instance-homes',
+      defaultCodexHome: '/Users/test/.codex'
+    },
     activeAccountId: 'a',
     currentSession: null,
     loginInProgress: false,
@@ -56,7 +62,8 @@ function createSnapshot(): AppSnapshot {
       statusBarAccountIds: ['c', 'b'],
       language: 'zh-CN',
       theme: 'light',
-      checkForUpdatesOnStartup: true
+      checkForUpdatesOnStartup: true,
+      codexDesktopExecutablePath: ''
     },
     usageByAccountId: {
       a: createUsage(),

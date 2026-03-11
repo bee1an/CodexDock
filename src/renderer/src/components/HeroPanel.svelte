@@ -3,6 +3,7 @@
     AccountSummary,
     AppSettings,
     AppUpdateState,
+    CreateCustomProviderInput,
     LoginEvent,
     LoginMethod
   } from '../../../shared/codex'
@@ -16,6 +17,7 @@
   export let loginEvent: LoginEvent | null = null
   export let loginStarting = false
   export let showSettings = false
+  export let showProviderComposer = false
   export let showCallbackLoginDetails = true
   export let showDeviceLoginDetails = true
   export let refreshingAllUsage = false
@@ -30,8 +32,11 @@
   export let refreshAllRateLimits: () => void
   export let activateBestAccount: () => void
   export let toggleSettings: () => void
+  export let toggleProviderComposer: () => void
+  export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
   export let updatePollingInterval: (minutes: number) => void
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void
+  export let updateCodexDesktopExecutablePath: (value: string) => Promise<void>
   export let checkForUpdates: () => void
   export let copyAuthUrl: () => void
   export let copyDeviceCode: () => void
@@ -43,6 +48,45 @@
     updateState.status !== 'available' &&
     updateState.status !== 'downloaded' &&
     updateState.status !== 'unsupported'
+
+  let providerMutationBusy = false
+  let newProviderName = ''
+  let newProviderBaseUrl = ''
+  let newProviderApiKey = ''
+  let newProviderModel = '5.4'
+  let newProviderFastMode = true
+  let codexDesktopExecutablePathDraft = ''
+
+  $: if (settings.codexDesktopExecutablePath !== codexDesktopExecutablePathDraft) {
+    codexDesktopExecutablePathDraft = settings.codexDesktopExecutablePath
+  }
+
+  const submitProvider = async (): Promise<void> => {
+    const baseUrl = newProviderBaseUrl.trim()
+    const apiKey = newProviderApiKey.trim()
+    if (!baseUrl || !apiKey || providerMutationBusy || loginActionBusy) {
+      return
+    }
+
+    providerMutationBusy = true
+
+    try {
+      await createProvider({
+        name: newProviderName.trim() || undefined,
+        baseUrl,
+        apiKey,
+        model: newProviderModel.trim() || '5.4',
+        fastMode: newProviderFastMode
+      })
+      newProviderName = ''
+      newProviderBaseUrl = ''
+      newProviderApiKey = ''
+      newProviderModel = '5.4'
+      newProviderFastMode = true
+    } finally {
+      providerMutationBusy = false
+    }
+  }
 </script>
 
 <section class={heroClass}>
@@ -119,6 +163,16 @@
       </button>
       <button
         class={iconToolbarButton}
+        on:click={toggleProviderComposer}
+        aria-label={copy.createProvider}
+        title={copy.createProvider}
+      >
+        <span
+          class={`${showProviderComposer ? 'i-lucide-panel-top-close' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
+        ></span>
+      </button>
+      <button
+        class={iconToolbarButton}
         on:click={toggleSettings}
         aria-label={copy.settings}
         title={copy.settings}
@@ -129,38 +183,129 @@
   </div>
 
   {#if showSettings}
-    <div class="mt-3 flex flex-wrap items-center gap-3 border-t border-black/6 pt-3">
-      <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
-      <select
-        class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-        value={settings.usagePollingMinutes}
-        on:change={(event) =>
-          updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
-      >
-        {#each pollingOptions as option (option)}
-          <option value={option}>{option} {copy.minutes}</option>
-        {/each}
-      </select>
-
-      <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
-        <input
-          type="checkbox"
-          class="h-4 w-4 rounded border border-black/14"
-          checked={settings.checkForUpdatesOnStartup}
+    <div class="mt-3 grid gap-3 border-t border-black/6 pt-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
+        <select
+          class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          value={settings.usagePollingMinutes}
           on:change={(event) =>
-            updateCheckForUpdatesOnStartup((event.currentTarget as HTMLInputElement).checked)}
-        />
-        <span>{copy.autoCheckUpdates}</span>
-      </label>
+            updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
+        >
+          {#each pollingOptions as option (option)}
+            <option value={option}>{option} {copy.minutes}</option>
+          {/each}
+        </select>
 
-      <button
-        class={compactGhostButton}
-        type="button"
-        on:click={checkForUpdates}
-        disabled={!canCheckForUpdates()}
+        <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border border-black/14"
+            checked={settings.checkForUpdatesOnStartup}
+            on:change={(event) =>
+              updateCheckForUpdatesOnStartup((event.currentTarget as HTMLInputElement).checked)}
+          />
+          <span>{copy.autoCheckUpdates}</span>
+        </label>
+
+        <button
+          class={compactGhostButton}
+          type="button"
+          on:click={checkForUpdates}
+          disabled={!canCheckForUpdates()}
+        >
+          {updateState.status === 'checking' ? copy.checkingUpdates : copy.checkUpdates}
+        </button>
+      </div>
+
+      <div
+        class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
       >
-        {updateState.status === 'checking' ? copy.checkingUpdates : copy.checkUpdates}
-      </button>
+        <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
+          {copy.codexDesktopExecutablePath}
+        </span>
+        <input
+          class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          type="text"
+          bind:value={codexDesktopExecutablePathDraft}
+          placeholder={copy.codexDesktopExecutablePlaceholder}
+          on:blur={() => void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
+          on:keydown={(event) => {
+            if (event.key === 'Enter') {
+              void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
+            }
+          }}
+        />
+      </div>
+    </div>
+  {/if}
+
+  {#if showProviderComposer}
+    <div class="mt-3 grid gap-3 border-t border-black/6 pt-3">
+      <p class="text-sm font-medium text-ink">{copy.createProvider}</p>
+
+      <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
+        <input
+          class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          type="text"
+          bind:value={newProviderName}
+          placeholder={copy.providerNamePlaceholder}
+          disabled={loginActionBusy || providerMutationBusy}
+        />
+        <input
+          class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          type="text"
+          bind:value={newProviderBaseUrl}
+          placeholder={copy.providerBaseUrlPlaceholder}
+          disabled={loginActionBusy || providerMutationBusy}
+        />
+        <input
+          class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          type="text"
+          bind:value={newProviderModel}
+          placeholder={copy.providerModelPlaceholder}
+          disabled={loginActionBusy || providerMutationBusy}
+        />
+      </div>
+
+      <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+        <input
+          class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          type="password"
+          bind:value={newProviderApiKey}
+          placeholder={copy.providerApiKeyPlaceholder}
+          disabled={loginActionBusy || providerMutationBusy}
+          on:keydown={(event) => {
+            if (event.key === 'Enter') {
+              void submitProvider()
+            }
+          }}
+        />
+        <label
+          class="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink"
+        >
+          <input
+            type="checkbox"
+            bind:checked={newProviderFastMode}
+            disabled={loginActionBusy || providerMutationBusy}
+          />
+          <span>{copy.providerFastMode}</span>
+        </label>
+        <button
+          class={compactGhostButton}
+          type="button"
+          on:click={() => void submitProvider()}
+          disabled={loginActionBusy ||
+            providerMutationBusy ||
+            !newProviderBaseUrl.trim() ||
+            !newProviderApiKey.trim()}
+        >
+          <span
+            class={`${providerMutationBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
+          ></span>
+          <span>{copy.createProvider}</span>
+        </button>
+      </div>
     </div>
   {/if}
 

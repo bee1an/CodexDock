@@ -16,15 +16,24 @@
     AccountRateLimits,
     AccountSummary,
     AppSnapshot,
+    CustomProviderDetail,
+    CreateCustomProviderInput,
     LoginEvent,
     LoginMethod,
-    PortOccupant
+    PortOccupant,
+    UpdateCustomProviderInput
   } from '../../shared/codex'
   import { resolveBestAccount, shouldAutoPollUsage } from '../../shared/codex'
 
   let snapshot: AppSnapshot = {
     accounts: [],
+    providers: [],
     tags: [],
+    codexInstances: [],
+    codexInstanceDefaults: {
+      rootDir: '',
+      defaultCodexHome: ''
+    },
     currentSession: null,
     loginInProgress: false,
     settings: {
@@ -32,7 +41,8 @@
       statusBarAccountIds: [],
       language: 'zh-CN',
       theme: 'light',
-      checkForUpdatesOnStartup: true
+      checkForUpdatesOnStartup: true,
+      codexDesktopExecutablePath: ''
     },
     usageByAccountId: {}
   }
@@ -44,11 +54,13 @@
   let loginStarting = false
   let showCallbackLoginDetails = true
   let showDeviceLoginDetails = true
+  let showProviderComposer = false
   let refreshingAllUsage = false
   let pageError = ''
   let showSettings = false
   let loginPortOccupant: PortOccupant | null = null
   let killingLoginPortOccupant = false
+  let accountActionKey = ''
   let updateState: AppUpdateState = {
     status: 'idle',
     currentVersion: '--',
@@ -97,6 +109,27 @@
 
   const refreshSnapshot = async (): Promise<void> => {
     applySnapshot(await window.codexApp.getSnapshot())
+  }
+
+  const closeProviderComposer = (): void => {
+    showProviderComposer = false
+  }
+
+  const closeExpandablePanels = (
+    except?: 'provider' | 'settings' | 'browser-login' | 'device-login'
+  ): void => {
+    if (except !== 'provider') {
+      showProviderComposer = false
+    }
+    if (except !== 'settings') {
+      showSettings = false
+    }
+    if (except !== 'browser-login') {
+      showCallbackLoginDetails = false
+    }
+    if (except !== 'device-login') {
+      showDeviceLoginDetails = false
+    }
   }
 
   const hasLoginPortConflict = (): boolean => {
@@ -173,21 +206,79 @@
     }
   }
 
+  const runAccountAction = async (
+    key: string,
+    task: () => Promise<AppSnapshot>
+  ): Promise<void> => {
+    if (accountActionKey) {
+      return
+    }
+
+    accountActionKey = key
+
+    try {
+      await runAction(key, task)
+    } finally {
+      accountActionKey = ''
+    }
+  }
+
+  const createProvider = async (input: CreateCustomProviderInput): Promise<void> => {
+    await runAction(`provider:create:${input.baseUrl}`, () => window.codexApp.createProvider(input))
+    closeProviderComposer()
+  }
+
+  const updateProvider = async (
+    providerId: string,
+    input: UpdateCustomProviderInput
+  ): Promise<void> => {
+    await runAction(`provider:update:${providerId}`, () =>
+      window.codexApp.updateProvider(providerId, input)
+    )
+  }
+
+  const removeProvider = async (providerId: string): Promise<void> => {
+    await runAction(`provider:remove:${providerId}`, () => window.codexApp.removeProvider(providerId))
+  }
+
+  const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
+    window.codexApp.getProvider(providerId)
+
+  const reorderProviders = async (providerIds: string[]): Promise<void> => {
+    if (
+      providerIds.length !== snapshot.providers.length ||
+      providerIds.every((providerId, index) => providerId === snapshot.providers[index]?.id)
+    ) {
+      return
+    }
+
+    await runAction('providers:reorder', () => window.codexApp.reorderProviders(providerIds))
+  }
+
+  const openProviderInCodex = async (providerId: string): Promise<void> => {
+    await runAccountAction(`provider:open:${providerId}`, () =>
+      window.codexApp.openProviderInCodex(providerId)
+    )
+  }
+
   const startLogin = async (method: LoginMethod): Promise<void> => {
     if (
       method === 'browser' &&
       loginEvent?.method === 'browser' &&
       loginEvent.phase === 'waiting'
     ) {
+      closeExpandablePanels(showCallbackLoginDetails ? undefined : 'browser-login')
       showCallbackLoginDetails = !showCallbackLoginDetails
       return
     }
 
     if (method === 'device' && loginEvent?.method === 'device' && loginEvent.phase === 'waiting') {
+      closeExpandablePanels(showDeviceLoginDetails ? undefined : 'device-login')
       showDeviceLoginDetails = !showDeviceLoginDetails
       return
     }
 
+    closeExpandablePanels(method === 'browser' ? 'browser-login' : 'device-login')
     pageError = ''
     loginEvent = null
     loginPortOccupant = null
@@ -367,6 +458,17 @@
     )
   }
 
+  const updateCodexDesktopExecutablePath = async (value: string): Promise<void> => {
+    const normalized = value.trim()
+    if (snapshot.settings.codexDesktopExecutablePath === normalized) {
+      return
+    }
+
+    await runAction('settings:codex-desktop-executable-path', () =>
+      window.codexApp.updateSettings({ codexDesktopExecutablePath: normalized })
+    )
+  }
+
   const toggleStatusAccount = async (accountId: string): Promise<void> => {
     const nextIds = snapshot.settings.statusBarAccountIds.includes(accountId)
       ? snapshot.settings.statusBarAccountIds.filter((id) => id !== accountId)
@@ -402,6 +504,7 @@
       return
     }
 
+    closeExpandablePanels()
     refreshingAllUsage = true
 
     try {
@@ -517,6 +620,7 @@
         {loginEvent}
         {loginStarting}
         {showSettings}
+        {showProviderComposer}
         {showCallbackLoginDetails}
         {showDeviceLoginDetails}
         {refreshingAllUsage}
@@ -527,14 +631,29 @@
         bestAccount={bestAccount()}
         activeAccountId={snapshot.activeAccountId}
         {startLogin}
-        importCurrent={() => runAction('import', () => window.codexApp.importCurrentAccount())}
+        importCurrent={() => {
+          closeExpandablePanels()
+          return runAction('import', () => window.codexApp.importCurrentAccount())
+        }}
         {refreshAllRateLimits}
-        {activateBestAccount}
+        activateBestAccount={() => {
+          closeExpandablePanels()
+          return activateBestAccount()
+        }}
+        {createProvider}
         toggleSettings={() => {
-          showSettings = !showSettings
+          const nextOpen = !showSettings
+          closeExpandablePanels(nextOpen ? 'settings' : undefined)
+          showSettings = nextOpen
+        }}
+        toggleProviderComposer={() => {
+          const nextOpen = !showProviderComposer
+          closeExpandablePanels(nextOpen ? 'provider' : undefined)
+          showProviderComposer = nextOpen
         }}
         {updatePollingInterval}
         {updateCheckForUpdatesOnStartup}
+        {updateCodexDesktopExecutablePath}
         {checkForUpdates}
         {copyAuthUrl}
         {copyDeviceCode}
@@ -573,6 +692,7 @@
         copy={copyForLanguage()}
         language={snapshot.settings.language}
         accounts={snapshot.accounts}
+        providers={snapshot.providers}
         tags={snapshot.tags}
         activeAccountId={snapshot.activeAccountId}
         {usageByAccountId}
@@ -580,9 +700,22 @@
         loginActionBusy={loginActionBusy()}
         {loginStarting}
         openAccountInCodex={(accountId) =>
-          runAction(`open:${accountId}`, () => window.codexApp.openAccountInCodex(accountId))}
+          runAccountAction(`open:${accountId}`, () => window.codexApp.openAccountInCodex(accountId))}
+        openAccountInIsolatedCodex={(accountId) =>
+          runAccountAction(`open-isolated:${accountId}`, () =>
+            window.codexApp.openAccountInIsolatedCodex(accountId)
+          )}
         activateAccount={(accountId) =>
-          runAction(`activate:${accountId}`, () => window.codexApp.activateAccount(accountId))}
+          runAccountAction(`activate:${accountId}`, () => window.codexApp.activateAccount(accountId))}
+        openingAccountId={accountActionKey.startsWith('open:') ? accountActionKey.slice('open:'.length) : ''}
+        openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:') ? accountActionKey.slice('open-isolated:'.length) : ''}
+        activatingAccountId={accountActionKey.startsWith('activate:') ? accountActionKey.slice('activate:'.length) : ''}
+        openingProviderId={accountActionKey.startsWith('provider:open:') ? accountActionKey.slice('provider:open:'.length) : ''}
+        {getProvider}
+        {reorderProviders}
+        {updateProvider}
+        {removeProvider}
+        {openProviderInCodex}
         {reorderAccounts}
         {createTag}
         {updateTag}
@@ -593,7 +726,6 @@
         {startLogin}
         importCurrent={() => runAction('import', () => window.codexApp.importCurrentAccount())}
       />
-
       <FooterBar
         {appMeta}
         {updateState}

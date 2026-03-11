@@ -114,7 +114,8 @@ describe('codex shared helpers', () => {
           statusBarAccountIds: ['c', 'b'],
           language: 'zh-CN',
           theme: 'light',
-          checkForUpdatesOnStartup: true
+          checkForUpdatesOnStartup: true,
+          codexDesktopExecutablePath: ''
         },
         accounts,
         'a'
