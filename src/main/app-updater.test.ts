@@ -47,6 +47,7 @@ describe('app updater service', () => {
 
     expect(service.getState()).toMatchObject({
       status: 'unsupported',
+      delivery: 'auto',
       currentVersion: '0.2.1',
       supported: false
     })
@@ -55,37 +56,52 @@ describe('app updater service', () => {
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
   })
 
-  it('runs the initial and interval silent checks when enabled', async () => {
-    const updater = new FakeUpdater()
+  it('runs the initial and interval silent checks on macOS via GitHub releases when enabled', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          tag_name: 'v0.2.2',
+          html_url: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.2'
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as typeof fetch
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
-      updater,
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl,
       initialCheckDelayMs: 1_000,
       checkIntervalMs: 5_000
     })
 
     service.start()
     await vi.advanceTimersByTimeAsync(999)
-    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1)
-    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(fetchImpl).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(5_000)
-    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
+    expect(fetchImpl).toHaveBeenCalledTimes(2)
   })
 
   it('stops scheduled checks when the startup setting is disabled', async () => {
-    const updater = new FakeUpdater()
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ tag_name: 'v0.2.2' }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' }
+      })
+    ) as typeof fetch
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
-      updater,
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl,
       initialCheckDelayMs: 1_000,
       checkIntervalMs: 5_000
     })
@@ -94,10 +110,10 @@ describe('app updater service', () => {
     service.syncSettings(createSettings({ checkForUpdatesOnStartup: false }))
     await vi.advanceTimersByTimeAsync(6_000)
 
-    expect(updater.checkForUpdates).not.toHaveBeenCalled()
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
-  it('tracks manual checks, downloads, and install actions', async () => {
+  it('tracks manual checks, downloads, and install actions on Windows', async () => {
     const updater = new FakeUpdater()
     updater.checkForUpdates.mockImplementation(async () => {
       updater.emit('checking-for-update')
@@ -112,13 +128,14 @@ describe('app updater service', () => {
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
-      platform: 'darwin',
+      platform: 'win32',
       updater
     })
 
     await service.checkForUpdates()
     expect(service.getState()).toMatchObject({
       status: 'available',
+      delivery: 'auto',
       availableVersion: '0.2.2',
       supported: true
     })
@@ -134,19 +151,23 @@ describe('app updater service', () => {
     expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
   })
 
-  it('shows up-to-date briefly for manual checks without an update', async () => {
-    const updater = new FakeUpdater()
-    updater.checkForUpdates.mockImplementation(async () => {
-      updater.emit('checking-for-update')
-      updater.emit('update-not-available', { version: '0.2.1' })
-    })
-
+  it('shows up-to-date briefly for manual GitHub checks without an update', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          tag_name: 'v0.2.1',
+          html_url: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.1'
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as typeof fetch
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
-      platform: 'win32',
-      updater
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl
     })
 
     await service.checkForUpdates()
@@ -154,6 +175,34 @@ describe('app updater service', () => {
 
     await vi.advanceTimersByTimeAsync(8_000)
     expect(service.getState().status).toBe('idle')
+  })
+
+  it('returns an external download URL for macOS release checks', async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          tag_name: 'v0.2.5',
+          html_url: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+        }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } }
+      )
+    ) as typeof fetch
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl
+    })
+
+    await service.checkForUpdates()
+    expect(service.getState()).toMatchObject({
+      status: 'available',
+      delivery: 'external',
+      availableVersion: '0.2.5',
+      externalDownloadUrl: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+    })
   })
 
   it('clears a stale manual-check error after a later silent success', async () => {
@@ -173,7 +222,7 @@ describe('app updater service', () => {
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
-      platform: 'darwin',
+      platform: 'win32',
       updater,
       initialCheckDelayMs: 1_000,
       checkIntervalMs: 5_000
@@ -193,5 +242,73 @@ describe('app updater service', () => {
       status: 'idle',
       message: undefined
     })
+  })
+
+  it('upgrades a running silent Windows check into a manual one', async () => {
+    let releaseCheck: (() => void) | null = null
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(
+      () =>
+        new Promise<undefined>((resolve) => {
+          releaseCheck = () => {
+            updater.emit('update-not-available', { version: '0.2.1' })
+            resolve(undefined)
+          }
+        })
+    )
+
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.1',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'win32',
+      updater,
+      initialCheckDelayMs: 1_000,
+      checkIntervalMs: 5_000
+    })
+
+    service.start()
+    await vi.advanceTimersByTimeAsync(1_000)
+    const manualCheck = service.checkForUpdates()
+
+    expect(service.getState().status).toBe('checking')
+
+    const finishCheck = releaseCheck as (() => void) | null
+    if (finishCheck) {
+      finishCheck()
+    }
+    await manualCheck
+
+    expect(service.getState().status).toBe('up-to-date')
+  })
+
+  it('keeps the downloaded state from being overwritten by silent follow-up checks', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.2' })
+    })
+    updater.downloadUpdate.mockImplementation(async () => {
+      updater.emit('update-downloaded', { version: '0.2.2', downloadedFile: '/tmp/ilovecodex.exe' })
+    })
+
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.1',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'win32',
+      updater,
+      initialCheckDelayMs: 1_000,
+      checkIntervalMs: 5_000
+    })
+
+    await service.checkForUpdates()
+    await service.downloadUpdate()
+    expect(service.getState().status).toBe('downloaded')
+
+    service.start()
+    await vi.advanceTimersByTimeAsync(6_000)
+
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(service.getState().status).toBe('downloaded')
   })
 })

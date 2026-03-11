@@ -1,13 +1,14 @@
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 import { autoUpdater } from 'electron-updater'
 
-import type { AppSettings, AppUpdateState } from '../shared/codex'
+import type { AppSettings, AppUpdateDelivery, AppUpdateState } from '../shared/codex'
 
 const DEFAULT_INITIAL_CHECK_DELAY_MS = 10_000
 const DEFAULT_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
 const RESET_UP_TO_DATE_DELAY_MS = 8_000
 
 type CheckMode = 'manual' | 'silent'
+type UpdateStrategyMode = 'auto' | 'external' | 'unsupported'
 
 export interface AppUpdaterService {
   getState(): AppUpdateState
@@ -41,82 +42,265 @@ interface AppUpdaterLike {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void
 }
 
+interface GithubReleaseSummary {
+  version: string
+  url: string
+}
+
+interface UpdateStrategy {
+  mode: UpdateStrategyMode
+  delivery: AppUpdateDelivery
+  supported: boolean
+  message?: string
+  githubRepo?: {
+    owner: string
+    repo: string
+    releasesUrl: string
+  }
+}
+
+function createNoopUpdater(): AppUpdaterLike {
+  return {
+    autoDownload: false,
+    autoInstallOnAppQuit: false,
+    allowPrerelease: false,
+    logger: console,
+    on() {
+      return this
+    },
+    removeAllListeners() {
+      return this
+    },
+    checkForUpdates: async () => undefined,
+    downloadUpdate: async () => undefined,
+    quitAndInstall: () => undefined
+  }
+}
+
 export interface CreateAppUpdaterServiceOptions {
   currentVersion: string
   initialSettings: AppSettings
+  githubUrl?: string | null
   isPackaged?: boolean
   platform?: NodeJS.Platform
   env?: NodeJS.ProcessEnv
   updater?: AppUpdaterLike
+  fetchImpl?: typeof fetch
   initialCheckDelayMs?: number
   checkIntervalMs?: number
 }
 
 function createBaseState(
   currentVersion: string,
-  supported: boolean,
+  strategy: Pick<UpdateStrategy, 'delivery' | 'supported'>,
   message?: string
 ): AppUpdateState {
   return {
-    status: supported ? 'idle' : 'unsupported',
+    status: strategy.supported ? 'idle' : 'unsupported',
+    delivery: strategy.delivery,
     currentVersion,
-    supported,
-    message
+    message,
+    supported: strategy.supported
   }
 }
 
-function resolveSupport(
+function parseGithubRepository(githubUrl?: string | null):
+  | {
+      owner: string
+      repo: string
+      releasesUrl: string
+    }
+  | undefined {
+  if (!githubUrl) {
+    return undefined
+  }
+
+  try {
+    const url = new URL(githubUrl)
+    if (!url.hostname.includes('github.com')) {
+      return undefined
+    }
+
+    const [owner, repo] = url.pathname.replace(/^\/+|\/+$/g, '').split('/')
+    if (!owner || !repo) {
+      return undefined
+    }
+
+    return {
+      owner,
+      repo,
+      releasesUrl: `https://github.com/${owner}/${repo}/releases`
+    }
+  } catch {
+    return undefined
+  }
+}
+
+function resolveStrategy(
   isPackaged: boolean,
   platform: NodeJS.Platform,
-  env: NodeJS.ProcessEnv
-): { supported: boolean; message?: string } {
+  env: NodeJS.ProcessEnv,
+  githubUrl?: string | null
+): UpdateStrategy {
   if (!isPackaged) {
     return {
+      mode: 'unsupported',
+      delivery: 'auto',
       supported: false,
       message: 'Automatic updates are only available in packaged builds.'
     }
   }
 
-  if (platform === 'darwin' || platform === 'win32') {
-    return { supported: true }
+  if (platform === 'darwin') {
+    const githubRepo = parseGithubRepository(githubUrl)
+    if (!githubRepo) {
+      return {
+        mode: 'unsupported',
+        delivery: 'external',
+        supported: false,
+        message: 'GitHub release URL is required for update checks on macOS.'
+      }
+    }
+
+    return {
+      mode: 'external',
+      delivery: 'external',
+      supported: true,
+      githubRepo
+    }
+  }
+
+  if (platform === 'win32') {
+    return {
+      mode: 'auto',
+      delivery: 'auto',
+      supported: true
+    }
   }
 
   if (platform === 'linux') {
     if (env['APPIMAGE']) {
-      return { supported: true }
+      return {
+        mode: 'auto',
+        delivery: 'auto',
+        supported: true
+      }
     }
 
     if (env['SNAP']) {
       return {
+        mode: 'unsupported',
+        delivery: 'auto',
         supported: false,
         message: 'Automatic updates are managed by the Snap store for this build.'
       }
     }
 
     return {
+      mode: 'unsupported',
+      delivery: 'auto',
       supported: false,
       message: 'Automatic updates are only supported for the AppImage build on Linux.'
     }
   }
 
   return {
+    mode: 'unsupported',
+    delivery: 'auto',
     supported: false,
     message: `Automatic updates are not supported on ${platform}.`
   }
 }
 
+function normalizeVersion(value: string): string {
+  return value.trim().replace(/^v/i, '')
+}
+
+function compareVersions(left: string, right: string): number {
+  const leftParts = normalizeVersion(left).split(/[.-]/)
+  const rightParts = normalizeVersion(right).split(/[.-]/)
+  const maxLength = Math.max(leftParts.length, rightParts.length)
+
+  for (let index = 0; index < maxLength; index += 1) {
+    const leftPart = leftParts[index] ?? '0'
+    const rightPart = rightParts[index] ?? '0'
+    const leftNumber = Number(leftPart)
+    const rightNumber = Number(rightPart)
+    const bothNumeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
+
+    if (bothNumeric) {
+      if (leftNumber > rightNumber) {
+        return 1
+      }
+      if (leftNumber < rightNumber) {
+        return -1
+      }
+      continue
+    }
+
+    const lexical = leftPart.localeCompare(rightPart)
+    if (lexical !== 0) {
+      return lexical > 0 ? 1 : -1
+    }
+  }
+
+  return 0
+}
+
+async function fetchLatestGithubRelease(
+  strategy: UpdateStrategy,
+  fetchImpl: typeof fetch
+): Promise<GithubReleaseSummary> {
+  if (!strategy.githubRepo) {
+    throw new Error('GitHub repository is not configured.')
+  }
+
+  const response = await fetchImpl(
+    `https://api.github.com/repos/${strategy.githubRepo.owner}/${strategy.githubRepo.repo}/releases/latest`,
+    {
+      headers: {
+        Accept: 'application/vnd.github+json',
+        'User-Agent': 'Ilovecodex'
+      }
+    }
+  )
+
+  if (!response.ok) {
+    throw new Error(`GitHub release check failed with status ${response.status}.`)
+  }
+
+  const payload = (await response.json()) as {
+    tag_name?: string
+    html_url?: string
+    name?: string
+  }
+  const version = payload.tag_name?.trim() || payload.name?.trim()
+  const url = payload.html_url?.trim() || strategy.githubRepo.releasesUrl
+
+  if (!version) {
+    throw new Error('Latest GitHub release does not contain a version tag.')
+  }
+
+  return { version, url }
+}
+
 export function createAppUpdaterService(
   options: CreateAppUpdaterServiceOptions
 ): AppUpdaterService {
-  const updater = (options.updater ?? autoUpdater) as AppUpdaterLike
-  const support = resolveSupport(
+  const strategy = resolveStrategy(
     options.isPackaged ?? false,
     options.platform ?? process.platform,
-    options.env ?? process.env
+    options.env ?? process.env,
+    options.githubUrl
   )
+  const updater =
+    strategy.mode === 'auto'
+      ? ((options.updater ?? autoUpdater) as AppUpdaterLike)
+      : createNoopUpdater()
+  const fetchImpl = options.fetchImpl ?? fetch
 
   let settings = options.initialSettings
-  let state = createBaseState(options.currentVersion, support.supported, support.message)
+  let state = createBaseState(options.currentVersion, strategy, strategy.message)
   let activeCheckMode: CheckMode | null = null
   let started = false
   let checkPromise: Promise<AppUpdateState> | null = null
@@ -161,7 +345,8 @@ export function createAppUpdaterService(
         mergeState({
           status: 'idle',
           message: undefined,
-          downloadProgress: undefined
+          downloadProgress: undefined,
+          externalDownloadUrl: undefined
         })
       }
     }, RESET_UP_TO_DATE_DELAY_MS)
@@ -179,26 +364,62 @@ export function createAppUpdaterService(
     }
   }
 
-  async function runCheck(mode: CheckMode): Promise<AppUpdateState> {
-    if (!support.supported) {
-      return setState(createBaseState(options.currentVersion, false, support.message))
-    }
+  async function runExternalCheck(mode: CheckMode): Promise<AppUpdateState> {
+    try {
+      const release = await fetchLatestGithubRelease(strategy, fetchImpl)
+      const hasUpdate = compareVersions(release.version, options.currentVersion) > 0
 
-    if (checkPromise) {
-      return checkPromise
-    }
+      if (hasUpdate) {
+        return mergeState({
+          status: 'available',
+          availableVersion: normalizeVersion(release.version),
+          checkedAt: new Date().toISOString(),
+          message: undefined,
+          downloadProgress: undefined,
+          externalDownloadUrl: release.url
+        })
+      }
 
-    clearResetTimer()
-    activeCheckMode = mode
-    if (mode === 'manual') {
-      mergeState({
-        status: 'checking',
+      if (mode === 'manual') {
+        mergeState({
+          status: 'up-to-date',
+          checkedAt: new Date().toISOString(),
+          availableVersion: undefined,
+          message: 'You are already using the latest version.',
+          downloadProgress: undefined,
+          externalDownloadUrl: undefined
+        })
+        scheduleUpToDateReset()
+        return state
+      }
+
+      return mergeState({
+        status: 'idle',
+        checkedAt: new Date().toISOString(),
+        availableVersion: undefined,
         message: undefined,
-        downloadProgress: undefined
+        downloadProgress: undefined,
+        externalDownloadUrl: undefined
       })
-    }
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to check GitHub releases for updates.'
+      if (mode === 'manual') {
+        return mergeState({
+          status: 'error',
+          checkedAt: new Date().toISOString(),
+          message,
+          downloadProgress: undefined
+        })
+      }
 
-    checkPromise = updater
+      console.warn(`GitHub update check failed: ${message}`)
+      return state
+    }
+  }
+
+  async function runAutoCheck(mode: CheckMode): Promise<AppUpdateState> {
+    return updater
       .checkForUpdates()
       .then(() => state)
       .catch((error: unknown) => {
@@ -212,17 +433,49 @@ export function createAppUpdaterService(
         }
         return state
       })
-      .finally(() => {
+  }
+
+  async function runCheck(mode: CheckMode): Promise<AppUpdateState> {
+    if (!strategy.supported) {
+      return setState(createBaseState(options.currentVersion, strategy, strategy.message))
+    }
+
+    if (checkPromise) {
+      if (mode === 'manual' && activeCheckMode === 'silent') {
+        activeCheckMode = 'manual'
+        clearResetTimer()
+        mergeState({
+          status: 'checking',
+          message: undefined,
+          downloadProgress: undefined
+        })
+      }
+      return checkPromise
+    }
+
+    clearResetTimer()
+    activeCheckMode = mode
+    if (mode === 'manual') {
+      mergeState({
+        status: 'checking',
+        message: undefined,
+        downloadProgress: undefined
+      })
+    }
+
+    checkPromise = (strategy.mode === 'external' ? runExternalCheck(mode) : runAutoCheck(mode)).finally(
+      () => {
         activeCheckMode = null
         checkPromise = null
-      })
+      }
+    )
 
     return checkPromise
   }
 
   function scheduleAutoChecks(): void {
     clearTimers()
-    if (!support.supported || !settings.checkForUpdatesOnStartup) {
+    if (!strategy.supported || !settings.checkForUpdatesOnStartup || state.status === 'downloaded') {
       return
     }
 
@@ -236,12 +489,12 @@ export function createAppUpdaterService(
     }, options.checkIntervalMs ?? DEFAULT_CHECK_INTERVAL_MS)
   }
 
-  updater.autoDownload = false
-  updater.autoInstallOnAppQuit = false
-  updater.allowPrerelease = false
-  updater.logger = console
+  if (strategy.mode === 'auto') {
+    updater.autoDownload = false
+    updater.autoInstallOnAppQuit = false
+    updater.allowPrerelease = false
+    updater.logger = console
 
-  if (support.supported) {
     updater.removeAllListeners('checking-for-update')
     updater.removeAllListeners('update-available')
     updater.removeAllListeners('update-not-available')
@@ -260,23 +513,33 @@ export function createAppUpdaterService(
     })
 
     updater.on('update-available', (info) => {
+      if (state.status === 'downloaded' && activeCheckMode !== 'manual') {
+        return
+      }
+
       mergeState({
         status: 'available',
         availableVersion: info.version,
         checkedAt: new Date().toISOString(),
         message: undefined,
-        downloadProgress: undefined
+        downloadProgress: undefined,
+        externalDownloadUrl: undefined
       })
     })
 
     updater.on('update-not-available', () => {
+      if (state.status === 'downloaded' && activeCheckMode !== 'manual') {
+        return
+      }
+
       if (activeCheckMode === 'manual') {
         mergeState({
           status: 'up-to-date',
           checkedAt: new Date().toISOString(),
           availableVersion: undefined,
           message: 'You are already using the latest version.',
-          downloadProgress: undefined
+          downloadProgress: undefined,
+          externalDownloadUrl: undefined
         })
         scheduleUpToDateReset()
         return
@@ -287,7 +550,8 @@ export function createAppUpdaterService(
         checkedAt: new Date().toISOString(),
         availableVersion: undefined,
         message: undefined,
-        downloadProgress: undefined
+        downloadProgress: undefined,
+        externalDownloadUrl: undefined
       })
     })
 
@@ -300,6 +564,7 @@ export function createAppUpdaterService(
     })
 
     updater.on('update-downloaded', (event) => {
+      clearTimers()
       mergeState({
         status: 'downloaded',
         availableVersion: event.version,
@@ -311,6 +576,10 @@ export function createAppUpdaterService(
 
     updater.on('error', (error, message) => {
       const detail = message || error.message || 'Update failed.'
+      if (state.status === 'downloaded' && activeCheckMode !== 'manual') {
+        return
+      }
+
       if (activeCheckMode === 'manual') {
         mergeState({
           status: 'error',
@@ -351,11 +620,11 @@ export function createAppUpdaterService(
       return runCheck('manual')
     },
     async downloadUpdate(): Promise<AppUpdateState> {
-      if (!support.supported) {
-        return setState(createBaseState(options.currentVersion, false, support.message))
+      if (!strategy.supported) {
+        return setState(createBaseState(options.currentVersion, strategy, strategy.message))
       }
 
-      if (state.status !== 'available') {
+      if (strategy.mode !== 'auto' || state.status !== 'available') {
         return state
       }
 
@@ -380,7 +649,7 @@ export function createAppUpdaterService(
       return state
     },
     async installUpdate(): Promise<void> {
-      if (!support.supported || state.status !== 'downloaded') {
+      if (strategy.mode !== 'auto' || !strategy.supported || state.status !== 'downloaded') {
         return
       }
 

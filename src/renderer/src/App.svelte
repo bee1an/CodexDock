@@ -63,6 +63,7 @@
   let accountActionKey = ''
   let updateState: AppUpdateState = {
     status: 'idle',
+    delivery: 'auto',
     currentVersion: '--',
     supported: false
   }
@@ -484,6 +485,11 @@
   }
 
   const downloadUpdate = async (): Promise<void> => {
+    if (updateState.delivery === 'external') {
+      openExternalLink(updateState.externalDownloadUrl ?? appMeta.githubUrl ?? undefined)
+      return
+    }
+
     updateState = await window.codexApp.downloadUpdate()
   }
 

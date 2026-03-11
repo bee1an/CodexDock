@@ -90,13 +90,17 @@ export type AppUpdateStatus =
   | 'unsupported'
   | 'error'
 
+export type AppUpdateDelivery = 'auto' | 'external'
+
 export interface AppUpdateState {
   status: AppUpdateStatus
+  delivery: AppUpdateDelivery
   currentVersion: string
   availableVersion?: string
   downloadProgress?: number
   checkedAt?: string
   message?: string
+  externalDownloadUrl?: string
   supported: boolean
 }
 

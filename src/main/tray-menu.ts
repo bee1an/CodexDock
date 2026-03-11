@@ -76,6 +76,7 @@ export function buildTrayUpdateMenuItem(
     checkForUpdates: string
     checkingForUpdates: string
     downloadUpdate: (version?: string) => string
+    openReleasePage: (version?: string) => string
     installUpdate: string
     unsupported: string
     downloadingUpdate: (progress?: number) => string
@@ -99,7 +100,10 @@ export function buildTrayUpdateMenuItem(
       }
     case 'available':
       return {
-        label: options.downloadUpdate(updateState.availableVersion),
+        label:
+          updateState.delivery === 'external'
+            ? options.openReleasePage(updateState.availableVersion)
+            : options.downloadUpdate(updateState.availableVersion),
         click: () => options.onDownload()
       }
     case 'downloading':

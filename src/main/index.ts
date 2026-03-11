@@ -69,6 +69,7 @@ function localeText(language: AppSettings['language']): {
   checkForUpdates: string
   checkingForUpdates: string
   downloadUpdate: (version?: string) => string
+  openReleasePage: (version?: string) => string
   installUpdate: string
   downloadingUpdate: (progress?: number) => string
   updatesUnsupported: string
@@ -95,6 +96,10 @@ function localeText(language: AppSettings['language']): {
       language === 'en'
         ? `Download update${version ? ` v${version}` : ''}`
         : `下载更新${version ? ` v${version}` : ''}`,
+    openReleasePage: (version) =>
+      language === 'en'
+        ? `Open download page${version ? ` v${version}` : ''}`
+        : `前往下载${version ? ` v${version}` : ''}`,
     installUpdate: language === 'en' ? 'Restart to install update' : '重启安装更新',
     downloadingUpdate: (progress) =>
       language === 'en' ? `Downloading ${progress ?? 0}%` : `下载更新中 ${progress ?? 0}%`,
@@ -346,6 +351,7 @@ function resolveUpdateState(): AppUpdateState {
   return (
     appUpdaterService?.getState() ?? {
       status: 'unsupported',
+      delivery: 'auto',
       currentVersion: app.getVersion(),
       supported: false,
       message: 'Automatic updates are unavailable.'
@@ -372,6 +378,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     checkForUpdates: text.checkForUpdates,
     checkingForUpdates: text.checkingForUpdates,
     downloadUpdate: text.downloadUpdate,
+    openReleasePage: text.openReleasePage,
     installUpdate: text.installUpdate,
     unsupported: text.updatesUnsupported,
     downloadingUpdate: text.downloadingUpdate,
@@ -379,6 +386,15 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
       void appUpdaterService?.checkForUpdates()
     },
     onDownload: () => {
+      const updateState = resolveUpdateState()
+      if (updateState.delivery === 'external') {
+        const downloadUrl = updateState.externalDownloadUrl ?? getAppMeta().githubUrl ?? undefined
+        if (downloadUrl) {
+          void shell.openExternal(downloadUrl)
+        }
+        return
+      }
+
       void appUpdaterService?.downloadUpdate()
     },
     onInstall: () => {
@@ -728,6 +744,7 @@ app.whenReady().then(async () => {
   appUpdaterService = createAppUpdaterService({
     currentVersion: app.getVersion(),
     initialSettings,
+    githubUrl: resolveGithubUrl(),
     isPackaged: app.isPackaged,
     platform: process.platform,
     env: process.env

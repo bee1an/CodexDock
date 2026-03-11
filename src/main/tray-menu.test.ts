@@ -130,6 +130,7 @@ describe('tray menu helpers', () => {
       checkForUpdates: '检查更新',
       checkingForUpdates: '检查更新中…',
       downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
+      openReleasePage: (version?: string) => `前往下载${version ? ` v${version}` : ''}`,
       installUpdate: '重启安装更新',
       unsupported: '当前构建不支持自动更新',
       downloadingUpdate: (progress?: number) => `下载更新中 ${progress ?? 0}%`,
@@ -141,6 +142,7 @@ describe('tray menu helpers', () => {
     const idleItem = buildTrayUpdateMenuItem(
       {
         status: 'idle',
+        delivery: 'auto',
         currentVersion: '0.2.1',
         supported: true
       } satisfies AppUpdateState,
@@ -157,6 +159,7 @@ describe('tray menu helpers', () => {
     const availableItem = buildTrayUpdateMenuItem(
       {
         status: 'available',
+        delivery: 'auto',
         currentVersion: '0.2.1',
         availableVersion: '0.2.2',
         supported: true
@@ -174,6 +177,7 @@ describe('tray menu helpers', () => {
     const errorItem = buildTrayUpdateMenuItem(
       {
         status: 'error',
+        delivery: 'auto',
         currentVersion: '0.2.1',
         supported: true,
         message: 'network error'
@@ -190,6 +194,7 @@ describe('tray menu helpers', () => {
     const downloadedItem = buildTrayUpdateMenuItem(
       {
         status: 'downloaded',
+        delivery: 'auto',
         currentVersion: '0.2.1',
         availableVersion: '0.2.2',
         supported: true
@@ -202,5 +207,22 @@ describe('tray menu helpers', () => {
     }
     downloadedItem.click?.(undefined as never, undefined as never, undefined as never)
     expect(install).toHaveBeenCalledOnce()
+
+    const externalItem = buildTrayUpdateMenuItem(
+      {
+        status: 'available',
+        delivery: 'external',
+        currentVersion: '0.2.4',
+        availableVersion: '0.2.5',
+        supported: true,
+        externalDownloadUrl: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(externalItem).not.toBeNull()
+    if (!externalItem) {
+      throw new Error('external item should render a release page action')
+    }
+    expect(externalItem.label).toBe('前往下载 v0.2.5')
   })
 })

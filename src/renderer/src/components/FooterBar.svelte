@@ -24,7 +24,9 @@
   const updateActionLabel = (): string | null => {
     switch (updateState.status) {
       case 'available':
-        return copy.downloadUpdate(updateState.availableVersion)
+        return updateState.delivery === 'external'
+          ? copy.openReleasePage(updateState.availableVersion)
+          : copy.downloadUpdate(updateState.availableVersion)
       case 'downloaded':
         return copy.restartToInstallUpdate
       default:
