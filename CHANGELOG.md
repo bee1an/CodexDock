@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.2.5 - 2026-03-11
+
+This patch release expands isolated Codex usage and improves how desktop updates surface across macOS and Windows.
+
+- Added isolated Codex launches for saved accounts and custom providers so multiple sessions can run with separate `CODEX_HOME` state.
+- Added custom provider management across the desktop app and CLI, including provider-specific auth, model selection, and isolated launch support.
+- Improved update behavior so macOS checks GitHub releases and guides users to download the latest build, while Windows keeps the in-app download and install flow.
+- Fixed updater edge cases where a manual check could be swallowed by a background check and where a downloaded update could lose its ready-to-install state.
+- Added a Windows desktop executable override for isolated launches so multi-open flows can target the installed Codex app directly when needed.
+
 ## 0.2.4 - 2026-03-10
 
 This patch release refines where manual update actions appear in the desktop interface.
