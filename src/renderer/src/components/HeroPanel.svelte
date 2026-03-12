@@ -90,10 +90,15 @@
   let newProviderFastMode = true
   let codexDesktopExecutablePathDraft = ''
   let lastSyncedCodexDesktopExecutablePath = ''
+  let showCodexDesktopExecutableEditor = false
 
   $: if (settings.codexDesktopExecutablePath !== lastSyncedCodexDesktopExecutablePath) {
     lastSyncedCodexDesktopExecutablePath = settings.codexDesktopExecutablePath
     codexDesktopExecutablePathDraft = settings.codexDesktopExecutablePath
+  }
+
+  $: if (settings.codexDesktopExecutablePath.trim()) {
+    showCodexDesktopExecutableEditor = true
   }
 
   const submitProvider = async (): Promise<void> => {
@@ -254,25 +259,42 @@
       </div>
 
       {#if showCodexDesktopExecutablePath}
-        <div
-          class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
-        >
-          <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
-            {copy.codexDesktopExecutablePath}
-          </span>
-          <input
-            class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            type="text"
-            bind:value={codexDesktopExecutablePathDraft}
-            placeholder={copy.codexDesktopExecutablePlaceholder}
-            on:blur={() => void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
-            on:keydown={(event) => {
-              if (event.key === 'Enter') {
-                void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
-              }
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="text-xs text-muted-strong">{copy.codexDesktopExecutablePath}</span>
+          <button
+            class={compactGhostButton}
+            type="button"
+            on:click={() => {
+              showCodexDesktopExecutableEditor = !showCodexDesktopExecutableEditor
             }}
-          />
+          >
+            {showCodexDesktopExecutableEditor
+              ? copy.hideCodexDesktopExecutablePath
+              : copy.showCodexDesktopExecutablePath}
+          </button>
         </div>
+
+        {#if showCodexDesktopExecutableEditor}
+          <div
+            class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+          >
+            <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
+              {copy.codexDesktopExecutablePath}
+            </span>
+            <input
+              class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              type="text"
+              bind:value={codexDesktopExecutablePathDraft}
+              placeholder={copy.codexDesktopExecutablePlaceholder}
+              on:blur={() => void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
+              on:keydown={(event) => {
+                if (event.key === 'Enter') {
+                  void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
+                }
+              }}
+            />
+          </div>
+        {/if}
       {/if}
     </div>
   {/if}
