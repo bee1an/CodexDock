@@ -192,6 +192,12 @@ export class CodexProviderStore {
     apiKey: string
   }> {
     const provider = await this.getPersistedProvider(providerId)
+    if (provider.apiKey.mode === 'safeStorage') {
+      throw new Error(
+        'This provider API key was saved with macOS Keychain protection in an older version. Edit the provider and save the API key again.'
+      )
+    }
+
     return {
       summary: toProviderSummary(provider),
       apiKey: this.platform.unprotect(provider.apiKey)

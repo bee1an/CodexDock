@@ -736,6 +736,12 @@ export class CodexAccountStore {
   }
 
   private unprotect(payload: ProtectedPayload): string {
+    if (payload.mode === 'safeStorage') {
+      throw new Error(
+        'This account was saved with macOS Keychain protection in an older version. Re-import it to use it without Keychain prompts.'
+      )
+    }
+
     return this.platform.unprotect(payload)
   }
 

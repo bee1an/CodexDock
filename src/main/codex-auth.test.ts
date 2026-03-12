@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -86,5 +86,47 @@ describe('CodexAccountStore', () => {
     const snapshot = await store.getSnapshot(false)
     expect(snapshot.tags).toEqual([])
     expect(snapshot.accounts[0]?.tagIds).toEqual([])
+  })
+
+  it('rejects legacy safeStorage accounts with a re-import hint', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ilovecodex-store-'))
+    createdDirectories.push(directory)
+    await writeFile(
+      join(directory, 'codex-accounts.json'),
+      JSON.stringify(
+        {
+          version: 3,
+          activeAccountId: 'legacy',
+          accounts: [
+            {
+              id: 'legacy',
+              tagIds: [],
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z',
+              authPayload: {
+                mode: 'safeStorage',
+                value: 'encrypted'
+              }
+            }
+          ],
+          tags: [],
+          settings: {
+            usagePollingMinutes: 15,
+            statusBarAccountIds: [],
+            language: 'zh-CN',
+            theme: 'light',
+            checkForUpdatesOnStartup: true,
+            codexDesktopExecutablePath: ''
+          },
+          usageByAccountId: {}
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+
+    const store = new CodexAccountStore(directory, createPlatform())
+    await expect(store.getStoredAuthPayload('legacy')).rejects.toThrow('Re-import it')
   })
 })

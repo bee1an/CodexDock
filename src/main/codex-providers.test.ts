@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -98,5 +98,39 @@ describe('CodexProviderStore', () => {
 
     expect(reordered.map((provider) => provider.id)).toEqual([first.id, second.id])
     expect((await store.list()).map((provider) => provider.id)).toEqual([first.id, second.id])
+  })
+
+  it('rejects legacy safeStorage provider keys with a re-entry hint', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ilovecodex-provider-store-'))
+    createdDirectories.push(directory)
+    await writeFile(
+      join(directory, 'codex-providers.json'),
+      JSON.stringify(
+        {
+          version: 1,
+          providers: [
+            {
+              id: 'legacy',
+              name: 'Legacy',
+              baseUrl: 'https://api.example.com/v1',
+              apiKey: {
+                mode: 'safeStorage',
+                value: 'encrypted'
+              },
+              model: '5.4',
+              fastMode: true,
+              createdAt: '2026-03-01T00:00:00.000Z',
+              updatedAt: '2026-03-01T00:00:00.000Z'
+            }
+          ]
+        },
+        null,
+        2
+      ),
+      'utf8'
+    )
+
+    const store = new CodexProviderStore(directory, createPlatform())
+    await expect(store.getResolvedProvider('legacy')).rejects.toThrow('save the API key again')
   })
 })
