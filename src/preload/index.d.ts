@@ -21,6 +21,8 @@ interface CodexDesktopApi {
   updateSettings: (nextSettings: Partial<AppSettings>) => Promise<AppSnapshot>
   openMainWindow: () => Promise<AppSnapshot>
   importCurrentAccount: () => Promise<AppSnapshot>
+  importAccountsFromFile: () => Promise<AppSnapshot>
+  exportAccountsToFile: () => Promise<AppSnapshot>
   activateAccount: (accountId: string) => Promise<AppSnapshot>
   activateBestAccount: () => Promise<AppSnapshot>
   reorderAccounts: (accountIds: string[]) => Promise<AppSnapshot>

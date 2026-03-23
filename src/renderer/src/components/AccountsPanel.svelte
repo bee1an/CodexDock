@@ -21,6 +21,7 @@
     planTagClass,
     providerLabel,
     progressWidth,
+    usageErrorKind,
     type LocalizedCopy
   } from './app-view'
 
@@ -39,6 +40,7 @@
   export let activeAccountId: string | undefined
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
+  export let usageErrorByAccountId: Record<string, string>
   export let loginActionBusy: boolean
   export let loginStarting = false
   export let openingAccountId = ''
@@ -162,6 +164,31 @@
 
   function providerActionBusy(providerId: string): boolean {
     return openingProviderId === providerId || providerMutationBusy
+  }
+
+  function accountUsageBadge(accountId: string):
+    | { kind: 'expired' | 'error'; label: string; title: string }
+    | null {
+    const message = usageErrorByAccountId[accountId]
+    const kind = usageErrorKind(message)
+
+    if (!message || !kind) {
+      return null
+    }
+
+    if (kind === 'expired') {
+      return {
+        kind,
+        label: copy.accountExpired,
+        title: `${copy.accountExpiredHint}\n${message}`
+      }
+    }
+
+    return {
+      kind,
+      label: copy.accountUsageRefreshFailed,
+      title: message
+    }
   }
 
   async function runProviderMutation(task: () => Promise<void>): Promise<void> {
@@ -744,6 +771,7 @@
           aria-label={copy.accountCount(sortableAccounts.length)}
         >
           {#each sortableAccounts as account (account.id)}
+          {@const usageBadge = accountUsageBadge(account.id)}
           <article
             class={`group grid items-center gap-3 rounded-[0.875rem] border px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto] ${accountCardTone(activeAccountId === account.id)}`}
             animate:flip={{ duration: flipDurationMs }}
@@ -777,6 +805,23 @@
                   >
                     {copy.active}
                   </span>
+                {/if}
+                {#if usageBadge}
+                  {#if usageBadge.kind === 'expired'}
+                    <span
+                      class="inline-flex flex-none items-center rounded-full border border-red-700 bg-red-700 px-2 py-0.75 text-[10px] font-semibold text-white"
+                      title={usageBadge.title}
+                    >
+                      {usageBadge.label}
+                    </span>
+                  {:else}
+                    <span
+                      class="inline-flex flex-none items-center rounded-full border border-amber-500/18 bg-amber-500/10 px-2 py-0.75 text-[10px] font-medium text-amber-700"
+                      title={usageBadge.title}
+                    >
+                      {usageBadge.label}
+                    </span>
+                  {/if}
                 {/if}
                 <span
                   class={`inline-flex flex-none items-center rounded-full px-2 py-0.75 text-[10px] font-medium ${planTagClass(usageByAccountId[account.id]?.planType)}`}
@@ -1031,7 +1076,7 @@
         >
           {#each sortableProviders as provider (provider.id)}
             <article
-              class="group grid items-center gap-3 rounded-[0.875rem] border border-black/8 bg-white px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+              class="theme-provider-card group grid items-center gap-3 rounded-[0.875rem] border border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
               animate:flip={{ duration: flipDurationMs }}
               aria-label={providerLabel(provider, copy)}
             >
@@ -1051,25 +1096,25 @@
                   {#if editingProviderId === provider.id}
                     <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
                       <input
-                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                         bind:value={providerDrafts[provider.id].name}
                         placeholder={copy.providerNamePlaceholder}
                         disabled={loginActionBusy || providerMutationBusy}
                       />
                       <input
-                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                         bind:value={providerDrafts[provider.id].baseUrl}
                         placeholder={copy.providerBaseUrlPlaceholder}
                         disabled={loginActionBusy || providerMutationBusy}
                       />
                       <input
-                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                        class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                         bind:value={providerDrafts[provider.id].model}
                         placeholder={copy.providerModelPlaceholder}
                         disabled={loginActionBusy || providerMutationBusy}
                       />
                       <input
-                        class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16 md:col-span-2"
+                        class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16 md:col-span-2"
                         type="password"
                         bind:value={providerDrafts[provider.id].apiKey}
                         placeholder={copy.providerApiKeyPlaceholder}
@@ -1078,15 +1123,15 @@
                     </div>
                   {:else}
                     <div class="scroll-row flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
-                      <span class="h-2 w-2 flex-none rounded-full bg-black/14"></span>
+                      <span class="theme-provider-status h-2 w-2 flex-none rounded-full bg-sky-500/55 ring-3 ring-sky-500/12"></span>
                       <p class="max-w-[220px] truncate text-sm font-medium text-ink">
                         {providerLabel(provider, copy)}
                       </p>
-                      <span class="inline-flex flex-none items-center rounded-full bg-black px-2 py-0.75 text-[10px] font-medium text-white/88">
+                      <span class="theme-provider-badge inline-flex flex-none items-center rounded-full border border-sky-500/16 bg-sky-500/10 px-2 py-0.75 text-[10px] font-medium text-sky-700">
                         {copy.providerBadge}
                       </span>
                       {#if provider.fastMode}
-                        <span class="inline-flex flex-none items-center rounded-full bg-emerald-500/10 px-2 py-0.75 text-[10px] font-medium text-emerald-700">
+                        <span class="theme-provider-fast-badge inline-flex flex-none items-center rounded-full border border-emerald-500/16 bg-emerald-500/10 px-2 py-0.75 text-[10px] font-medium text-emerald-700">
                           Fast
                         </span>
                       {/if}
@@ -1105,7 +1150,7 @@
 
               <div class="flex items-center justify-end gap-1">
                 {#if editingProviderId === provider.id}
-                  <label class="mr-2 inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink">
+                  <label class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink">
                     <input
                       type="checkbox"
                       bind:checked={providerDrafts[provider.id].fastMode}

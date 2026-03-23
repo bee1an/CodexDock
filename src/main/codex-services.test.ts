@@ -421,4 +421,129 @@ describe('createCodexServices', () => {
     expect(terminationCalls).not.toContain(isolatedPid)
     expect(mockedProcessState.runningPids.has(isolatedPid ?? -1)).toBe(true)
   })
+
+  it('clears stale usage after an expired usage refresh fails', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    const baseAuth = createAuthPayload('acct-a', 'a@example.com')
+    const { refresh_token: _refreshToken, ...tokensWithoutRefresh } = baseAuth.tokens
+    const expiredAuth = {
+      ...baseAuth,
+      tokens: tokensWithoutRefresh
+    }
+
+    await writeGlobalAuth(env.globalAuthPath, expiredAuth)
+    await services.accounts.importCurrent()
+    const snapshot = await services.getSnapshot()
+    const account = snapshot.accounts[0]
+    const statePath = join(env.userDataPath, 'codex-accounts.json')
+    const staleUsage = {
+      limitId: 'codex',
+      limitName: null,
+      planType: 'plus',
+      primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+      secondary: { usedPercent: 34, windowDurationMins: 10_080, resetsAt: 1_800_000_000 },
+      credits: null,
+      limits: [],
+      fetchedAt: '2026-03-19T00:00:00.000Z'
+    }
+
+    const persistedState = JSON.parse(await readFile(statePath, 'utf8')) as {
+      usageByAccountId: Record<string, unknown>
+    }
+    persistedState.usageByAccountId = {
+      ...persistedState.usageByAccountId,
+      [account.id]: staleUsage
+    }
+    await writeFile(statePath, `${JSON.stringify(persistedState, null, 2)}\n`, 'utf8')
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      new Response('unauthorized', {
+        status: 401,
+        headers: {
+          'content-type': 'text/plain'
+        }
+      })
+    )
+
+    await expect(services.usage.read(account.id)).rejects.toThrow('failed: 401')
+
+    const nextSnapshot = await services.getSnapshot()
+    expect(nextSnapshot.usageByAccountId[account.id]).toBeUndefined()
+  })
+
+  it('refreshes expiring stored sessions and syncs the current auth file', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, {
+      auth_mode: 'chatgpt',
+      last_refresh: '2026-03-11T00:00:00.000Z',
+      tokens: {
+        access_token: createJwt({
+          exp: Math.floor(Date.now() / 1000) - 60,
+          'https://api.openai.com/auth': {
+            chatgpt_account_id: 'acct-a'
+          }
+        }),
+        refresh_token: 'refresh-acct-a',
+        id_token: createJwt({
+          email: 'a@example.com',
+          name: 'a',
+          'https://api.openai.com/auth': {
+            chatgpt_account_id: 'acct-a'
+          }
+        }),
+        account_id: 'acct-a'
+      }
+    })
+    await services.accounts.importCurrent()
+
+    const snapshot = await services.getSnapshot()
+    const account = snapshot.accounts[0]
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          access_token: createJwt({
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: 'acct-a'
+            }
+          }),
+          refresh_token: 'refresh-acct-a-2',
+          id_token: createJwt({
+            email: 'a@example.com',
+            name: 'a',
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: 'acct-a'
+            }
+          })
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json'
+          }
+        }
+      )
+    )
+
+    await expect(services.accounts.refreshExpiringSession(account.id)).resolves.toBe(true)
+
+    const storedAuth = await readFile(join(env.userDataPath, 'codex-accounts.json'), 'utf8')
+    expect(storedAuth).toContain('refresh-acct-a-2')
+    await expect(readFile(env.globalAuthPath, 'utf8')).resolves.toContain('refresh-acct-a-2')
+  })
 })

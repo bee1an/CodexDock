@@ -43,6 +43,7 @@ interface PersistedState {
   tags: AccountTag[]
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
+  usageErrorByAccountId: Record<string, string>
 }
 
 interface LegacyPersistedState {
@@ -52,6 +53,7 @@ interface LegacyPersistedState {
   tags?: AccountTag[]
   settings?: AppSettings
   usageByAccountId?: Record<string, AccountRateLimits>
+  usageErrorByAccountId?: Record<string, string>
 }
 
 function defaultSettings(): AppSettings {
@@ -97,7 +99,8 @@ function defaultState(): PersistedState {
     accounts: [],
     tags: [],
     settings: defaultSettings(),
-    usageByAccountId: {}
+    usageByAccountId: {},
+    usageErrorByAccountId: {}
   }
 }
 
@@ -433,7 +436,8 @@ export class CodexAccountStore {
       currentSession,
       loginInProgress,
       settings: state.settings,
-      usageByAccountId: state.usageByAccountId
+      usageByAccountId: state.usageByAccountId,
+      usageErrorByAccountId: state.usageErrorByAccountId
     }
   }
 
@@ -460,6 +464,54 @@ export class CodexAccountStore {
       ...state.usageByAccountId,
       [accountId]: rateLimits
     }
+    await this.writeState(state)
+  }
+
+  async clearAccountRateLimits(accountId: string): Promise<void> {
+    const state = await this.readState()
+
+    if (!state.accounts.some((account) => account.id === accountId)) {
+      throw new Error('Account not found.')
+    }
+
+    if (!(accountId in state.usageByAccountId)) {
+      return
+    }
+
+    const nextUsageByAccountId = { ...state.usageByAccountId }
+    delete nextUsageByAccountId[accountId]
+    state.usageByAccountId = nextUsageByAccountId
+    await this.writeState(state)
+  }
+
+  async saveAccountUsageError(accountId: string, message: string): Promise<void> {
+    const state = await this.readState()
+
+    if (!state.accounts.some((account) => account.id === accountId)) {
+      throw new Error('Account not found.')
+    }
+
+    state.usageErrorByAccountId = {
+      ...state.usageErrorByAccountId,
+      [accountId]: message
+    }
+    await this.writeState(state)
+  }
+
+  async clearAccountUsageError(accountId: string): Promise<void> {
+    const state = await this.readState()
+
+    if (!state.accounts.some((account) => account.id === accountId)) {
+      throw new Error('Account not found.')
+    }
+
+    if (!(accountId in state.usageErrorByAccountId)) {
+      return
+    }
+
+    const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
+    delete nextUsageErrorByAccountId[accountId]
+    state.usageErrorByAccountId = nextUsageErrorByAccountId
     await this.writeState(state)
   }
 
@@ -578,6 +630,23 @@ export class CodexAccountStore {
     return this.getStoredAuth(accountId)
   }
 
+  async syncCurrentAuthPayload(accountId: string, auth: CodexAuthPayload): Promise<boolean> {
+    const state = await this.readState()
+
+    try {
+      const currentAuth = await this.readCodexAuthFile()
+      const matched = findMatchingAccount(state.accounts, currentAuth)
+      if (!matched || matched.id !== accountId) {
+        return false
+      }
+
+      await this.writeCodexAuthFile(auth)
+      return true
+    } catch {
+      return false
+    }
+  }
+
   async getAccountSummary(accountId: string): Promise<AccountSummary> {
     const state = await this.readState()
     const account = state.accounts.find((item) => item.id === accountId)
@@ -613,6 +682,14 @@ export class CodexAccountStore {
 
     if (state.activeAccountId === accountId) {
       state.activeAccountId = undefined
+    }
+
+    if (state.usageByAccountId[accountId]) {
+      delete state.usageByAccountId[accountId]
+    }
+
+    if (state.usageErrorByAccountId[accountId]) {
+      delete state.usageErrorByAccountId[accountId]
     }
 
     await this.writeState(state)
@@ -691,6 +768,14 @@ export class CodexAccountStore {
           }
           delete state.usageByAccountId[previousId]
         }
+
+        if (state.usageErrorByAccountId[previousId]) {
+          state.usageErrorByAccountId = {
+            ...state.usageErrorByAccountId,
+            [identity]: state.usageErrorByAccountId[previousId]
+          }
+          delete state.usageErrorByAccountId[previousId]
+        }
       }
 
       existing.id = identity
@@ -719,6 +804,10 @@ export class CodexAccountStore {
 
     if (makeActive) {
       state.activeAccountId = identity
+    }
+
+    if (state.usageErrorByAccountId[identity]) {
+      delete state.usageErrorByAccountId[identity]
     }
 
     await this.writeState(state)
@@ -779,7 +868,8 @@ export class CodexAccountStore {
           ...defaultSettings(),
           ...('settings' in parsed ? parsed.settings : {})
         },
-        usageByAccountId: parsed.usageByAccountId ?? {}
+        usageByAccountId: parsed.usageByAccountId ?? {},
+        usageErrorByAccountId: parsed.usageErrorByAccountId ?? {}
       }
     } catch {
       return defaultState()

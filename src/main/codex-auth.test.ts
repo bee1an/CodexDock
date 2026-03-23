@@ -118,7 +118,8 @@ describe('CodexAccountStore', () => {
             checkForUpdatesOnStartup: true,
             codexDesktopExecutablePath: ''
           },
-          usageByAccountId: {}
+          usageByAccountId: {},
+          usageErrorByAccountId: {}
         },
         null,
         2

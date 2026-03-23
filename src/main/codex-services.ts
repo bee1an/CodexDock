@@ -42,6 +42,7 @@ import type { CodexPlatformAdapter } from '../shared/codex-platform'
 const execFile = promisify(execFileCallback)
 const DEFAULT_CODEX_INSTANCE_ID = '__default__'
 const macosCodexAppBinary = '/Applications/Codex.app/Contents/MacOS/Codex'
+const BACKGROUND_AUTH_REFRESH_SKEW_MS = 5 * 60_000
 const codexProcessPattern =
   process.platform === 'darwin'
     ? '(/Applications/Codex\\.app/Contents/MacOS/Codex|(^|/)codex( |$))'
@@ -79,6 +80,330 @@ function accessTokenExpiresSoon(token?: string, skewMs = 60_000): boolean {
   }
 
   return payload.exp * 1000 <= Date.now() + skewMs
+}
+
+interface TemplateCredentialRecord {
+  _token_version?: number
+  access_token?: string
+  chatgpt_account_id?: string
+  chatgpt_user_id?: string
+  client_id?: string
+  email?: string
+  expires_at?: string
+  expires_in?: number
+  id_token?: string
+  organization_id?: string
+  plan_type?: string
+  refresh_token?: string
+  scope?: string | null
+  token_type?: string | null
+}
+
+interface TemplateExtraRecord {
+  codex_5h_reset_after_seconds?: number
+  codex_5h_reset_at?: string
+  codex_5h_used_percent?: number
+  codex_5h_window_minutes?: number
+  codex_7d_reset_after_seconds?: number
+  codex_7d_reset_at?: string
+  codex_7d_used_percent?: number
+  codex_7d_window_minutes?: number
+  codex_primary_over_secondary_percent?: number
+  codex_primary_reset_after_seconds?: number
+  codex_primary_reset_at?: string
+  codex_primary_used_percent?: number
+  codex_primary_window_minutes?: number
+  codex_secondary_reset_after_seconds?: number
+  codex_secondary_reset_at?: string
+  codex_secondary_used_percent?: number
+  codex_secondary_window_minutes?: number
+  codex_usage_updated_at?: string
+  email?: string
+  privacy_mode?: string
+}
+
+interface TemplateAccountRecord {
+  name?: string
+  notes?: string
+  platform?: string
+  type?: string
+  credentials?: TemplateCredentialRecord
+  extra?: TemplateExtraRecord
+  concurrency?: number
+  priority?: number
+  rate_multiplier?: number
+  auto_pause_on_expired?: boolean
+}
+
+interface TemplateFileRecord {
+  exported_at?: string
+  proxies?: unknown[]
+  accounts?: TemplateAccountRecord[]
+}
+
+function toEpochSeconds(value?: string | number | null): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.max(0, Math.floor(value))
+  }
+
+  if (!value || typeof value !== 'string') {
+    return null
+  }
+
+  const parsed = Date.parse(value)
+  if (Number.isNaN(parsed)) {
+    return null
+  }
+
+  return Math.floor(parsed / 1000)
+}
+
+function toIsoFromEpochSeconds(value?: number | null): string | undefined {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return undefined
+  }
+
+  return new Date(value * 1000).toISOString()
+}
+
+function normalizeWindowDuration(value?: number | null): number | null {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null
+  }
+
+  return Math.floor(value)
+}
+
+function normalizeUsedPercent(value?: number | null): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    return 0
+  }
+
+  return Math.max(0, Math.min(100, Math.round(value)))
+}
+
+function resolveClaimString(payload: Record<string, unknown>, key: string): string | undefined {
+  const value = payload[key]
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
+function resolveAuthMetadata(auth: CodexAuthPayload): {
+  email?: string
+  userId?: string
+  organizationId?: string
+  scope?: string
+  tokenType?: string
+  expiresAt?: string
+} {
+  const idClaims = decodeJwtPayload(auth.tokens?.id_token)
+  const accessClaims = decodeJwtPayload(auth.tokens?.access_token)
+  const authClaims =
+    accessClaims['https://api.openai.com/auth'] &&
+    typeof accessClaims['https://api.openai.com/auth'] === 'object'
+      ? (accessClaims['https://api.openai.com/auth'] as Record<string, unknown>)
+      : {}
+  const expiresAt = toIsoFromEpochSeconds(
+    typeof accessClaims.exp === 'number' ? accessClaims.exp : undefined
+  )
+
+  return {
+    email:
+      resolveClaimString(idClaims, 'email') ??
+      resolveClaimString(accessClaims, 'email') ??
+      resolveClaimString(authClaims, 'email'),
+    userId:
+      resolveClaimString(idClaims, 'sub') ??
+      resolveClaimString(accessClaims, 'sub') ??
+      resolveClaimString(authClaims, 'chatgpt_user_id'),
+    organizationId:
+      resolveClaimString(authClaims, 'organization_id') ??
+      resolveClaimString(idClaims, 'organization_id') ??
+      resolveClaimString(accessClaims, 'organization_id'),
+    scope: resolveClaimString(accessClaims, 'scope'),
+    tokenType: resolveClaimString(accessClaims, 'token_type'),
+    expiresAt
+  }
+}
+
+function buildTemplateRateLimits(
+  extra: TemplateExtraRecord | undefined,
+  credentials: TemplateCredentialRecord | undefined,
+  exportedAt: string
+): AccountRateLimits | null {
+  if (!extra) {
+    return null
+  }
+
+  const primaryResetsAt =
+    toEpochSeconds(extra.codex_primary_reset_at) ??
+    (typeof extra.codex_primary_reset_after_seconds === 'number'
+      ? Math.floor(Date.now() / 1000) + Math.max(0, Math.floor(extra.codex_primary_reset_after_seconds))
+      : null)
+  const secondaryResetsAt =
+    toEpochSeconds(extra.codex_secondary_reset_at) ??
+    (typeof extra.codex_secondary_reset_after_seconds === 'number'
+      ? Math.floor(Date.now() / 1000) + Math.max(0, Math.floor(extra.codex_secondary_reset_after_seconds))
+      : null)
+
+  const hasPrimary =
+    primaryResetsAt !== null ||
+    typeof extra.codex_primary_used_percent === 'number' ||
+    typeof extra.codex_primary_window_minutes === 'number'
+  const hasSecondary =
+    secondaryResetsAt !== null ||
+    typeof extra.codex_secondary_used_percent === 'number' ||
+    typeof extra.codex_secondary_window_minutes === 'number'
+
+  if (!hasPrimary && !hasSecondary) {
+    return null
+  }
+
+  return {
+    limitId: 'codex',
+    limitName: null,
+    planType: credentials?.plan_type ?? null,
+    primary: hasPrimary
+      ? {
+          usedPercent: normalizeUsedPercent(extra.codex_primary_used_percent),
+          windowDurationMins: normalizeWindowDuration(extra.codex_primary_window_minutes),
+          resetsAt: primaryResetsAt
+        }
+      : null,
+    secondary: hasSecondary
+      ? {
+          usedPercent: normalizeUsedPercent(extra.codex_secondary_used_percent),
+          windowDurationMins: normalizeWindowDuration(extra.codex_secondary_window_minutes),
+          resetsAt: secondaryResetsAt
+        }
+      : null,
+    credits: {
+      hasCredits: false,
+      unlimited: false,
+      balance: null
+    },
+    limits: [
+      {
+        limitId: 'codex',
+        limitName: null,
+        planType: credentials?.plan_type ?? null,
+        primary: hasPrimary
+          ? {
+              usedPercent: normalizeUsedPercent(extra.codex_primary_used_percent),
+              windowDurationMins: normalizeWindowDuration(extra.codex_primary_window_minutes),
+              resetsAt: primaryResetsAt
+            }
+          : null,
+        secondary: hasSecondary
+          ? {
+              usedPercent: normalizeUsedPercent(extra.codex_secondary_used_percent),
+              windowDurationMins: normalizeWindowDuration(extra.codex_secondary_window_minutes),
+              resetsAt: secondaryResetsAt
+            }
+          : null
+      }
+    ],
+    fetchedAt: extra.codex_usage_updated_at ?? exportedAt
+  }
+}
+
+function buildAuthPayloadFromTemplate(
+  account: TemplateAccountRecord,
+  exportedAt: string
+): CodexAuthPayload {
+  const credentials = account.credentials
+  if (!credentials) {
+    throw new Error('Template account is missing credentials.')
+  }
+
+  return {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: null,
+    last_refresh: exportedAt,
+    tokens: {
+      access_token: credentials.access_token,
+      refresh_token: credentials.refresh_token,
+      id_token: credentials.id_token,
+      account_id: credentials.chatgpt_account_id
+    }
+  }
+}
+
+function buildTemplateAccountExport(
+  account: AccountSummary,
+  auth: CodexAuthPayload,
+  rateLimits: AccountRateLimits | undefined,
+  exportedAt: string
+): TemplateAccountRecord {
+  const metadata = resolveAuthMetadata(auth)
+  const primary = rateLimits?.primary
+  const secondary = rateLimits?.secondary
+
+  return {
+    name: account.name ?? account.email ?? account.accountId ?? account.id,
+    notes: '',
+    platform: 'openai',
+    type: 'oauth',
+    credentials: {
+      _token_version: 1,
+      access_token: auth.tokens?.access_token,
+      chatgpt_account_id: auth.tokens?.account_id ?? account.accountId,
+      chatgpt_user_id: metadata.userId,
+      client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+      email: account.email ?? metadata.email,
+      expires_at: metadata.expiresAt,
+      expires_in:
+        metadata.expiresAt != null
+          ? Math.max(0, Math.floor((Date.parse(metadata.expiresAt) - Date.now()) / 1000))
+          : undefined,
+      id_token: auth.tokens?.id_token,
+      organization_id: metadata.organizationId,
+      plan_type: rateLimits?.planType ?? undefined,
+      refresh_token: auth.tokens?.refresh_token,
+      scope: metadata.scope ?? null,
+      token_type: metadata.tokenType ?? null
+    },
+    extra: {
+      codex_5h_reset_after_seconds:
+        typeof primary?.resetsAt === 'number'
+          ? Math.max(0, primary.resetsAt - Math.floor(Date.now() / 1000))
+          : undefined,
+      codex_5h_reset_at: toIsoFromEpochSeconds(primary?.resetsAt),
+      codex_5h_used_percent: primary?.usedPercent ?? undefined,
+      codex_5h_window_minutes: primary?.windowDurationMins ?? undefined,
+      codex_7d_reset_after_seconds:
+        typeof secondary?.resetsAt === 'number'
+          ? Math.max(0, secondary.resetsAt - Math.floor(Date.now() / 1000))
+          : undefined,
+      codex_7d_reset_at: toIsoFromEpochSeconds(secondary?.resetsAt),
+      codex_7d_used_percent: secondary?.usedPercent ?? undefined,
+      codex_7d_window_minutes: secondary?.windowDurationMins ?? undefined,
+      codex_primary_over_secondary_percent:
+        typeof primary?.usedPercent === 'number' && typeof secondary?.usedPercent === 'number'
+          ? Math.max(0, primary.usedPercent - secondary.usedPercent)
+          : undefined,
+      codex_primary_reset_after_seconds:
+        typeof primary?.resetsAt === 'number'
+          ? Math.max(0, primary.resetsAt - Math.floor(Date.now() / 1000))
+          : undefined,
+      codex_primary_reset_at: toIsoFromEpochSeconds(primary?.resetsAt),
+      codex_primary_used_percent: primary?.usedPercent ?? undefined,
+      codex_primary_window_minutes: primary?.windowDurationMins ?? undefined,
+      codex_secondary_reset_after_seconds:
+        typeof secondary?.resetsAt === 'number'
+          ? Math.max(0, secondary.resetsAt - Math.floor(Date.now() / 1000))
+          : undefined,
+      codex_secondary_reset_at: toIsoFromEpochSeconds(secondary?.resetsAt),
+      codex_secondary_used_percent: secondary?.usedPercent ?? undefined,
+      codex_secondary_window_minutes: secondary?.windowDurationMins ?? undefined,
+      codex_usage_updated_at: rateLimits?.fetchedAt ?? exportedAt,
+      email: account.email ?? metadata.email,
+      privacy_mode: 'training_off'
+    },
+    concurrency: 10,
+    priority: 1,
+    rate_multiplier: 1,
+    auto_pause_on_expired: false
+  }
 }
 
 function parseExtraArgs(raw: string): string[] {
@@ -384,6 +709,35 @@ function shouldRefreshStoredAuth(error: unknown, refreshToken?: string): boolean
   return error.status === 401 || error.status === 403
 }
 
+function shouldClearStoredUsage(error: unknown): boolean {
+  if (error instanceof AccountRateLimitLookupError) {
+    return error.status === 401 || error.status === 403
+  }
+
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  if (
+    message.includes('missing access token required for rate-limit lookup') ||
+    message.includes('missing refresh token required for token refresh')
+  ) {
+    return true
+  }
+
+  if (!message.includes('openai token refresh failed')) {
+    return false
+  }
+
+  return (
+    message.includes('invalid_grant') ||
+    message.includes('expired') ||
+    message.includes('revoked') ||
+    message.includes('invalid token')
+  )
+}
+
 async function writeAuthPayloadToCodexHome(
   codexHome: string,
   authPayload: CodexAuthPayload
@@ -453,8 +807,11 @@ export interface CodexServices {
   accounts: {
     list(): Promise<AppSnapshot>
     importCurrent(): Promise<AppSnapshot>
+    importFromTemplate(raw: string): Promise<AppSnapshot>
+    exportToTemplate(): Promise<string>
     activate(accountId: string): Promise<AppSnapshot>
     activateBest(): Promise<AppSnapshot>
+    refreshExpiringSession(accountId: string): Promise<boolean>
     reorder(accountIds: string[]): Promise<AppSnapshot>
     remove(accountId: string): Promise<AppSnapshot>
     updateTags(accountId: string, tagIds: string[]): Promise<AppSnapshot>
@@ -523,6 +880,18 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     options.platform
   )
 
+  async function persistRefreshedAuth(
+    accountId: string,
+    refreshedAuth: CodexAuthPayload
+  ): Promise<{ accountId: string; auth: CodexAuthPayload }> {
+    await store.syncCurrentAuthPayload(accountId, refreshedAuth)
+    const refreshedAccount = await store.importAuthPayload(refreshedAuth)
+    return {
+      accountId: refreshedAccount.id,
+      auth: refreshedAuth
+    }
+  }
+
   async function readUsageForAuth(
     accountId: string,
     account: AccountSummary,
@@ -541,15 +910,23 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         }
 
         const refreshedAuth = await refreshCodexAuthPayload(auth, options.platform)
-        const refreshedAccount = await store.importAuthPayload(refreshedAuth)
-        targetAccountId = refreshedAccount.id
-        rateLimits = await readAccountRateLimits(refreshedAuth, options.platform)
+        const persisted = await persistRefreshedAuth(targetAccountId, refreshedAuth)
+        targetAccountId = persisted.accountId
+        rateLimits = await readAccountRateLimits(persisted.auth, options.platform)
       }
 
-      await store.saveAccountRateLimits(targetAccountId, rateLimits)
+      await Promise.all([
+        store.saveAccountRateLimits(targetAccountId, rateLimits),
+        store.clearAccountUsageError(targetAccountId)
+      ])
       return rateLimits
     } catch (error) {
+      if (shouldClearStoredUsage(error)) {
+        await store.clearAccountRateLimits(targetAccountId)
+      }
+
       const detail = error instanceof Error ? error.message : 'Failed to read account limits.'
+      await store.saveAccountUsageError(targetAccountId, detail)
       throw new Error(`${accountErrorLabel(account)}: ${detail}`)
     }
   }
@@ -562,8 +939,32 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     }
 
     const refreshed = await refreshCodexAuthPayload(storedAuth, options.platform)
-    await store.importAuthPayload(refreshed)
-    return refreshed
+    return (await persistRefreshedAuth(accountId, refreshed)).auth
+  }
+
+  async function refreshExpiringAccountSession(accountId: string): Promise<boolean> {
+    const storedAuth = await store.getStoredAuthPayload(accountId)
+
+    if (
+      !storedAuth.tokens?.refresh_token ||
+      !accessTokenExpiresSoon(storedAuth.tokens?.access_token, BACKGROUND_AUTH_REFRESH_SKEW_MS)
+    ) {
+      return false
+    }
+
+    try {
+      const refreshed = await refreshCodexAuthPayload(storedAuth, options.platform)
+      await Promise.all([
+        persistRefreshedAuth(accountId, refreshed),
+        store.clearAccountUsageError(accountId)
+      ])
+      return true
+    } catch (error) {
+      const detail =
+        error instanceof Error ? error.message : 'Failed to refresh account session.'
+      await store.saveAccountUsageError(accountId, detail)
+      throw error
+    }
   }
 
   async function resolveAccountIdOrThrow(explicitAccountId?: string): Promise<string> {
@@ -818,6 +1219,60 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         await store.importCurrentAuth()
         return getSnapshot()
       },
+      importFromTemplate: async (raw) => {
+        let parsed: TemplateFileRecord
+
+        try {
+          parsed = JSON.parse(raw) as TemplateFileRecord
+        } catch {
+          throw new Error('Invalid account template file.')
+        }
+
+        const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : []
+        if (!accounts.length) {
+          throw new Error('Template file does not contain any accounts.')
+        }
+
+        const exportedAt = parsed.exported_at ?? new Date().toISOString()
+
+        for (const account of accounts) {
+          const authPayload = buildAuthPayloadFromTemplate(account, exportedAt)
+          const imported = await store.importAuthPayload(authPayload)
+          const rateLimits = buildTemplateRateLimits(account.extra, account.credentials, exportedAt)
+          if (rateLimits) {
+            await store.saveAccountRateLimits(imported.id, rateLimits)
+          }
+        }
+
+        return getSnapshot()
+      },
+      exportToTemplate: async () => {
+        const snapshot = await getSnapshot()
+        const exportedAt = new Date().toISOString()
+        const accounts: TemplateAccountRecord[] = []
+
+        for (const account of snapshot.accounts) {
+          const auth = await store.getStoredAuthPayload(account.id)
+          accounts.push(
+            buildTemplateAccountExport(
+              account,
+              auth,
+              snapshot.usageByAccountId[account.id],
+              exportedAt
+            )
+          )
+        }
+
+        return `${JSON.stringify(
+          {
+            exported_at: exportedAt,
+            proxies: [],
+            accounts
+          },
+          null,
+          2
+        )}\n`
+      },
       activate: async (accountId) => {
         await store.activateAccount(accountId)
         return getSnapshot()
@@ -841,6 +1296,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         await store.reorderAccounts(accountIds)
         return getSnapshot()
       },
+      refreshExpiringSession: refreshExpiringAccountSession,
       remove: async (accountId) => {
         await store.removeAccount(accountId)
         return getSnapshot()

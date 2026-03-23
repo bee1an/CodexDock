@@ -4,10 +4,14 @@ import {
   BrowserWindow,
   ipcMain,
   Tray,
+  dialog,
   nativeImage,
   Menu,
-  type MenuItemConstructorOptions
+  type MenuItemConstructorOptions,
+  type OpenDialogOptions,
+  type SaveDialogOptions
 } from 'electron'
+import { promises as fs } from 'node:fs'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'path'
@@ -17,6 +21,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { runCli } from '../cli/run-cli'
 import { createAppUpdaterService, type AppUpdaterService } from './app-updater'
+import { createAuthRefreshController, type AuthRefreshController } from './auth-poller'
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
@@ -39,6 +44,7 @@ let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
 let codexServices: CodexServices
 let appUpdaterService: AppUpdaterService | null = null
+let authRefreshController: AuthRefreshController | null = null
 let usagePollingController: UsagePollingController | null = null
 let lastSnapshot: AppSnapshot | null = null
 const defaultWorkspacePath = process.cwd()
@@ -590,6 +596,7 @@ async function refreshTrayTitle(): Promise<AppSnapshot> {
   }
 
   usagePollingController?.sync(snapshot)
+  authRefreshController?.sync(snapshot)
 
   return snapshot
 }
@@ -686,7 +693,8 @@ function createTray(): void {
             checkForUpdatesOnStartup: true,
             codexDesktopExecutablePath: ''
           },
-          usageByAccountId: {}
+          usageByAccountId: {},
+          usageErrorByAccountId: {}
         })
       : nativeImage.createFromPath(icon).resize({ width: 18, height: 18 })
 
@@ -764,6 +772,15 @@ app.whenReady().then(async () => {
       console.warn(`Failed to poll usage for ${account.email ?? account.id}: ${detail}`)
     }
   })
+  authRefreshController = createAuthRefreshController({
+    getSnapshot: () => codexServices.getSnapshot(),
+    refreshExpiringSession: (accountId) => codexServices.accounts.refreshExpiringSession(accountId),
+    onSnapshotChanged: () => refreshTrayTitle(),
+    onRefreshError: (account, error) => {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to refresh auth for ${account.email ?? account.id}: ${detail}`)
+    }
+  })
 
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
@@ -792,6 +809,54 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('codex:import-current-account', async () => {
     await codexServices.accounts.importCurrent()
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:import-accounts-from-file', async () => {
+    const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
+    const openDialogOptions: OpenDialogOptions = {
+      title: 'Import accounts',
+      properties: ['openFile'],
+      filters: [
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    }
+    const selection = dialogWindow
+      ? await dialog.showOpenDialog(dialogWindow, openDialogOptions)
+      : await dialog.showOpenDialog(openDialogOptions)
+
+    if (selection.canceled || !selection.filePaths[0]) {
+      return refreshTrayTitle()
+    }
+
+    const raw = await fs.readFile(selection.filePaths[0], 'utf8')
+    await codexServices.accounts.importFromTemplate(raw)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:export-accounts-to-file', async () => {
+    const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
+    const exportPath = join(
+      app.getPath('downloads'),
+      `sub2api-account-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}.json`
+    )
+    const saveDialogOptions: SaveDialogOptions = {
+      title: 'Export accounts',
+      defaultPath: exportPath,
+      filters: [
+        { name: 'JSON', extensions: ['json'] },
+        { name: 'All Files', extensions: ['*'] }
+      ]
+    }
+    const selection = dialogWindow
+      ? await dialog.showSaveDialog(dialogWindow, saveDialogOptions)
+      : await dialog.showSaveDialog(saveDialogOptions)
+
+    if (selection.canceled || !selection.filePath) {
+      return refreshTrayTitle()
+    }
+
+    const raw = await codexServices.accounts.exportToTemplate()
+    await fs.writeFile(selection.filePath, raw, 'utf8')
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:activate-account', async (_, accountId: string) => {
@@ -926,9 +991,11 @@ app.whenReady().then(async () => {
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:read-account-rate-limits', async (_, accountId: string) => {
-    const rateLimits = await codexServices.usage.read(accountId)
-    void refreshTrayTitle()
-    return rateLimits
+    try {
+      return await codexServices.usage.read(accountId)
+    } finally {
+      await refreshTrayTitle()
+    }
   })
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => requireAppUpdaterService().downloadUpdate())
@@ -943,6 +1010,7 @@ app.whenReady().then(async () => {
   }
   void refreshTrayTitle()
   appUpdaterService.start()
+  authRefreshController.start()
   usagePollingController.start()
 
   app.on('activate', function () {
@@ -963,6 +1031,7 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   appUpdaterService?.stop()
+  authRefreshController?.stop()
   usagePollingController?.stop()
   mainWindow = null
   tray = null

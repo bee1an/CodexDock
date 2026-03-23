@@ -29,6 +29,8 @@ export const messages = {
     callbackLogin: '回调登录',
     deviceLogin: '设备码登录',
     importCurrent: '导入当前登录',
+    importAccountsFile: '导入账号文件',
+    exportAccountsFile: '导出账号文件',
     switchBest: '切换到最优账号',
     alreadyBest: '当前已是最优账号',
     noBestAccount: '暂无可切换账号',
@@ -85,6 +87,9 @@ export const messages = {
     noAccountsForFilter: '当前筛选下没有账号。',
     deleteTagConfirm: (name: string) => `删除标签 ${name}？已绑定账号会一并取消关联。`,
     active: '当前',
+    accountExpired: '已过期',
+    accountUsageRefreshFailed: '刷新失败',
+    accountExpiredHint: '登录态已失效，请重新登录或重新导入当前登录。',
     sessionQuota: '5小时',
     weeklyQuota: '周限额',
     sessionReset: '5小时重置',
@@ -176,6 +181,8 @@ export const messages = {
     callbackLogin: 'Callback login',
     deviceLogin: 'Device code login',
     importCurrent: 'Import current login',
+    importAccountsFile: 'Import account file',
+    exportAccountsFile: 'Export account file',
     switchBest: 'Switch to best account',
     alreadyBest: 'Already using best account',
     noBestAccount: 'No account to switch to',
@@ -234,6 +241,9 @@ export const messages = {
     deleteTagConfirm: (name: string) =>
       `Delete tag ${name}? It will also be removed from any assigned accounts.`,
     active: 'Active',
+    accountExpired: 'Expired',
+    accountUsageRefreshFailed: 'Refresh failed',
+    accountExpiredHint: 'Session is no longer valid. Sign in again or re-import the current login.',
     sessionQuota: 'Session',
     weeklyQuota: 'Weekly',
     sessionReset: 'Session resets',
@@ -398,6 +408,27 @@ export function accountCardTone(active: boolean): string {
   return active
     ? 'theme-account-card theme-account-card-active border-black/14 bg-black/[0.02]'
     : 'theme-account-card border-black/8 bg-white'
+}
+
+export function usageErrorKind(message?: string): 'expired' | 'error' | null {
+  if (!message) {
+    return null
+  }
+
+  const normalized = message.toLowerCase()
+
+  if (
+    normalized.includes('invalid_grant') ||
+    normalized.includes('token refresh failed') ||
+    normalized.includes('missing refresh token') ||
+    normalized.includes('missing access token') ||
+    normalized.includes('failed: 401') ||
+    normalized.includes('failed: 403')
+  ) {
+    return 'expired'
+  }
+
+  return 'error'
 }
 
 export function progressWidth(value?: number | null): string {

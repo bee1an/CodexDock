@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.0 - 2026-03-23
+
+This release improves desktop account lifecycle management with import/export, persistent session status, and background token upkeep.
+
+- Added account file import and export in the desktop toolbar so saved Codex logins can move in and out using the external account template format.
+- Added background session refresh for saved accounts so expiring access tokens are renewed proactively and the active Codex auth file stays in sync.
+- Persisted expired and refresh-failed account states across app restarts, and clear stale usage snapshots when a saved login can no longer be refreshed.
+- Improved account status badges so expired and failed refresh states are shown directly in the account list instead of leaving stale quota numbers on screen.
+- Refined provider card styling in light and dark themes so custom provider rows, badges, and edit controls match the rest of the desktop UI more cleanly.
+
 ## 0.2.6 - 2026-03-11
 
 This patch release fixes the desktop settings flow around update actions and isolated Codex launch configuration.

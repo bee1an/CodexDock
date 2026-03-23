@@ -56,6 +56,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       codexDesktopExecutablePath: ''
     },
     usageByAccountId: {},
+    usageErrorByAccountId: {},
     ...overrides
   }
 }

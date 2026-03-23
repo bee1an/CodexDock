@@ -5,7 +5,13 @@
   import FooterBar from './components/FooterBar.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
-  import { accountLabel, messages, pollingOptions, statusBarAccounts } from './components/app-view'
+  import {
+    accountLabel,
+    messages,
+    pollingOptions,
+    statusBarAccounts,
+    usageErrorKind
+  } from './components/app-view'
 
   import type {
     AppLanguage,
@@ -44,7 +50,8 @@
       checkForUpdatesOnStartup: true,
       codexDesktopExecutablePath: ''
     },
-    usageByAccountId: {}
+    usageByAccountId: {},
+    usageErrorByAccountId: {}
   }
   let appMeta: AppMeta = {
     version: '--',
@@ -187,6 +194,9 @@
     usageByAccountId = {
       ...nextSnapshot.usageByAccountId
     }
+    usageErrorByAccountId = {
+      ...nextSnapshot.usageErrorByAccountId
+    }
     syncUsageState(nextSnapshot.accounts)
   }
 
@@ -194,6 +204,19 @@
     const nextState = { ...usageErrorByAccountId }
     delete nextState[accountId]
     usageErrorByAccountId = nextState
+  }
+
+  const clearUsageData = (accountId: string): void => {
+    const nextUsageByAccountId = { ...usageByAccountId }
+    delete nextUsageByAccountId[accountId]
+    usageByAccountId = nextUsageByAccountId
+
+    const nextSnapshotUsageByAccountId = { ...snapshot.usageByAccountId }
+    delete nextSnapshotUsageByAccountId[accountId]
+    snapshot = {
+      ...snapshot,
+      usageByAccountId: nextSnapshotUsageByAccountId
+    }
   }
 
   const localizeKnownError = (
@@ -446,6 +469,10 @@
         }
       }
     } catch (error) {
+      if (usageErrorKind(error instanceof Error ? error.message : undefined) === 'expired') {
+        clearUsageData(account.id)
+      }
+
       usageErrorByAccountId = {
         ...usageErrorByAccountId,
         [account.id]: localizeKnownError(error, copyForLanguage().readRateLimitFailed)
@@ -670,6 +697,14 @@
           closeExpandablePanels()
           return runAction('import', () => window.codexApp.importCurrentAccount())
         }}
+        importAccountsFile={() => {
+          closeExpandablePanels()
+          return runAction('import:file', () => window.codexApp.importAccountsFromFile())
+        }}
+        exportAccountsFile={() => {
+          closeExpandablePanels()
+          return runAction('export:file', () => window.codexApp.exportAccountsToFile())
+        }}
         {refreshAllRateLimits}
         activateBestAccount={() => {
           closeExpandablePanels()
@@ -735,6 +770,7 @@
         activeAccountId={snapshot.activeAccountId}
         {usageByAccountId}
         {usageLoadingByAccountId}
+        {usageErrorByAccountId}
         loginActionBusy={loginActionBusy()}
         {loginStarting}
         openAccountInCodex={(accountId) =>
@@ -817,7 +853,8 @@
   :global(html[data-theme='dark'] .theme-toolbar),
   :global(html[data-theme='dark'] .theme-version-pill),
   :global(html[data-theme='dark'] .theme-plan-neutral),
-  :global(html[data-theme='dark'] .theme-menu-choice-active) {
+  :global(html[data-theme='dark'] .theme-menu-choice-active),
+  :global(html[data-theme='dark'] .theme-provider-toggle) {
     background: var(--surface-soft) !important;
   }
 
@@ -885,6 +922,45 @@
   :global(html[data-theme='dark'] .theme-select) {
     border-color: var(--line) !important;
     background: var(--panel-strong) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-card) {
+    border-color: var(--line-strong) !important;
+    background:
+      linear-gradient(
+        180deg,
+        color-mix(in srgb, var(--panel-strong) 92%, white 8%),
+        color-mix(in srgb, var(--panel) 96%, black 4%)
+      ) !important;
+    box-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.06) inset,
+      0 14px 36px color-mix(in srgb, var(--paper-shadow) 44%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-input),
+  :global(html[data-theme='dark'] .theme-provider-toggle) {
+    border-color: var(--line) !important;
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-input) {
+    background: var(--panel-strong) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-input::placeholder) {
+    color: var(--ink-faint) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-badge) {
+    border-color: rgb(56 189 248 / 0.24) !important;
+    background: rgb(14 165 233 / 0.18) !important;
+    color: rgb(186 230 253) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-fast-badge) {
+    border-color: rgb(16 185 129 / 0.24) !important;
+    background: rgb(16 185 129 / 0.18) !important;
+    color: rgb(167 243 208) !important;
   }
 
   :global(html[data-theme='dark'] .theme-select option) {

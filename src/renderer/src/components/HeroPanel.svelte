@@ -30,6 +30,8 @@
   export let activeAccountId: string | undefined
   export let startLogin: (method: LoginMethod) => void
   export let importCurrent: () => void
+  export let importAccountsFile: () => void
+  export let exportAccountsFile: () => void
   export let refreshAllRateLimits: () => void
   export let activateBestAccount: () => void
   export let toggleSettings: () => void
@@ -176,6 +178,23 @@
         title={copy.importCurrent}
       >
         <span class="i-lucide-plus h-4.5 w-4.5"></span>
+      </button>
+      <button
+        class={iconToolbarButton}
+        on:click={importAccountsFile}
+        disabled={loginActionBusy}
+        aria-label={copy.importAccountsFile}
+        title={copy.importAccountsFile}
+      >
+        <span class="i-lucide-file-up h-4.5 w-4.5"></span>
+      </button>
+      <button
+        class={iconToolbarButton}
+        on:click={exportAccountsFile}
+        aria-label={copy.exportAccountsFile}
+        title={copy.exportAccountsFile}
+      >
+        <span class="i-lucide-file-down h-4.5 w-4.5"></span>
       </button>
       <button
         class={iconToolbarButton}

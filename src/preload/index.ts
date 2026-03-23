@@ -22,6 +22,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:update-settings', nextSettings),
   openMainWindow: () => ipcRenderer.invoke('codex:open-main-window'),
   importCurrentAccount: () => ipcRenderer.invoke('codex:import-current-account'),
+  importAccountsFromFile: () => ipcRenderer.invoke('codex:import-accounts-from-file'),
+  exportAccountsToFile: () => ipcRenderer.invoke('codex:export-accounts-to-file'),
   activateAccount: (accountId: string) => ipcRenderer.invoke('codex:activate-account', accountId),
   activateBestAccount: () => ipcRenderer.invoke('codex:activate-best-account'),
   reorderAccounts: (accountIds: string[]) =>

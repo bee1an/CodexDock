@@ -174,6 +174,7 @@ export interface AppSnapshot {
   loginInProgress: boolean
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
+  usageErrorByAccountId: Record<string, string>
 }
 
 export interface LoginAttempt {
