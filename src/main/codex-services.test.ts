@@ -93,11 +93,7 @@ describe('createCodexServices', () => {
       ) => {
         const resolvedArgs = Array.isArray(args) ? args : []
         const resolvedCallback =
-          typeof args === 'function'
-            ? args
-            : typeof options === 'function'
-              ? options
-              : callback
+          typeof args === 'function' ? args : typeof options === 'function' ? options : callback
 
         if (!resolvedCallback) {
           throw new Error('Missing execFile callback')
@@ -163,17 +159,17 @@ describe('createCodexServices', () => {
     processKillSpy = vi
       .spyOn(process, 'kill')
       .mockImplementation((pid: number, signal?: string | number) => {
-      if (signal === 0) {
-        if (!mockedProcessState.runningPids.has(pid)) {
-          throw Object.assign(new Error('not running'), { code: 'ESRCH' })
+        if (signal === 0) {
+          if (!mockedProcessState.runningPids.has(pid)) {
+            throw Object.assign(new Error('not running'), { code: 'ESRCH' })
+          }
+          return true
         }
-        return true
-      }
 
-      mockedProcessState.runningPids.delete(pid)
-      mockedProcessState.pidHomes.delete(pid)
-      return true
-    })
+        mockedProcessState.runningPids.delete(pid)
+        mockedProcessState.pidHomes.delete(pid)
+        return true
+      })
   })
 
   afterEach(async () => {
@@ -181,7 +177,9 @@ describe('createCodexServices', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform })
     process.env.HOME = originalHome
     await Promise.all(
-      createdDirectories.splice(0).map((directory) => rm(directory, { recursive: true, force: true }))
+      createdDirectories
+        .splice(0)
+        .map((directory) => rm(directory, { recursive: true, force: true }))
     )
   })
 
@@ -244,7 +242,9 @@ describe('createCodexServices', () => {
 
     expect(globalAuth.tokens?.account_id).toBe('acct-a')
     expect(instanceAuth.tokens?.account_id).toBe('acct-b')
-    expect(mockedProcessState.spawnedCommands.at(-1)).toBe('/Applications/Codex.app/Contents/MacOS/Codex')
+    expect(mockedProcessState.spawnedCommands.at(-1)).toBe(
+      '/Applications/Codex.app/Contents/MacOS/Codex'
+    )
   })
 
   it('uses the configured desktop executable path for isolated launches when provided', async () => {
@@ -278,11 +278,7 @@ describe('createCodexServices', () => {
         callback?: (error: Error | null, stdout: string, stderr: string) => void
       ) => {
         const resolvedCallback =
-          typeof args === 'function'
-            ? args
-            : typeof options === 'function'
-              ? options
-              : callback
+          typeof args === 'function' ? args : typeof options === 'function' ? options : callback
 
         if (!resolvedCallback) {
           throw new Error('Missing execFile callback')
@@ -315,7 +311,11 @@ describe('createCodexServices', () => {
     })
 
     await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
-    await writeFile(join(process.env.HOME ?? '', '.codex', 'config.toml'), 'model = "gpt-5"\n', 'utf8')
+    await writeFile(
+      join(process.env.HOME ?? '', '.codex', 'config.toml'),
+      'model = "gpt-5"\n',
+      'utf8'
+    )
     await writeFile(join(process.env.HOME ?? '', '.codex', 'memory.md'), '# memory\n', 'utf8')
     await writeFile(join(process.env.HOME ?? '', '.codex', 'history.jsonl'), '{}\n', 'utf8')
     await mkdir(join(process.env.HOME ?? '', '.codex', 'worktrees', 'demo'), { recursive: true })
@@ -350,7 +350,11 @@ describe('createCodexServices', () => {
     })
 
     await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
-    await writeFile(join(process.env.HOME ?? '', '.codex', 'config.toml'), 'model = "gpt-5"\n', 'utf8')
+    await writeFile(
+      join(process.env.HOME ?? '', '.codex', 'config.toml'),
+      'model = "gpt-5"\n',
+      'utf8'
+    )
     await services.accounts.importCurrent()
 
     const created = await services.providers.create({
@@ -382,7 +386,9 @@ describe('createCodexServices', () => {
     await expect(readFile(join(isolatedHome!, 'config.toml'), 'utf8')).resolves.toContain(
       'base_url = "https://api.bee1an.us.kg/v1"'
     )
-    expect(mockedProcessState.spawnedCommands.at(-1)).toBe('/Applications/Codex.app/Contents/MacOS/Codex')
+    expect(mockedProcessState.spawnedCommands.at(-1)).toBe(
+      '/Applications/Codex.app/Contents/MacOS/Codex'
+    )
   })
 
   it('restarts only the default instance when codex.open(accountId) is called', async () => {
@@ -462,7 +468,6 @@ describe('createCodexServices', () => {
       [account.id]: staleUsage
     }
     await writeFile(statePath, `${JSON.stringify(persistedState, null, 2)}\n`, 'utf8')
-
     ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
       new Response('unauthorized', {
         status: 401,
@@ -476,6 +481,204 @@ describe('createCodexServices', () => {
 
     const nextSnapshot = await services.getSnapshot()
     expect(nextSnapshot.usageByAccountId[account.id]).toBeUndefined()
+  })
+
+  it('exports accounts with the minimal aligned template schema', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const statePath = join(env.userDataPath, 'codex-accounts.json')
+    const persistedState = JSON.parse(await readFile(statePath, 'utf8')) as {
+      accounts: Array<{ id: string }>
+      usageByAccountId: Record<string, unknown>
+    }
+    const accountId = persistedState.accounts[0]?.id
+    expect(accountId).toBeTruthy()
+    persistedState.usageByAccountId = {
+      ...persistedState.usageByAccountId,
+      [accountId!]: {
+        limitId: 'codex',
+        limitName: null,
+        planType: 'plus',
+        primary: { usedPercent: 12, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+        secondary: { usedPercent: 34, windowDurationMins: 10_080, resetsAt: 1_800_500_000 },
+        credits: null,
+        limits: [],
+        fetchedAt: '2026-03-19T00:00:00.000Z'
+      }
+    }
+    await writeFile(statePath, `${JSON.stringify(persistedState, null, 2)}\n`, 'utf8')
+
+    const exported = JSON.parse(await services.accounts.exportToTemplate()) as {
+      exported_at: string
+      accounts: Array<Record<string, unknown>>
+      proxies?: unknown
+    }
+
+    expect(typeof exported.exported_at).toBe('string')
+    expect(exported.proxies).toBeUndefined()
+    expect(exported.accounts).toHaveLength(1)
+    expect(exported.accounts[0]).toEqual({
+      auth: {
+        access_token: expect.any(String),
+        refresh_token: 'refresh-acct-a',
+        id_token: expect.any(String),
+        chatgpt_account_id: 'acct-a'
+      },
+      usage: {
+        plan_type: 'plus',
+        primary: {
+          used_percent: 12,
+          window_minutes: 300,
+          reset_at: '2027-01-15T08:00:00.000Z'
+        },
+        secondary: {
+          used_percent: 34,
+          window_minutes: 10080,
+          reset_at: '2027-01-21T02:53:20.000Z'
+        },
+        updated_at: '2026-03-19T00:00:00.000Z'
+      }
+    })
+    expect(exported.accounts[0]).not.toHaveProperty('name')
+    expect(exported.accounts[0]).not.toHaveProperty('notes')
+    expect(exported.accounts[0]).not.toHaveProperty('concurrency')
+    expect(exported.accounts[0]).not.toHaveProperty('priority')
+    expect(exported.accounts[0]).not.toHaveProperty('rate_multiplier')
+    expect(exported.accounts[0]).not.toHaveProperty('auto_pause_on_expired')
+  })
+
+  it('exports only the selected accounts', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-b', 'b@example.com'))
+    await services.accounts.importCurrent()
+
+    const snapshot = await services.getSnapshot()
+    const accountA = snapshot.accounts.find((account) => account.email === 'a@example.com')
+    expect(accountA).toBeTruthy()
+
+    const exported = JSON.parse(await services.accounts.exportToTemplate([accountA!.id])) as {
+      accounts: Array<{
+        auth: {
+          chatgpt_account_id: string
+        }
+      }>
+    }
+
+    expect(exported.accounts).toHaveLength(1)
+    expect(exported.accounts[0]?.auth.chatgpt_account_id).toBe('acct-a')
+  })
+
+  it('imports the aligned template schema and rejects missing auth fields', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      JSON.stringify({
+        exported_at: '2026-03-24T08:00:00.000Z',
+        accounts: [
+          {
+            auth: {
+              access_token: createJwt({
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                'https://api.openai.com/auth': {
+                  chatgpt_account_id: 'acct-b'
+                }
+              }),
+              refresh_token: 'refresh-acct-b',
+              id_token: createJwt({
+                email: 'b@example.com',
+                name: 'b',
+                'https://api.openai.com/auth': {
+                  chatgpt_account_id: 'acct-b'
+                }
+              }),
+              chatgpt_account_id: 'acct-b'
+            },
+            usage: {
+              plan_type: 'pro',
+              primary: {
+                used_percent: 20,
+                window_minutes: 300,
+                reset_at: '2026-03-24T10:00:00.000Z'
+              },
+              secondary: {
+                used_percent: 40,
+                window_minutes: 10080,
+                reset_at: '2026-03-31T08:00:00.000Z'
+              },
+              updated_at: '2026-03-24T08:00:00.000Z'
+            }
+          }
+        ]
+      })
+    )
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.accounts[0]?.email).toBe('b@example.com')
+    expect(snapshot.usageByAccountId[snapshot.accounts[0]!.id]).toMatchObject({
+      planType: 'pro',
+      primary: {
+        usedPercent: 20,
+        windowDurationMins: 300
+      },
+      secondary: {
+        usedPercent: 40,
+        windowDurationMins: 10080
+      }
+    })
+
+    await expect(
+      services.accounts.importFromTemplate(
+        JSON.stringify({
+          exported_at: '2026-03-24T08:00:00.000Z',
+          accounts: [{}]
+        })
+      )
+    ).rejects.toThrow('missing required field: auth')
+  })
+
+  it('removes multiple accounts in one call', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-b', 'b@example.com'))
+    await services.accounts.importCurrent()
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-c', 'c@example.com'))
+    await services.accounts.importCurrent()
+
+    const snapshot = await services.getSnapshot()
+    const targets = snapshot.accounts
+      .filter((account) => ['a@example.com', 'c@example.com'].includes(account.email ?? ''))
+      .map((account) => account.id)
+
+    const nextSnapshot = await services.accounts.removeMany(targets)
+    expect(nextSnapshot.accounts.map((account) => account.email)).toEqual(['b@example.com'])
   })
 
   it('refreshes expiring stored sessions and syncs the current auth file', async () => {

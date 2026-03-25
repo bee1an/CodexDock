@@ -194,6 +194,41 @@ function loadRendererWindow(
   return window.loadURL(buildRendererUrl(query))
 }
 
+async function saveAccountsExport(
+  raw: string,
+  options?: {
+    title?: string
+    defaultFilePrefix?: string
+  }
+): Promise<void> {
+  const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
+  const filePrefix = options?.defaultFilePrefix ?? 'ilovecodex-accounts'
+  const exportPath = join(
+    app.getPath('downloads'),
+    `${filePrefix}-${new Date()
+      .toISOString()
+      .replace(/[-:.TZ]/g, '')
+      .slice(0, 14)}.json`
+  )
+  const saveDialogOptions: SaveDialogOptions = {
+    title: options?.title ?? 'Export accounts',
+    defaultPath: exportPath,
+    filters: [
+      { name: 'JSON', extensions: ['json'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  }
+  const selection = dialogWindow
+    ? await dialog.showSaveDialog(dialogWindow, saveDialogOptions)
+    : await dialog.showSaveDialog(saveDialogOptions)
+
+  if (selection.canceled || !selection.filePath) {
+    return
+  }
+
+  await fs.writeFile(selection.filePath, raw, 'utf8')
+}
+
 function buildTrayTitle(snapshot: AppSnapshot): string {
   const account = resolveCurrentAccount(snapshot)
   if (!account) {
@@ -834,29 +869,16 @@ app.whenReady().then(async () => {
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:export-accounts-to-file', async () => {
-    const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
-    const exportPath = join(
-      app.getPath('downloads'),
-      `sub2api-account-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}.json`
-    )
-    const saveDialogOptions: SaveDialogOptions = {
-      title: 'Export accounts',
-      defaultPath: exportPath,
-      filters: [
-        { name: 'JSON', extensions: ['json'] },
-        { name: 'All Files', extensions: ['*'] }
-      ]
-    }
-    const selection = dialogWindow
-      ? await dialog.showSaveDialog(dialogWindow, saveDialogOptions)
-      : await dialog.showSaveDialog(saveDialogOptions)
-
-    if (selection.canceled || !selection.filePath) {
-      return refreshTrayTitle()
-    }
-
     const raw = await codexServices.accounts.exportToTemplate()
-    await fs.writeFile(selection.filePath, raw, 'utf8')
+    await saveAccountsExport(raw)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:export-selected-accounts-to-file', async (_, accountIds: string[]) => {
+    const raw = await codexServices.accounts.exportToTemplate(accountIds)
+    await saveAccountsExport(raw, {
+      title: 'Export selected accounts',
+      defaultFilePrefix: 'ilovecodex-selected-accounts'
+    })
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:activate-account', async (_, accountId: string) => {
@@ -873,6 +895,10 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('codex:remove-account', async (_, accountId: string) => {
     await codexServices.accounts.remove(accountId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:remove-accounts', async (_, accountIds: string[]) => {
+    await codexServices.accounts.removeMany(accountIds)
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:update-account-tags', async (_, accountId: string, tagIds: string[]) => {
@@ -892,7 +918,9 @@ app.whenReady().then(async () => {
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:list-providers', () => codexServices.providers.list())
-  ipcMain.handle('codex:get-provider', (_, providerId: string) => codexServices.providers.get(providerId))
+  ipcMain.handle('codex:get-provider', (_, providerId: string) =>
+    codexServices.providers.get(providerId)
+  )
   ipcMain.handle('codex:reorder-providers', async (_, providerIds: string[]) => {
     await codexServices.providers.reorder(providerIds)
     return refreshTrayTitle()

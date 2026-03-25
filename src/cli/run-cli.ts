@@ -1,5 +1,4 @@
 import type {
-  AccountRateLimits,
   AccountTag,
   AccountSummary,
   AppSettings,
@@ -7,410 +6,38 @@ import type {
   CliAccountListPayload,
   CliLoginResult,
   CliResult,
-  CliSettingsKey,
-  CreateCustomProviderInput,
-  CurrentSessionSummary,
-  CustomProviderSummary,
   LoginEvent,
-  UpdateCustomProviderInput,
+  UpdateCustomProviderInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import type { CodexServices } from '../main/codex-services'
+import { CliError, EXIT_ENVIRONMENT, EXIT_FAILURE, EXIT_OK, EXIT_USAGE } from './cli-errors'
+import {
+  ensureSettingsKey,
+  parseFlags,
+  parseProviderOptions,
+  parseSettingsValue,
+  type CliFlags
+} from './cli-parsing'
+import {
+  accountLabel,
+  printAccountList,
+  printHelp,
+  printIfNeeded,
+  printProviders,
+  printSettings,
+  printTags,
+  printUsage,
+  providerLabel,
+  sessionLabel,
+  tagLabel,
+  toCliResult
+} from './cli-output'
 
 interface CliRuntime {
   services: CodexServices
   platform: Pick<CodexPlatformAdapter, 'openExternal'>
   subscribeLoginEvents(listener: (event: LoginEvent) => void): () => void
-}
-
-interface CliFlags {
-  json: boolean
-  quiet: boolean
-  openBrowser: boolean
-  timeoutSeconds?: number
-  help: boolean
-}
-
-class CliError extends Error {
-  constructor(
-    message: string,
-    readonly code: number
-  ) {
-    super(message)
-    this.name = 'CliError'
-  }
-}
-
-const EXIT_OK = 0
-const EXIT_FAILURE = 1
-const EXIT_USAGE = 2
-const EXIT_ENVIRONMENT = 3
-const SETTING_KEYS: CliSettingsKey[] = [
-  'usagePollingMinutes',
-  'statusBarAccountIds',
-  'language',
-  'theme',
-  'checkForUpdatesOnStartup',
-  'codexDesktopExecutablePath'
-]
-
-function parseFlags(argv: string[]): { flags: CliFlags; positionals: string[] } {
-  const flags: CliFlags = {
-    json: false,
-    quiet: false,
-    openBrowser: true,
-    help: false
-  }
-  const positionals: string[] = []
-  let seenCommand = false
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-
-    if (arg === '--') {
-      positionals.push(...argv.slice(index + 1))
-      break
-    }
-
-    if (arg === '--json') {
-      flags.json = true
-      continue
-    }
-
-    if (arg === '--quiet') {
-      flags.quiet = true
-      continue
-    }
-
-    if (arg === '--no-open') {
-      flags.openBrowser = false
-      continue
-    }
-
-    if (arg === '--help' || arg === '-h') {
-      flags.help = true
-      continue
-    }
-
-    if (arg === '--timeout') {
-      const value = argv[index + 1]
-      if (!value) {
-        throw new CliError('Missing value for --timeout', EXIT_USAGE)
-      }
-      const parsed = Number(value)
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new CliError('Invalid --timeout value', EXIT_USAGE)
-      }
-      flags.timeoutSeconds = parsed
-      index += 1
-      continue
-    }
-
-    if (arg.startsWith('--timeout=')) {
-      const parsed = Number(arg.slice('--timeout='.length))
-      if (!Number.isFinite(parsed) || parsed <= 0) {
-        throw new CliError('Invalid --timeout value', EXIT_USAGE)
-      }
-      flags.timeoutSeconds = parsed
-      continue
-    }
-
-    if (arg.startsWith('--')) {
-      if (seenCommand) {
-        positionals.push(arg)
-        continue
-      }
-
-      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
-    }
-
-    positionals.push(arg)
-    seenCommand = true
-  }
-
-  return { flags, positionals }
-}
-
-function printHelp(): void {
-  console.log(`ilc
-
-Usage:
-  ilc account list [--json]
-  ilc account import-current [--json]
-  ilc account activate <account-id> [--json]
-  ilc account best [--json]
-  ilc account remove <account-id> [--json]
-  ilc provider list [--json]
-  ilc provider create --base-url <url> --api-key <key> [--name <name>] [--model <model>] [--fast <true|false>] [--json]
-  ilc provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--model <model>] [--fast <true|false>] [--json]
-  ilc provider remove <provider-id> [--json]
-  ilc provider open <provider-id> [--json]
-  ilc tag list [--json]
-  ilc tag create <name> [--json]
-  ilc tag rename <tag-id> <name> [--json]
-  ilc tag remove <tag-id> [--json]
-  ilc tag assign <account-id> <tag-id> [--json]
-  ilc tag unassign <account-id> <tag-id> [--json]
-  ilc session current [--json]
-  ilc usage read [account-id] [--json]
-  ilc login browser [--json] [--no-open] [--timeout <sec>]
-  ilc login device [--json] [--timeout <sec>]
-  ilc login port status [--json]
-  ilc login port kill [--json]
-  ilc codex open [account-id] [--json]
-  ilc codex open-isolated <account-id> [--json]
-  ilc settings get [key] [--json]
-  ilc settings set <key> <value> [--json]
-
-Global options:
-  --json        Output { ok, data, error }
-  --quiet       Suppress non-error text output
-  --no-open     Do not auto-open browser for callback login
-  --timeout     Fail waiting commands after N seconds
-  --help        Show this help`)
-}
-
-function accountLabel(
-  account?: Pick<AccountSummary, 'email' | 'name' | 'accountId' | 'id'> | null
-): string {
-  if (!account) {
-    return 'unknown'
-  }
-
-  return account.email ?? account.name ?? account.accountId ?? account.id
-}
-
-function sessionLabel(session: CurrentSessionSummary | null): string {
-  if (!session) {
-    return 'none'
-  }
-
-  return session.email ?? session.name ?? session.accountId ?? 'current'
-}
-
-function tagLabel(tag?: Pick<AccountTag, 'id' | 'name'> | null): string {
-  if (!tag) {
-    return 'unknown'
-  }
-
-  return tag.name || tag.id
-}
-
-function providerLabel(provider?: Pick<CustomProviderSummary, 'id' | 'name' | 'baseUrl'> | null): string {
-  if (!provider) {
-    return 'unknown'
-  }
-
-  return provider.name ?? provider.baseUrl ?? provider.id
-}
-
-function printIfNeeded(message: string, quiet: boolean): void {
-  if (!quiet) {
-    console.log(message)
-  }
-}
-
-function toCliResult<T>(data: T): CliResult<T> {
-  return {
-    ok: true,
-    data,
-    error: null
-  }
-}
-
-function parseSettingsValue(key: CliSettingsKey, rawValue: string): AppSettings[CliSettingsKey] {
-  switch (key) {
-    case 'usagePollingMinutes': {
-      const parsed = Number(rawValue)
-      if (!Number.isInteger(parsed) || parsed <= 0) {
-        throw new CliError('usagePollingMinutes must be a positive integer', EXIT_USAGE)
-      }
-      return parsed
-    }
-    case 'statusBarAccountIds':
-      return rawValue
-        .split(',')
-        .map((value) => value.trim())
-        .filter(Boolean)
-        .slice(0, 5)
-    case 'language':
-      if (rawValue !== 'zh-CN' && rawValue !== 'en') {
-        throw new CliError('language must be zh-CN or en', EXIT_USAGE)
-      }
-      return rawValue
-    case 'theme':
-      if (rawValue !== 'light' && rawValue !== 'dark' && rawValue !== 'system') {
-        throw new CliError('theme must be light, dark, or system', EXIT_USAGE)
-      }
-      return rawValue
-    case 'checkForUpdatesOnStartup':
-      if (rawValue !== 'true' && rawValue !== 'false') {
-        throw new CliError('checkForUpdatesOnStartup must be true or false', EXIT_USAGE)
-      }
-      return rawValue === 'true'
-    case 'codexDesktopExecutablePath':
-      return rawValue.trim()
-  }
-}
-
-function ensureSettingsKey(value: string): CliSettingsKey {
-  if (!SETTING_KEYS.includes(value as CliSettingsKey)) {
-    throw new CliError(`Unknown settings key: ${value}`, EXIT_USAGE)
-  }
-
-  return value as CliSettingsKey
-}
-
-function printAccountList(payload: CliAccountListPayload, quiet: boolean): void {
-  if (quiet) {
-    return
-  }
-
-  if (!payload.accounts.length) {
-    console.log('No stored accounts')
-    console.log(`Current session: ${sessionLabel(payload.currentSession)}`)
-    return
-  }
-
-  for (const account of payload.accounts) {
-    const marker = account.id === payload.activeAccountId ? '*' : ' '
-    console.log(`${marker} ${account.id}  ${accountLabel(account)}`)
-  }
-
-  console.log(`Current session: ${sessionLabel(payload.currentSession)}`)
-}
-
-function printUsage(rateLimits: AccountRateLimits, quiet: boolean): void {
-  if (quiet) {
-    return
-  }
-
-  const primary = rateLimits.primary
-    ? `${Math.max(0, 100 - rateLimits.primary.usedPercent)}%`
-    : '--'
-  const secondary = rateLimits.secondary
-    ? `${Math.max(0, 100 - rateLimits.secondary.usedPercent)}%`
-    : '--'
-
-  console.log(`Plan: ${rateLimits.planType ?? 'unknown'}`)
-  console.log(`Primary remaining: ${primary}`)
-  console.log(`Secondary remaining: ${secondary}`)
-  if (rateLimits.credits) {
-    console.log(
-      `Credits: ${rateLimits.credits.unlimited ? 'unlimited' : (rateLimits.credits.balance ?? '--')}`
-    )
-  }
-}
-
-function printTags(tags: AccountTag[], quiet: boolean): void {
-  if (quiet) {
-    return
-  }
-
-  if (!tags.length) {
-    console.log('No tags')
-    return
-  }
-
-  for (const tag of tags) {
-    console.log(`${tag.id}  ${tag.name}`)
-  }
-}
-
-function printProviders(providers: CustomProviderSummary[], quiet: boolean): void {
-  if (quiet) {
-    return
-  }
-
-  if (!providers.length) {
-    console.log('No custom providers')
-    return
-  }
-
-  for (const provider of providers) {
-    console.log(
-      `${provider.id}  ${providerLabel(provider)}  ${provider.model}  ${provider.fastMode ? 'fast' : 'normal'}`
-    )
-  }
-}
-
-function printSettings(settings: AppSettings, quiet: boolean): void {
-  if (quiet) {
-    return
-  }
-
-  console.log(`usagePollingMinutes=${settings.usagePollingMinutes}`)
-  console.log(`statusBarAccountIds=${settings.statusBarAccountIds.join(',')}`)
-  console.log(`language=${settings.language}`)
-  console.log(`theme=${settings.theme}`)
-  console.log(`checkForUpdatesOnStartup=${settings.checkForUpdatesOnStartup}`)
-  console.log(`codexDesktopExecutablePath=${settings.codexDesktopExecutablePath}`)
-}
-
-function parseProviderOptions(argv: string[]): {
-  input: Partial<CreateCustomProviderInput & UpdateCustomProviderInput>
-  positionals: string[]
-} {
-  const input: Partial<CreateCustomProviderInput & UpdateCustomProviderInput> = {}
-  const positionals: string[] = []
-
-  for (let index = 0; index < argv.length; index += 1) {
-    const arg = argv[index]
-    const value = argv[index + 1]
-
-    if (arg === '--name') {
-      if (!value) {
-        throw new CliError('Missing value for --name', EXIT_USAGE)
-      }
-      input.name = value
-      index += 1
-      continue
-    }
-
-    if (arg === '--base-url') {
-      if (!value) {
-        throw new CliError('Missing value for --base-url', EXIT_USAGE)
-      }
-      input.baseUrl = value
-      index += 1
-      continue
-    }
-
-    if (arg === '--api-key') {
-      if (!value) {
-        throw new CliError('Missing value for --api-key', EXIT_USAGE)
-      }
-      input.apiKey = value
-      index += 1
-      continue
-    }
-
-    if (arg === '--model') {
-      if (!value) {
-        throw new CliError('Missing value for --model', EXIT_USAGE)
-      }
-      input.model = value
-      index += 1
-      continue
-    }
-
-    if (arg === '--fast') {
-      if (!value || (value !== 'true' && value !== 'false')) {
-        throw new CliError('--fast must be true or false', EXIT_USAGE)
-      }
-      input.fastMode = value === 'true'
-      index += 1
-      continue
-    }
-
-    if (arg.startsWith('--')) {
-      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
-    }
-
-    positionals.push(arg)
-  }
-
-  return { input, positionals }
 }
 
 async function waitForLoginResult(
@@ -610,7 +237,10 @@ async function execute(
         case 'create': {
           const { input } = parseProviderOptions(rest)
           if (!input.baseUrl || !input.apiKey) {
-            throw new CliError('Usage: ilc provider create --base-url <url> --api-key <key>', EXIT_USAGE)
+            throw new CliError(
+              'Usage: ilc provider create --base-url <url> --api-key <key>',
+              EXIT_USAGE
+            )
           }
 
           const snapshot = await runtime.services.providers.create({
@@ -847,10 +477,7 @@ async function execute(
       if (subcommand === 'open') {
         const snapshot = await runtime.services.codex.open(rest[0])
         const active = snapshot.accounts.find((account) => account.id === snapshot.activeAccountId)
-        printIfNeeded(
-          `Opened Codex with account: ${accountLabel(active)}`,
-          silent
-        )
+        printIfNeeded(`Opened Codex with account: ${accountLabel(active)}`, silent)
         return { code: EXIT_OK, payload: toCliResult(snapshot) }
       }
       if (subcommand === 'open-isolated') {

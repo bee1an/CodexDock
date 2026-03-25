@@ -24,11 +24,14 @@ const codexApp = {
   importCurrentAccount: () => ipcRenderer.invoke('codex:import-current-account'),
   importAccountsFromFile: () => ipcRenderer.invoke('codex:import-accounts-from-file'),
   exportAccountsToFile: () => ipcRenderer.invoke('codex:export-accounts-to-file'),
+  exportSelectedAccountsToFile: (accountIds: string[]) =>
+    ipcRenderer.invoke('codex:export-selected-accounts-to-file', accountIds),
   activateAccount: (accountId: string) => ipcRenderer.invoke('codex:activate-account', accountId),
   activateBestAccount: () => ipcRenderer.invoke('codex:activate-best-account'),
   reorderAccounts: (accountIds: string[]) =>
     ipcRenderer.invoke('codex:reorder-accounts', accountIds),
   removeAccount: (accountId: string) => ipcRenderer.invoke('codex:remove-account', accountId),
+  removeAccounts: (accountIds: string[]) => ipcRenderer.invoke('codex:remove-accounts', accountIds),
   updateAccountTags: (accountId: string, tagIds: string[]) =>
     ipcRenderer.invoke('codex:update-account-tags', accountId, tagIds),
   createTag: (name: string) => ipcRenderer.invoke('codex:create-tag', name),
@@ -37,12 +40,15 @@ const codexApp = {
   listProviders: () => ipcRenderer.invoke('codex:list-providers'),
   getProvider: (providerId: string): Promise<CustomProviderDetail> =>
     ipcRenderer.invoke('codex:get-provider', providerId),
-  reorderProviders: (providerIds: string[]) => ipcRenderer.invoke('codex:reorder-providers', providerIds),
-  createProvider: (input: CreateCustomProviderInput) => ipcRenderer.invoke('codex:create-provider', input),
+  reorderProviders: (providerIds: string[]) =>
+    ipcRenderer.invoke('codex:reorder-providers', providerIds),
+  createProvider: (input: CreateCustomProviderInput) =>
+    ipcRenderer.invoke('codex:create-provider', input),
   updateProvider: (providerId: string, input: UpdateCustomProviderInput) =>
     ipcRenderer.invoke('codex:update-provider', providerId, input),
   removeProvider: (providerId: string) => ipcRenderer.invoke('codex:remove-provider', providerId),
-  openProviderInCodex: (providerId: string) => ipcRenderer.invoke('codex:open-provider-in-codex', providerId),
+  openProviderInCodex: (providerId: string) =>
+    ipcRenderer.invoke('codex:open-provider-in-codex', providerId),
   openAccountInCodex: (accountId: string) =>
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),
   openAccountInIsolatedCodex: (accountId: string) =>

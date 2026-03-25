@@ -19,6 +19,7 @@ import type {
   PortOccupant
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
+import { decodeJwtPayload, resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
 
 export interface CodexAuthPayload {
   auth_mode?: string
@@ -104,6 +105,31 @@ function defaultState(): PersistedState {
   }
 }
 
+function normalizePersistedState(
+  parsed: PersistedState | LegacyPersistedState
+): PersistedState {
+  return {
+    ...defaultState(),
+    ...parsed,
+    version: 3,
+    accounts: (parsed.accounts ?? []).map((account) => ({
+      ...account,
+      tagIds: dedupeAccountTagIds(account.tagIds ?? [])
+    })),
+    tags: parsed.tags ?? [],
+    settings: {
+      ...defaultSettings(),
+      ...('settings' in parsed ? parsed.settings : {})
+    },
+    usageByAccountId: parsed.usageByAccountId ?? {},
+    usageErrorByAccountId: parsed.usageErrorByAccountId ?? {}
+  }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
 function normalizeTagName(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
@@ -166,27 +192,6 @@ interface TokenEndpointPayload {
   id_token?: string
 }
 
-function decodeJwtPayload(token?: string): Record<string, unknown> {
-  if (!token) {
-    return {}
-  }
-
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return {}
-  }
-
-  const payload = parts[1]
-  const padding = '='.repeat((4 - (payload.length % 4)) % 4)
-  const normalized = `${payload}${padding}`.replaceAll('-', '+').replaceAll('_', '/')
-
-  try {
-    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-
 export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
   try {
     const { stdout } = await execFile('lsof', [
@@ -226,26 +231,6 @@ export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | n
   return occupant
 }
 
-function extractChatGptAccountIdFromTokens(
-  idToken?: string,
-  accessToken?: string
-): string | undefined {
-  const claims = [decodeJwtPayload(idToken), decodeJwtPayload(accessToken)]
-  for (const payload of claims) {
-    const authClaim = payload['https://api.openai.com/auth']
-    if (
-      authClaim &&
-      typeof authClaim === 'object' &&
-      'chatgpt_account_id' in authClaim &&
-      typeof authClaim.chatgpt_account_id === 'string'
-    ) {
-      return authClaim.chatgpt_account_id
-    }
-  }
-
-  return undefined
-}
-
 function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexAuthPayload {
   return {
     auth_mode: 'chatgpt',
@@ -255,7 +240,7 @@ function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexA
       access_token: tokens.access_token,
       refresh_token: tokens.refresh_token,
       id_token: tokens.id_token,
-      account_id: extractChatGptAccountIdFromTokens(tokens.id_token, tokens.access_token)
+      account_id: resolveChatGptAccountIdFromTokens(tokens.id_token, tokens.access_token)
     }
   }
 }
@@ -351,11 +336,11 @@ function resolveAccountId(auth: CodexAuthPayload): string {
 }
 
 function extractChatGptAccountId(auth: CodexAuthPayload): string | undefined {
-  if (auth.tokens?.account_id) {
-    return auth.tokens.account_id
-  }
-
-  return extractChatGptAccountIdFromTokens(auth.tokens?.id_token, auth.tokens?.access_token)
+  return resolveChatGptAccountIdFromTokens(
+    auth.tokens?.id_token,
+    auth.tokens?.access_token,
+    auth.tokens?.account_id
+  )
 }
 
 function findMatchingAccount(
@@ -403,322 +388,358 @@ function toAccountSummary(account: PersistedAccount): AccountSummary {
 
 export class CodexAccountStore {
   private readonly stateFile: string
+  private readonly stateBackupFile: string
   private readonly codexAuthFile: string
+  private stateQueue: Promise<void> = Promise.resolve()
 
   constructor(
     userDataPath: string,
     private readonly platform: CodexPlatformAdapter
   ) {
     this.stateFile = join(userDataPath, 'codex-accounts.json')
+    this.stateBackupFile = `${this.stateFile}.bak`
     this.codexAuthFile = join(homedir(), '.codex', 'auth.json')
   }
 
   async getSnapshot(loginInProgress: boolean): Promise<AppSnapshot> {
-    const state = await this.readState()
-    const currentSession = await this.getCurrentSession(state)
-    const resolvedActiveAccountId = currentSession?.storedAccountId
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const currentSession = await this.getCurrentSession(state)
+      const resolvedActiveAccountId = currentSession?.storedAccountId
 
-    if (state.activeAccountId !== resolvedActiveAccountId) {
-      state.activeAccountId = resolvedActiveAccountId
-      await this.writeState(state)
-    }
+      if (state.activeAccountId !== resolvedActiveAccountId) {
+        state.activeAccountId = resolvedActiveAccountId
+        await this.writeState(state)
+      }
 
-    return {
-      accounts: state.accounts.map(toAccountSummary),
-      providers: [],
-      tags: state.tags,
-      codexInstances: [],
-      codexInstanceDefaults: {
-        rootDir: '',
-        defaultCodexHome: join(homedir(), '.codex')
-      },
-      activeAccountId: resolvedActiveAccountId,
-      currentSession,
-      loginInProgress,
-      settings: state.settings,
-      usageByAccountId: state.usageByAccountId,
-      usageErrorByAccountId: state.usageErrorByAccountId
-    }
+      return {
+        accounts: state.accounts.map(toAccountSummary),
+        providers: [],
+        tags: state.tags,
+        codexInstances: [],
+        codexInstanceDefaults: {
+          rootDir: '',
+          defaultCodexHome: join(homedir(), '.codex')
+        },
+        activeAccountId: resolvedActiveAccountId,
+        currentSession,
+        loginInProgress,
+        settings: state.settings,
+        usageByAccountId: state.usageByAccountId,
+        usageErrorByAccountId: state.usageErrorByAccountId
+      }
+    })
   }
 
   async updateSettings(nextSettings: Partial<AppSettings>): Promise<void> {
-    const state = await this.readState()
-    state.settings = {
-      ...state.settings,
-      ...nextSettings,
-      statusBarAccountIds: (
-        nextSettings.statusBarAccountIds ?? state.settings.statusBarAccountIds
-      ).slice(0, 5)
-    }
-    await this.writeState(state)
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+      state.settings = {
+        ...state.settings,
+        ...nextSettings,
+        statusBarAccountIds: (
+          nextSettings.statusBarAccountIds ?? state.settings.statusBarAccountIds
+        ).slice(0, 5)
+      }
+      await this.writeState(state)
+    })
   }
 
   async saveAccountRateLimits(accountId: string, rateLimits: AccountRateLimits): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (!state.accounts.some((account) => account.id === accountId)) {
-      throw new Error('Account not found.')
-    }
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
 
-    state.usageByAccountId = {
-      ...state.usageByAccountId,
-      [accountId]: rateLimits
-    }
-    await this.writeState(state)
+      state.usageByAccountId = {
+        ...state.usageByAccountId,
+        [accountId]: rateLimits
+      }
+      await this.writeState(state)
+    })
   }
 
   async clearAccountRateLimits(accountId: string): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (!state.accounts.some((account) => account.id === accountId)) {
-      throw new Error('Account not found.')
-    }
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
 
-    if (!(accountId in state.usageByAccountId)) {
-      return
-    }
+      if (!(accountId in state.usageByAccountId)) {
+        return
+      }
 
-    const nextUsageByAccountId = { ...state.usageByAccountId }
-    delete nextUsageByAccountId[accountId]
-    state.usageByAccountId = nextUsageByAccountId
-    await this.writeState(state)
+      const nextUsageByAccountId = { ...state.usageByAccountId }
+      delete nextUsageByAccountId[accountId]
+      state.usageByAccountId = nextUsageByAccountId
+      await this.writeState(state)
+    })
   }
 
   async saveAccountUsageError(accountId: string, message: string): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (!state.accounts.some((account) => account.id === accountId)) {
-      throw new Error('Account not found.')
-    }
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
 
-    state.usageErrorByAccountId = {
-      ...state.usageErrorByAccountId,
-      [accountId]: message
-    }
-    await this.writeState(state)
+      state.usageErrorByAccountId = {
+        ...state.usageErrorByAccountId,
+        [accountId]: message
+      }
+      await this.writeState(state)
+    })
   }
 
   async clearAccountUsageError(accountId: string): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (!state.accounts.some((account) => account.id === accountId)) {
-      throw new Error('Account not found.')
-    }
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
 
-    if (!(accountId in state.usageErrorByAccountId)) {
-      return
-    }
+      if (!(accountId in state.usageErrorByAccountId)) {
+        return
+      }
 
-    const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
-    delete nextUsageErrorByAccountId[accountId]
-    state.usageErrorByAccountId = nextUsageErrorByAccountId
-    await this.writeState(state)
+      const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
+      delete nextUsageErrorByAccountId[accountId]
+      state.usageErrorByAccountId = nextUsageErrorByAccountId
+      await this.writeState(state)
+    })
   }
 
   async createTag(name: string): Promise<AccountTag> {
-    const state = await this.readState()
-    const normalizedName = normalizeTagName(name)
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const normalizedName = normalizeTagName(name)
 
-    if (!normalizedName) {
-      throw new Error('Tag name is required.')
-    }
+      if (!normalizedName) {
+        throw new Error('Tag name is required.')
+      }
 
-    if (
-      state.tags.some(
-        (tag) => tag.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
-      )
-    ) {
-      throw new Error('Tag name already exists.')
-    }
+      if (
+        state.tags.some(
+          (tag) =>
+            tag.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
+        )
+      ) {
+        throw new Error('Tag name already exists.')
+      }
 
-    const now = new Date().toISOString()
-    const tag: AccountTag = {
-      id: randomUUID(),
-      name: normalizedName,
-      createdAt: now,
-      updatedAt: now
-    }
+      const now = new Date().toISOString()
+      const tag: AccountTag = {
+        id: randomUUID(),
+        name: normalizedName,
+        createdAt: now,
+        updatedAt: now
+      }
 
-    state.tags = [...state.tags, tag]
-    await this.writeState(state)
-    return tag
+      state.tags = [...state.tags, tag]
+      await this.writeState(state)
+      return tag
+    })
   }
 
   async updateTag(tagId: string, name: string): Promise<AccountTag> {
-    const state = await this.readState()
-    const tag = state.tags.find((item) => item.id === tagId)
-    const normalizedName = normalizeTagName(name)
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const tag = state.tags.find((item) => item.id === tagId)
+      const normalizedName = normalizeTagName(name)
 
-    if (!tag) {
-      throw new Error('Tag not found.')
-    }
+      if (!tag) {
+        throw new Error('Tag not found.')
+      }
 
-    if (!normalizedName) {
-      throw new Error('Tag name is required.')
-    }
+      if (!normalizedName) {
+        throw new Error('Tag name is required.')
+      }
 
-    if (
-      state.tags.some(
-        (item) =>
-          item.id !== tagId &&
-          item.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
-      )
-    ) {
-      throw new Error('Tag name already exists.')
-    }
+      if (
+        state.tags.some(
+          (item) =>
+            item.id !== tagId &&
+            item.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
+        )
+      ) {
+        throw new Error('Tag name already exists.')
+      }
 
-    tag.name = normalizedName
-    tag.updatedAt = new Date().toISOString()
-    await this.writeState(state)
-    return tag
+      tag.name = normalizedName
+      tag.updatedAt = new Date().toISOString()
+      await this.writeState(state)
+      return tag
+    })
   }
 
   async deleteTag(tagId: string): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (!state.tags.some((tag) => tag.id === tagId)) {
-      throw new Error('Tag not found.')
-    }
+      if (!state.tags.some((tag) => tag.id === tagId)) {
+        throw new Error('Tag not found.')
+      }
 
-    state.tags = state.tags.filter((tag) => tag.id !== tagId)
-    state.accounts = state.accounts.map((account) => ({
-      ...account,
-      tagIds: account.tagIds.filter((item) => item !== tagId)
-    }))
+      state.tags = state.tags.filter((tag) => tag.id !== tagId)
+      state.accounts = state.accounts.map((account) => ({
+        ...account,
+        tagIds: account.tagIds.filter((item) => item !== tagId)
+      }))
 
-    await this.writeState(state)
+      await this.writeState(state)
+    })
   }
 
   async importCurrentAuth(): Promise<void> {
-    const auth = await this.readCodexAuthFile()
-    await this.upsertAccount(auth, true)
+    await this.runStateTask(async () => {
+      const auth = await this.readCodexAuthFile()
+      await this.upsertAccount(auth, true)
+    })
   }
 
   async importAuthPayload(auth: CodexAuthPayload): Promise<AccountSummary> {
-    return this.upsertAccount(auth, false)
+    return this.runStateTask(() => this.upsertAccount(auth, false))
   }
 
   async activateAccount(accountId: string): Promise<void> {
-    const state = await this.readState()
-    const account = state.accounts.find((item) => item.id === accountId)
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+      const account = state.accounts.find((item) => item.id === accountId)
 
-    if (!account) {
-      throw new Error('Account not found.')
-    }
+      if (!account) {
+        throw new Error('Account not found.')
+      }
 
-    const rawAuth = this.unprotect(account.authPayload)
-    const parsed = JSON.parse(rawAuth) as CodexAuthPayload
+      const rawAuth = this.unprotect(account.authPayload)
+      const parsed = JSON.parse(rawAuth) as CodexAuthPayload
 
-    await this.writeCodexAuthFile(parsed)
+      await this.writeCodexAuthFile(parsed)
 
-    const now = new Date().toISOString()
-    state.activeAccountId = accountId
-    state.accounts = state.accounts.map((item) =>
-      item.id === accountId
-        ? {
-            ...item,
-            lastUsedAt: now,
-            updatedAt: now
-          }
-        : item
-    )
+      const now = new Date().toISOString()
+      state.activeAccountId = accountId
+      state.accounts = state.accounts.map((item) =>
+        item.id === accountId
+          ? {
+              ...item,
+              lastUsedAt: now,
+              updatedAt: now
+            }
+          : item
+      )
 
-    await this.writeState(state)
+      await this.writeState(state)
+    })
   }
 
   async getStoredAuthPayload(accountId: string): Promise<CodexAuthPayload> {
-    return this.getStoredAuth(accountId)
+    return this.runStateTask(() => this.getStoredAuth(accountId))
   }
 
   async syncCurrentAuthPayload(accountId: string, auth: CodexAuthPayload): Promise<boolean> {
-    const state = await this.readState()
+    return this.runStateTask(async () => {
+      const state = await this.readState()
 
-    try {
-      const currentAuth = await this.readCodexAuthFile()
-      const matched = findMatchingAccount(state.accounts, currentAuth)
-      if (!matched || matched.id !== accountId) {
+      try {
+        const currentAuth = await this.readCodexAuthFile()
+        const matched = findMatchingAccount(state.accounts, currentAuth)
+        if (!matched || matched.id !== accountId) {
+          return false
+        }
+
+        await this.writeCodexAuthFile(auth)
+        return true
+      } catch {
         return false
       }
-
-      await this.writeCodexAuthFile(auth)
-      return true
-    } catch {
-      return false
-    }
+    })
   }
 
   async getAccountSummary(accountId: string): Promise<AccountSummary> {
-    const state = await this.readState()
-    const account = state.accounts.find((item) => item.id === accountId)
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const account = state.accounts.find((item) => item.id === accountId)
 
-    if (!account) {
-      throw new Error('Account not found.')
-    }
+      if (!account) {
+        throw new Error('Account not found.')
+      }
 
-    return toAccountSummary(account)
+      return toAccountSummary(account)
+    })
   }
 
   async updateAccountTags(accountId: string, tagIds: string[]): Promise<void> {
-    const state = await this.readState()
-    const account = state.accounts.find((item) => item.id === accountId)
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+      const account = state.accounts.find((item) => item.id === accountId)
 
-    if (!account) {
-      throw new Error('Account not found.')
-    }
+      if (!account) {
+        throw new Error('Account not found.')
+      }
 
-    const nextTagIds = dedupeAccountTagIds(tagIds)
-    if (!nextTagIds.every((tagId) => state.tags.some((tag) => tag.id === tagId))) {
-      throw new Error('One or more tags do not exist.')
-    }
+      const nextTagIds = dedupeAccountTagIds(tagIds)
+      if (!nextTagIds.every((tagId) => state.tags.some((tag) => tag.id === tagId))) {
+        throw new Error('One or more tags do not exist.')
+      }
 
-    account.tagIds = nextTagIds
-    account.updatedAt = new Date().toISOString()
-    await this.writeState(state)
+      account.tagIds = nextTagIds
+      account.updatedAt = new Date().toISOString()
+      await this.writeState(state)
+    })
   }
 
   async removeAccount(accountId: string): Promise<void> {
-    const state = await this.readState()
-    state.accounts = state.accounts.filter((item) => item.id !== accountId)
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+      state.accounts = state.accounts.filter((item) => item.id !== accountId)
 
-    if (state.activeAccountId === accountId) {
-      state.activeAccountId = undefined
-    }
+      if (state.activeAccountId === accountId) {
+        state.activeAccountId = undefined
+      }
 
-    if (state.usageByAccountId[accountId]) {
-      delete state.usageByAccountId[accountId]
-    }
+      if (state.usageByAccountId[accountId]) {
+        delete state.usageByAccountId[accountId]
+      }
 
-    if (state.usageErrorByAccountId[accountId]) {
-      delete state.usageErrorByAccountId[accountId]
-    }
+      if (state.usageErrorByAccountId[accountId]) {
+        delete state.usageErrorByAccountId[accountId]
+      }
 
-    await this.writeState(state)
+      await this.writeState(state)
+    })
   }
 
   async reorderAccounts(accountIds: string[]): Promise<void> {
-    const state = await this.readState()
+    await this.runStateTask(async () => {
+      const state = await this.readState()
 
-    if (accountIds.length !== state.accounts.length) {
-      throw new Error('Account reorder payload does not match saved accounts.')
-    }
-
-    const accountsById = new Map(state.accounts.map((account) => [account.id, account]))
-    const reorderedAccounts = accountIds.map((accountId) => {
-      const account = accountsById.get(accountId)
-      if (!account) {
-        throw new Error(`Account not found: ${accountId}`)
+      if (accountIds.length !== state.accounts.length) {
+        throw new Error('Account reorder payload does not match saved accounts.')
       }
 
-      accountsById.delete(accountId)
-      return account
+      const accountsById = new Map(state.accounts.map((account) => [account.id, account]))
+      const reorderedAccounts = accountIds.map((accountId) => {
+        const account = accountsById.get(accountId)
+        if (!account) {
+          throw new Error(`Account not found: ${accountId}`)
+        }
+
+        accountsById.delete(accountId)
+        return account
+      })
+
+      if (accountsById.size) {
+        throw new Error('Account reorder payload is missing saved accounts.')
+      }
+
+      state.accounts = reorderedAccounts
+      await this.writeState(state)
     })
-
-    if (accountsById.size) {
-      throw new Error('Account reorder payload is missing saved accounts.')
-    }
-
-    state.accounts = reorderedAccounts
-    await this.writeState(state)
   }
 
   private async getCurrentSession(state: PersistedState): Promise<CurrentSessionSummary | null> {
@@ -839,6 +860,15 @@ export class CodexAccountStore {
     return JSON.parse(raw) as CodexAuthPayload
   }
 
+  private runStateTask<T>(task: () => Promise<T>): Promise<T> {
+    const run = this.stateQueue.then(task, task)
+    this.stateQueue = run.then(
+      () => undefined,
+      () => undefined
+    )
+    return run
+  }
+
   private async getStoredAuth(accountId: string): Promise<CodexAuthPayload> {
     const state = await this.readState()
     const account = state.accounts.find((item) => item.id === accountId)
@@ -851,34 +881,46 @@ export class CodexAccountStore {
   }
 
   private async readState(): Promise<PersistedState> {
-    try {
-      const raw = await fs.readFile(this.stateFile, 'utf8')
-      const parsed = JSON.parse(raw) as PersistedState | LegacyPersistedState
+    const primaryState = await this.readStateFile(this.stateFile)
+    if (primaryState) {
+      return primaryState
+    }
 
-      return {
-        ...defaultState(),
-        ...parsed,
-        version: 3,
-        accounts: (parsed.accounts ?? []).map((account) => ({
-          ...account,
-          tagIds: dedupeAccountTagIds(account.tagIds ?? [])
-        })),
-        tags: parsed.tags ?? [],
-        settings: {
-          ...defaultSettings(),
-          ...('settings' in parsed ? parsed.settings : {})
-        },
-        usageByAccountId: parsed.usageByAccountId ?? {},
-        usageErrorByAccountId: parsed.usageErrorByAccountId ?? {}
+    const backupState = await this.readStateFile(this.stateBackupFile)
+    if (backupState) {
+      console.warn(`Recovered account state from backup: ${this.stateBackupFile}`)
+      return backupState
+    }
+
+    return defaultState()
+  }
+
+  private async readStateFile(path: string): Promise<PersistedState | null> {
+    try {
+      const raw = await fs.readFile(path, 'utf8')
+      return normalizePersistedState(JSON.parse(raw) as PersistedState | LegacyPersistedState)
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return null
       }
-    } catch {
-      return defaultState()
+
+      console.warn(`Failed to read account state from ${path}: ${describeError(error)}`)
+      return null
     }
   }
 
   private async writeState(state: PersistedState): Promise<void> {
     await fs.mkdir(dirname(this.stateFile), { recursive: true })
-    await fs.writeFile(this.stateFile, `${JSON.stringify(state, null, 2)}\n`, 'utf8')
+    const raw = `${JSON.stringify(state, null, 2)}\n`
+    const tempFile = `${this.stateFile}.${process.pid}.${randomUUID()}.tmp`
+
+    try {
+      await fs.writeFile(tempFile, raw, 'utf8')
+      await fs.rename(tempFile, this.stateFile)
+      await fs.copyFile(this.stateFile, this.stateBackupFile)
+    } finally {
+      await fs.rm(tempFile, { force: true })
+    }
   }
 
   private async writeCodexAuthFile(auth: CodexAuthPayload): Promise<void> {

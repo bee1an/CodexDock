@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -129,5 +129,51 @@ describe('CodexAccountStore', () => {
 
     const store = new CodexAccountStore(directory, createPlatform())
     await expect(store.getStoredAuthPayload('legacy')).rejects.toThrow('Re-import it')
+  })
+
+  it('serializes concurrent state updates without dropping changes', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'ilovecodex-store-'))
+    createdDirectories.push(directory)
+
+    const store = new CodexAccountStore(directory, createPlatform())
+    const account = await store.importAuthPayload(createAuthPayload('a'))
+    await store.saveAccountUsageError(account.id, 'boom')
+
+    const rateLimits = {
+      limitId: null,
+      limitName: null,
+      planType: 'plus',
+      primary: {
+        usedPercent: 12,
+        windowDurationMins: 300,
+        resetsAt: Date.parse('2026-03-25T10:00:00.000Z')
+      },
+      secondary: null,
+      credits: null,
+      limits: [],
+      fetchedAt: '2026-03-25T08:00:00.000Z'
+    }
+
+    await Promise.all([
+      store.saveAccountRateLimits(account.id, rateLimits),
+      store.clearAccountUsageError(account.id)
+    ])
+
+    const snapshot = await store.getSnapshot(false)
+    expect(snapshot.usageByAccountId[account.id]).toEqual(rateLimits)
+    expect(snapshot.usageErrorByAccountId[account.id]).toBeUndefined()
+
+    const persisted = await readFile(join(directory, 'codex-accounts.json'), 'utf8')
+    const backup = await readFile(join(directory, 'codex-accounts.json.bak'), 'utf8')
+    expect(JSON.parse(persisted)).toMatchObject({
+      usageByAccountId: {
+        [account.id]: rateLimits
+      }
+    })
+    expect(JSON.parse(backup)).toMatchObject({
+      usageByAccountId: {
+        [account.id]: rateLimits
+      }
+    })
   })
 })

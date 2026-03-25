@@ -62,6 +62,8 @@
   export let updateAccountTags: (account: AccountSummary, tagIds: string[]) => Promise<void>
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let removeAccount: (account: AccountSummary) => void
+  export let removeAccounts: (accountIds: string[]) => Promise<void>
+  export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
   export let startLogin: (method: 'browser' | 'device') => void
   export let importCurrent: () => void
 
@@ -79,6 +81,7 @@
   let providerSortInteractionActive = false
   let providerMutationBusy = false
   let editingProviderId = ''
+  let selectedAccountIds: string[] = []
   let providerDrafts: Record<
     string,
     { name: string; baseUrl: string; apiKey: string; model: string; fastMode: boolean }
@@ -104,6 +107,16 @@
     return account.tagIds.includes(activeTagFilter)
   })
 
+  $: {
+    const visibleAccountIds = new Set(visibleAccounts.map((account) => account.id))
+    const nextSelectedAccountIds = selectedAccountIds.filter((accountId) =>
+      visibleAccountIds.has(accountId)
+    )
+    if (nextSelectedAccountIds.length !== selectedAccountIds.length) {
+      selectedAccountIds = nextSelectedAccountIds
+    }
+  }
+
   $: if (!sortInteractionActive) {
     sortableAccounts = visibleAccounts
   }
@@ -128,6 +141,35 @@
 
   $: if (currentView !== 'accounts') {
     tagPickerAccountId = null
+  }
+
+  $: selectedVisibleCount = selectedAccountIds.length
+  $: allVisibleSelected =
+    visibleAccounts.length > 0 && selectedVisibleCount === visibleAccounts.length
+
+  function selectAllVisibleAccounts(): void {
+    selectedAccountIds = visibleAccounts.map((account) => account.id)
+  }
+
+  function clearSelectedAccounts(): void {
+    selectedAccountIds = []
+  }
+
+  async function exportCurrentSelection(): Promise<void> {
+    if (!selectedAccountIds.length || loginActionBusy) {
+      return
+    }
+
+    await exportSelectedAccounts(selectedAccountIds)
+  }
+
+  async function removeCurrentSelection(): Promise<void> {
+    if (!selectedAccountIds.length || loginActionBusy) {
+      return
+    }
+
+    await removeAccounts(selectedAccountIds)
+    clearSelectedAccounts()
   }
 
   function accountTags(account: AccountSummary): AccountTag[] {
@@ -166,9 +208,9 @@
     return openingProviderId === providerId || providerMutationBusy
   }
 
-  function accountUsageBadge(accountId: string):
-    | { kind: 'expired' | 'error'; label: string; title: string }
-    | null {
+  function accountUsageBadge(
+    accountId: string
+  ): { kind: 'expired' | 'error'; label: string; title: string } | null {
     const message = usageErrorByAccountId[accountId]
     const kind = usageErrorKind(message)
 
@@ -501,23 +543,30 @@
 
 <section class={`${panelClass} flex min-h-0 flex-1 flex-col gap-4 overflow-hidden`}>
   <div class="flex flex-wrap items-center justify-between gap-3">
-    <div class="grid gap-1">
-      <div class="text-sm text-faint">
+    <div class="grid gap-0.5">
+      <div class="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
         {currentView === 'tags'
           ? copy.tagManager
           : currentView === 'providers'
             ? copy.providerList
             : copy.accountList}
       </div>
+      <div class="text-sm font-medium text-ink">
+        {currentView === 'tags'
+          ? `${tags.length} ${copy.tagManager}`
+          : currentView === 'providers'
+            ? copy.providerCount(providers.length)
+            : copy.accountCount(accounts.length)}
+      </div>
     </div>
 
     <div
-      class="theme-toolbar inline-flex items-center gap-1 rounded-[0.9rem] border border-black/8 bg-black/[0.03] p-1"
+      class="theme-toolbar inline-flex items-center gap-1 rounded-[0.8rem] border border-black/8 bg-black/[0.03] p-1"
     >
       <button
         class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
           currentView === 'accounts'
-            ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
+            ? 'theme-view-toggle-active bg-white text-ink'
             : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
         }`}
         type="button"
@@ -531,7 +580,7 @@
       <button
         class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
           currentView === 'providers'
-            ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
+            ? 'theme-view-toggle-active bg-white text-ink'
             : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
         }`}
         type="button"
@@ -545,7 +594,7 @@
       <button
         class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
           currentView === 'tags'
-            ? 'theme-view-toggle-active bg-white text-ink shadow-[0_8px_20px_rgba(24,24,27,0.08)]'
+            ? 'theme-view-toggle-active bg-white text-ink'
             : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
         }`}
         type="button"
@@ -694,14 +743,14 @@
       {/if}
     </div>
   {:else if currentView === 'accounts'}
-    <div class="grid gap-3">
-      <div
-        class="theme-soft-panel grid gap-2 rounded-[0.95rem] border border-black/8 bg-black/[0.02] p-3"
-      >
-        <p class="text-xs font-medium uppercase tracking-[0.12em] text-faint">{copy.filterByTag}</p>
-        <div class="flex flex-wrap gap-2">
+    <div class="theme-workbench-toolbar grid gap-2 rounded-[0.9rem] border border-black/8 bg-black/[0.02] px-2.5 py-2.5">
+      <div class="grid gap-1">
+        <p class="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+          {copy.filterByTag}
+        </p>
+        <div class="flex flex-wrap gap-1">
           <button
-            class={`theme-filter-chip rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-140 ${
+            class={`theme-filter-chip rounded-full px-2 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
               activeTagFilter === 'all'
                 ? 'theme-filter-chip-active bg-black text-white'
                 : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
@@ -714,7 +763,7 @@
             {copy.allTags} · {filterCount('all')}
           </button>
           <button
-            class={`theme-filter-chip rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-140 ${
+            class={`theme-filter-chip rounded-full px-2 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
               activeTagFilter === untaggedFilterId
                 ? 'theme-filter-chip-active bg-black text-white'
                 : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
@@ -728,7 +777,7 @@
           </button>
           {#each tags as tag (tag.id)}
             <button
-              class={`theme-filter-chip rounded-full px-3 py-1.5 text-xs font-medium transition-colors duration-140 ${
+              class={`theme-filter-chip rounded-full px-2 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
                 activeTagFilter === tag.id
                   ? 'theme-filter-chip-active bg-black text-white'
                   : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
@@ -741,6 +790,64 @@
               {tag.name} · {filterCount(tag.id)}
             </button>
           {/each}
+        </div>
+      </div>
+
+      <div
+        class={`theme-selection-toolbar flex flex-wrap items-center justify-between gap-1.5 border-t border-black/6 pt-2 ${
+          selectedVisibleCount ? 'theme-selection-toolbar-active' : 'theme-selection-toolbar-idle'
+        }`}
+      >
+        <div class="grid gap-0.5">
+          <div class="text-[12px] font-medium leading-none text-ink">
+            {copy.selectedAccountCount(selectedVisibleCount)}
+          </div>
+          <div class="text-[9px] uppercase tracking-[0.08em] text-faint">
+            {copy.accountCount(visibleAccounts.length)}
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-end gap-1.5">
+          <div class="theme-selection-group inline-flex items-center rounded-[0.7rem] border border-black/8 bg-white/[0.72] p-0.5">
+            <button
+              class="theme-selection-group-button inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.55rem] px-2.5 py-1.5 text-[11px] font-medium leading-none transition-colors duration-140"
+              type="button"
+              onclick={selectAllVisibleAccounts}
+              disabled={loginActionBusy || !visibleAccounts.length || allVisibleSelected}
+            >
+              <span class="i-lucide-check-check h-3.5 w-3.5"></span>
+              <span>{copy.selectAllVisibleAccounts}</span>
+            </button>
+            <div class="theme-selection-divider h-5 w-px bg-black/8"></div>
+            <button
+              class="theme-selection-group-button inline-flex min-w-[92px] items-center justify-center gap-1.5 rounded-[0.55rem] px-2.5 py-1.5 text-[11px] font-medium leading-none transition-colors duration-140"
+              type="button"
+              onclick={clearSelectedAccounts}
+              disabled={loginActionBusy || !selectedVisibleCount}
+            >
+              <span class="i-lucide-eraser h-3.5 w-3.5"></span>
+              <span>{copy.clearSelectedAccounts}</span>
+            </button>
+          </div>
+
+          <button
+            class="theme-selection-export inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.7rem] border border-black/8 bg-white/[0.72] px-2.5 py-1.5 text-[11px] font-medium leading-none text-ink transition-colors duration-140 hover:bg-black/[0.04]"
+            type="button"
+            onclick={() => void exportCurrentSelection()}
+            disabled={loginActionBusy || !selectedVisibleCount}
+          >
+            <span class="i-lucide-download h-3.5 w-3.5"></span>
+            <span>{copy.exportSelectedAccounts}</span>
+          </button>
+
+          <button
+            class="theme-selection-delete inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.7rem] border border-red-500/14 bg-red-500/[0.08] px-2.5 py-1.5 text-[11px] font-medium leading-none text-danger transition-colors duration-140 hover:bg-red-500/[0.12]"
+            type="button"
+            onclick={() => void removeCurrentSelection()}
+            disabled={loginActionBusy || !selectedVisibleCount}
+          >
+            <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+            <span>{copy.deleteSelectedAccounts}</span>
+          </button>
         </div>
       </div>
     </div>
@@ -771,277 +878,304 @@
           aria-label={copy.accountCount(sortableAccounts.length)}
         >
           {#each sortableAccounts as account (account.id)}
-          {@const usageBadge = accountUsageBadge(account.id)}
-          <article
-            class={`group grid items-center gap-3 rounded-[0.875rem] border px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto] ${accountCardTone(activeAccountId === account.id)}`}
-            animate:flip={{ duration: flipDurationMs }}
-            aria-label={accountEmail(account, copy)}
-          >
-            <button
-              class={`${iconRowButton} h-8 w-8 self-center text-black/42 ${activeTagFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
-              type="button"
-              use:dragHandle
-              aria-label={`${copy.dragSortHandle} · ${accountEmail(account, copy)}`}
-              title={copy.dragSortHandle}
-              disabled={loginActionBusy ||
-                tagMutationBusy ||
-                activeTagFilter !== 'all' ||
-                sortableAccounts.length < 2}
+            {@const usageBadge = accountUsageBadge(account.id)}
+            <article
+              class={`group grid items-center gap-3 rounded-[0.95rem] border px-3 py-2.5 transition-[border-color,box-shadow,transform,background-color] duration-180 md:grid-cols-[auto_minmax(0,1fr)_auto] ${
+                selectedAccountIds.includes(account.id)
+                  ? 'theme-account-card-selected border-black/10 bg-white'
+                  : accountCardTone(activeAccountId === account.id)
+              }`}
+              animate:flip={{ duration: flipDurationMs }}
+              aria-label={accountEmail(account, copy)}
             >
-              <span class="i-lucide-grip-vertical h-4 w-4"></span>
-            </button>
+              <div class="flex items-center gap-2">
+                <label
+                  class={`theme-account-selector inline-flex h-8 w-8 flex-none items-center justify-center rounded-[0.75rem] border transition-[border-color,background-color,box-shadow] duration-180 ${
+                    selectedAccountIds.includes(account.id)
+                      ? 'border-black/18 bg-white text-black'
+                      : 'border-black/10 bg-white/80 text-black/72'
+                  }`}
+                  title={copy.selectAccount}
+                >
+                  <input
+                    class="theme-account-selector-input h-4 w-4 accent-black"
+                    type="checkbox"
+                    value={account.id}
+                    bind:group={selectedAccountIds}
+                    disabled={loginActionBusy}
+                    aria-label={`${copy.selectAccount} · ${accountEmail(account, copy)}`}
+                  />
+                </label>
+                <button
+                  class={`${iconRowButton} h-8 w-8 self-center text-black/42 ${activeTagFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+                  type="button"
+                  use:dragHandle
+                  aria-label={`${copy.dragSortHandle} · ${accountEmail(account, copy)}`}
+                  title={copy.dragSortHandle}
+                  disabled={loginActionBusy ||
+                    tagMutationBusy ||
+                    activeTagFilter !== 'all' ||
+                    sortableAccounts.length < 2}
+                >
+                  <span class="i-lucide-grip-vertical h-4 w-4"></span>
+                </button>
+              </div>
 
-            <div class="flex min-w-0 items-center gap-3 overflow-visible">
-              <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
-                <span
-                  class={`h-2 w-2 flex-none rounded-full ${activeAccountId === account.id ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
-                ></span>
-                <p class="max-w-[220px] truncate text-sm font-medium">
-                  {accountEmail(account, copy)}
-                </p>
-                {#if activeAccountId === account.id}
+              <div class="flex min-w-0 items-center gap-3 overflow-visible">
+                <div class="flex min-w-0 flex-1 items-center gap-2 overflow-visible">
                   <span
-                    class="theme-active-pill inline-flex flex-none items-center rounded-full bg-black px-2 py-0.75 text-[10px] font-medium text-white/88"
-                  >
-                    {copy.active}
-                  </span>
-                {/if}
-                {#if usageBadge}
-                  {#if usageBadge.kind === 'expired'}
+                    class={`h-2 w-2 flex-none rounded-full ${activeAccountId === account.id ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
+                  ></span>
+                  <p class="max-w-[220px] truncate text-sm font-medium">
+                    {accountEmail(account, copy)}
+                  </p>
+                  {#if activeAccountId === account.id}
                     <span
-                      class="inline-flex flex-none items-center rounded-full border border-red-700 bg-red-700 px-2 py-0.75 text-[10px] font-semibold text-white"
-                      title={usageBadge.title}
+                      class="theme-active-pill inline-flex flex-none items-center rounded-full bg-black px-2 py-0.75 text-[10px] font-medium text-white/88"
                     >
-                      {usageBadge.label}
-                    </span>
-                  {:else}
-                    <span
-                      class="inline-flex flex-none items-center rounded-full border border-amber-500/18 bg-amber-500/10 px-2 py-0.75 text-[10px] font-medium text-amber-700"
-                      title={usageBadge.title}
-                    >
-                      {usageBadge.label}
+                      {copy.active}
                     </span>
                   {/if}
-                {/if}
-                <span
-                  class={`inline-flex flex-none items-center rounded-full px-2 py-0.75 text-[10px] font-medium ${planTagClass(usageByAccountId[account.id]?.planType)}`}
-                >
-                  {planLabel(usageByAccountId[account.id]?.planType)}
-                </span>
-                <div class="flex min-w-0 items-center gap-1.5">
-                  <div
-                    class="scroll-row flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1"
-                  >
-                    {#each accountTags(account) as tag (tag.id)}
+                  {#if usageBadge}
+                    {#if usageBadge.kind === 'expired'}
                       <span
-                        class="theme-tag-assigned inline-flex items-center rounded-full border border-emerald-500/14 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700"
+                        class="inline-flex flex-none items-center rounded-full border border-red-700 bg-red-700 px-2 py-0.75 text-[10px] font-semibold text-white"
+                        title={usageBadge.title}
                       >
-                        <span class="max-w-28 truncate">{tag.name}</span>
-                        <button
-                          class="theme-tag-remove ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
-                          type="button"
-                          onclick={() => void removeTagFromAccount(account, tag.id)}
-                          disabled={loginActionBusy || tagMutationBusy}
-                          aria-label={`${copy.removeTag} · ${tag.name}`}
-                          title={copy.removeTag}
-                        >
-                          <span class="i-lucide-x h-3 w-3"></span>
-                        </button>
+                        {usageBadge.label}
                       </span>
-                    {/each}
+                    {:else}
+                      <span
+                        class="inline-flex flex-none items-center rounded-full border border-amber-500/18 bg-amber-500/10 px-2 py-0.75 text-[10px] font-medium text-amber-700"
+                        title={usageBadge.title}
+                      >
+                        {usageBadge.label}
+                      </span>
+                    {/if}
+                  {/if}
+                  <span
+                    class={`inline-flex flex-none items-center rounded-full px-2 py-0.75 text-[10px] font-medium ${planTagClass(usageByAccountId[account.id]?.planType)}`}
+                  >
+                    {planLabel(usageByAccountId[account.id]?.planType)}
+                  </span>
+                  <div class="flex min-w-0 items-center gap-1.5">
+                    <div
+                      class="scroll-row flex min-w-0 items-center gap-1.5 overflow-x-auto whitespace-nowrap pb-1"
+                    >
+                      {#each accountTags(account) as tag (tag.id)}
+                        <span
+                          class="theme-tag-assigned inline-flex items-center rounded-full border border-emerald-500/14 bg-emerald-500/10 px-2 py-1 text-[11px] font-medium text-emerald-700"
+                        >
+                          <span class="max-w-28 truncate">{tag.name}</span>
+                          <button
+                            class="theme-tag-remove ml-1 inline-flex h-4 w-4 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
+                            type="button"
+                            onclick={() => void removeTagFromAccount(account, tag.id)}
+                            disabled={loginActionBusy || tagMutationBusy}
+                            aria-label={`${copy.removeTag} · ${tag.name}`}
+                            title={copy.removeTag}
+                          >
+                            <span class="i-lucide-x h-3 w-3"></span>
+                          </button>
+                        </span>
+                      {/each}
+                    </div>
+
+                    {#if availableTags(account).length}
+                      <div class="flex-none" use:stopClickPropagation>
+                        <button
+                          class={`theme-tag-add-button inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-[opacity,background-color,border-color,color] duration-140 ${
+                            tagPickerAccountId === account.id
+                              ? 'theme-tag-add-button-active border-black/16 bg-black/[0.08] text-black/80 opacity-100'
+                              : 'pointer-events-none border-black/12 bg-black/[0.02] text-black/58 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-hover:hover:bg-black/[0.05] group-focus-within:pointer-events-auto group-focus-within:opacity-100'
+                          }`}
+                          type="button"
+                          onclick={(event) => toggleTagPicker(event, account.id)}
+                          disabled={loginActionBusy || tagMutationBusy}
+                          aria-label={`${copy.addTag} · ${accountEmail(account, copy)}`}
+                          title={copy.addTag}
+                        >
+                          <span class="i-lucide-plus h-3.5 w-3.5"></span>
+                          <span>{copy.addTag}</span>
+                        </button>
+
+                        {#if tagPickerAccountId === account.id}
+                          <div
+                            use:portal
+                            use:floatingTagPicker={tagPickerAnchorRect}
+                            use:stopClickPropagation
+                            class="theme-tag-picker-surface z-[999] rounded-[0.9rem] border border-black/8 bg-white p-1.5 shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
+                          >
+                            <div
+                              class="px-2.5 pb-1 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint"
+                            >
+                              {copy.addTag}
+                            </div>
+                            {#each availableTags(account) as tag (tag.id)}
+                              <button
+                                class="theme-tag-picker-item tag-picker-item flex w-full appearance-none items-center justify-between rounded-[0.7rem] border-0 bg-transparent px-2.5 py-2 text-left text-[12px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-black/[0.06]"
+                                type="button"
+                                onclick={() => void addTagToAccount(account, tag.id)}
+                                disabled={loginActionBusy || tagMutationBusy}
+                              >
+                                <span class="truncate">{tag.name}</span>
+                                <span
+                                  class="theme-tag-picker-plus inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/[0.04] text-black/45"
+                                >
+                                  <span class="i-lucide-plus h-3.5 w-3.5"></span>
+                                </span>
+                              </button>
+                            {/each}
+                          </div>
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+
+                <div
+                  class="scroll-row ml-auto flex flex-none items-center justify-end gap-2 overflow-x-auto whitespace-nowrap pb-1"
+                >
+                  <div
+                    class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong"
+                    title={`${copy.sessionReset} · ${formatRelativeReset(
+                      usageByAccountId[account.id]?.primary?.resetsAt,
+                      language
+                    )}`}
+                  >
+                    <span class="font-medium">{copy.sessionQuota}</span>
+                    <span
+                      class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                    >
+                      <span
+                        class="theme-progress-fill block h-full rounded-full bg-black/70"
+                        style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
+                      ></span>
+                    </span>
+                    {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                      <span>…</span>
+                    {:else if usageByAccountId[account.id]?.primary}
+                      <span
+                        >{remainingPercent(
+                          usageByAccountId[account.id].primary?.usedPercent
+                        )}%</span
+                      >
+                    {:else}
+                      <span>-</span>
+                    {/if}
                   </div>
 
-                  {#if availableTags(account).length}
-                    <div class="flex-none" use:stopClickPropagation>
-                      <button
-                        class={`theme-tag-add-button inline-flex items-center gap-1 rounded-full border border-dashed px-2.5 py-1 text-[11px] font-medium transition-[opacity,background-color,border-color,color] duration-140 ${
-                          tagPickerAccountId === account.id
-                            ? 'theme-tag-add-button-active border-black/16 bg-black/[0.08] text-black/80 opacity-100'
-                            : 'pointer-events-none border-black/12 bg-black/[0.02] text-black/58 opacity-0 group-hover:pointer-events-auto group-hover:opacity-100 group-hover:hover:bg-black/[0.05] group-focus-within:pointer-events-auto group-focus-within:opacity-100'
-                        }`}
-                        type="button"
-                        onclick={(event) => toggleTagPicker(event, account.id)}
-                        disabled={loginActionBusy || tagMutationBusy}
-                        aria-label={`${copy.addTag} · ${accountEmail(account, copy)}`}
-                        title={copy.addTag}
+                  <div
+                    class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong"
+                    title={`${copy.weeklyReset} · ${formatRelativeReset(
+                      usageByAccountId[account.id]?.secondary?.resetsAt,
+                      language
+                    )}`}
+                  >
+                    <span class="font-medium">{copy.weeklyQuota}</span>
+                    <span
+                      class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                    >
+                      <span
+                        class="theme-progress-fill block h-full rounded-full bg-black/70"
+                        style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
+                      ></span>
+                    </span>
+                    {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                      <span>…</span>
+                    {:else if usageByAccountId[account.id]?.secondary}
+                      <span
+                        >{remainingPercent(
+                          usageByAccountId[account.id].secondary?.usedPercent
+                        )}%</span
                       >
-                        <span class="i-lucide-plus h-3.5 w-3.5"></span>
-                        <span>{copy.addTag}</span>
-                      </button>
+                    {:else}
+                      <span>-</span>
+                    {/if}
+                  </div>
 
-                      {#if tagPickerAccountId === account.id}
-                        <div
-                          use:portal
-                          use:floatingTagPicker={tagPickerAnchorRect}
-                          use:stopClickPropagation
-                          class="theme-tag-picker-surface z-[999] rounded-[0.9rem] border border-black/8 bg-white p-1.5 shadow-[0_18px_44px_rgba(15,23,42,0.12)]"
+                  {#if extraLimits(usageByAccountId, account.id).length}
+                    {#each extraLimits(usageByAccountId, account.id) as limit (`${account.id}:${limit.limitId ?? 'extra'}`)}
+                      <div
+                        class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px]"
+                      >
+                        <span class="font-medium uppercase tracking-[0.08em]"
+                          >{limitLabel(limit)}</span
                         >
-                          <div
-                            class="px-2.5 pb-1 pt-1 text-[11px] font-medium uppercase tracking-[0.08em] text-faint"
-                          >
-                            {copy.addTag}
-                          </div>
-                          {#each availableTags(account) as tag (tag.id)}
-                            <button
-                              class="theme-tag-picker-item tag-picker-item flex w-full appearance-none items-center justify-between rounded-[0.7rem] border-0 bg-transparent px-2.5 py-2 text-left text-[12px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-black/[0.06]"
-                              type="button"
-                              onclick={() => void addTagToAccount(account, tag.id)}
-                              disabled={loginActionBusy || tagMutationBusy}
-                            >
-                              <span class="truncate">{tag.name}</span>
-                              <span
-                                class="theme-tag-picker-plus inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/[0.04] text-black/45"
-                              >
-                                <span class="i-lucide-plus h-3.5 w-3.5"></span>
-                              </span>
-                            </button>
-                          {/each}
-                        </div>
-                      {/if}
-                    </div>
+                        {#if limit.primary}
+                          <span>h {remainingPercent(limit.primary.usedPercent)}%</span>
+                        {/if}
+                        {#if limit.secondary}
+                          <span>w {remainingPercent(limit.secondary.usedPercent)}%</span>
+                        {/if}
+                      </div>
+                    {/each}
                   {/if}
                 </div>
               </div>
 
-              <div
-                class="scroll-row ml-auto flex flex-none items-center justify-end gap-2 overflow-x-auto whitespace-nowrap pb-1"
-              >
-                <div
-                  class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong"
-                  title={`${copy.sessionReset} · ${formatRelativeReset(
-                    usageByAccountId[account.id]?.primary?.resetsAt,
-                    language
-                  )}`}
+              <div class="flex items-center justify-end gap-1">
+                <button
+                  class={iconRowButton}
+                  onclick={() => openAccountInCodex(account.id)}
+                  disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
+                  aria-label={`${copy.openCodex} · ${accountEmail(account, copy)}`}
+                  title={copy.openCodex}
                 >
-                  <span class="font-medium">{copy.sessionQuota}</span>
-                  <span
-                    class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
-                  >
-                    <span
-                      class="theme-progress-fill block h-full rounded-full bg-black/70"
-                      style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
-                    ></span>
-                  </span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.primary}
-                    <span
-                      >{remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%</span
-                    >
+                  {#if openingAccountId === account.id}
+                    <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
                   {:else}
-                    <span>-</span>
+                    <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
                   {/if}
-                </div>
-
-                <div
-                  class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong"
-                  title={`${copy.weeklyReset} · ${formatRelativeReset(
-                    usageByAccountId[account.id]?.secondary?.resetsAt,
-                    language
-                  )}`}
+                </button>
+                <button
+                  class={iconRowButton}
+                  onclick={() => openAccountInIsolatedCodex(account.id)}
+                  disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
+                  aria-label={`${copy.openCodexIsolated} · ${accountEmail(account, copy)}`}
+                  title={copy.openCodexIsolated}
                 >
-                  <span class="font-medium">{copy.weeklyQuota}</span>
-                  <span
-                    class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
-                  >
-                    <span
-                      class="theme-progress-fill block h-full rounded-full bg-black/70"
-                      style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
-                    ></span>
-                  </span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.secondary}
-                    <span
-                      >{remainingPercent(
-                        usageByAccountId[account.id].secondary?.usedPercent
-                      )}%</span
-                    >
+                  {#if openingIsolatedAccountId === account.id}
+                    <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
                   {:else}
-                    <span>-</span>
+                    <span class="i-lucide-copy-plus h-4 w-4"></span>
                   {/if}
-                </div>
-
-                {#if extraLimits(usageByAccountId, account.id).length}
-                  {#each extraLimits(usageByAccountId, account.id) as limit (`${account.id}:${limit.limitId ?? 'extra'}`)}
-                    <div
-                      class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px]"
-                    >
-                      <span class="font-medium uppercase tracking-[0.08em]"
-                        >{limitLabel(limit)}</span
-                      >
-                      {#if limit.primary}
-                        <span>h {remainingPercent(limit.primary.usedPercent)}%</span>
-                      {/if}
-                      {#if limit.secondary}
-                        <span>w {remainingPercent(limit.secondary.usedPercent)}%</span>
-                      {/if}
-                    </div>
-                  {/each}
-                {/if}
+                </button>
+                <button
+                  class={iconRowButton}
+                  onclick={() => activateAccount(account.id)}
+                  disabled={loginActionBusy ||
+                    activeAccountId === account.id ||
+                    Boolean(accountActionBusy(account.id))}
+                  aria-label={`${copy.switchAccount} · ${accountEmail(account, copy)}`}
+                  title={copy.switchAccount}
+                >
+                  {#if activatingAccountId === account.id}
+                    <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                  {:else}
+                    <span class="i-lucide-repeat-2 h-4 w-4"></span>
+                  {/if}
+                </button>
+                <button
+                  class={iconRowButton}
+                  onclick={() => refreshAccountUsage(account)}
+                  disabled={loginActionBusy || usageLoadingByAccountId[account.id]}
+                  aria-label={`${copy.refreshQuota} · ${accountEmail(account, copy)}`}
+                  title={copy.refreshQuota}
+                >
+                  <span class="i-lucide-refresh-cw h-4 w-4"></span>
+                </button>
+                <button
+                  class={iconRowButton}
+                  onclick={() => removeAccount(account)}
+                  disabled={loginActionBusy}
+                  aria-label={`${copy.deleteSaved} · ${accountEmail(account, copy)}`}
+                  title={copy.deleteSaved}
+                >
+                  <span class="i-lucide-trash-2 h-4 w-4"></span>
+                </button>
               </div>
-            </div>
-
-            <div class="flex items-center justify-end gap-1">
-              <button
-                class={iconRowButton}
-                onclick={() => openAccountInCodex(account.id)}
-                disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
-                aria-label={`${copy.openCodex} · ${accountEmail(account, copy)}`}
-                title={copy.openCodex}
-              >
-                {#if openingAccountId === account.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
-                {/if}
-              </button>
-              <button
-                class={iconRowButton}
-                onclick={() => openAccountInIsolatedCodex(account.id)}
-                disabled={loginActionBusy || Boolean(accountActionBusy(account.id))}
-                aria-label={`${copy.openCodexIsolated} · ${accountEmail(account, copy)}`}
-                title={copy.openCodexIsolated}
-              >
-                {#if openingIsolatedAccountId === account.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-copy-plus h-4 w-4"></span>
-                {/if}
-              </button>
-              <button
-                class={iconRowButton}
-                onclick={() => activateAccount(account.id)}
-                disabled={loginActionBusy || activeAccountId === account.id || Boolean(accountActionBusy(account.id))}
-                aria-label={`${copy.switchAccount} · ${accountEmail(account, copy)}`}
-                title={copy.switchAccount}
-              >
-                {#if activatingAccountId === account.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-repeat-2 h-4 w-4"></span>
-                {/if}
-              </button>
-              <button
-                class={iconRowButton}
-                onclick={() => refreshAccountUsage(account)}
-                disabled={loginActionBusy || usageLoadingByAccountId[account.id]}
-                aria-label={`${copy.refreshQuota} · ${accountEmail(account, copy)}`}
-                title={copy.refreshQuota}
-              >
-                <span class="i-lucide-refresh-cw h-4 w-4"></span>
-              </button>
-              <button
-                class={iconRowButton}
-                onclick={() => removeAccount(account)}
-                disabled={loginActionBusy}
-                aria-label={`${copy.deleteSaved} · ${accountEmail(account, copy)}`}
-                title={copy.deleteSaved}
-              >
-                <span class="i-lucide-trash-2 h-4 w-4"></span>
-              </button>
-            </div>
-          </article>
+            </article>
           {/each}
         </div>
       </div>
@@ -1076,7 +1210,7 @@
         >
           {#each sortableProviders as provider (provider.id)}
             <article
-              class="theme-provider-card group grid items-center gap-3 rounded-[0.875rem] border border-black/8 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,252,0.96))] px-3 py-2.5 transition-[border-color,box-shadow,transform] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+              class="theme-provider-card group grid items-center gap-3 rounded-[0.8rem] border border-black/8 bg-white px-3 py-2 transition-[border-color,box-shadow,transform,background-color] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
               animate:flip={{ duration: flipDurationMs }}
               aria-label={providerLabel(provider, copy)}
             >
@@ -1094,7 +1228,9 @@
               <div class="flex min-w-0 items-center gap-3 overflow-visible">
                 <div class="min-w-0 flex-1">
                   {#if editingProviderId === provider.id}
-                    <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
+                    <div
+                      class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]"
+                    >
                       <input
                         class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                         bind:value={providerDrafts[provider.id].name}
@@ -1122,27 +1258,41 @@
                       />
                     </div>
                   {:else}
-                    <div class="scroll-row flex min-w-0 items-center gap-2 overflow-x-auto whitespace-nowrap pb-1">
-                      <span class="theme-provider-status h-2 w-2 flex-none rounded-full bg-sky-500/55 ring-3 ring-sky-500/12"></span>
-                      <p class="max-w-[220px] truncate text-sm font-medium text-ink">
-                        {providerLabel(provider, copy)}
-                      </p>
-                      <span class="theme-provider-badge inline-flex flex-none items-center rounded-full border border-sky-500/16 bg-sky-500/10 px-2 py-0.75 text-[10px] font-medium text-sky-700">
-                        {copy.providerBadge}
-                      </span>
-                      {#if provider.fastMode}
-                        <span class="theme-provider-fast-badge inline-flex flex-none items-center rounded-full border border-emerald-500/16 bg-emerald-500/10 px-2 py-0.75 text-[10px] font-medium text-emerald-700">
-                          Fast
+                    <div class="grid min-w-0 gap-1.5">
+                      <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                        <span
+                          class="theme-provider-status h-1.5 w-1.5 flex-none rounded-full bg-sky-500/55 ring-2 ring-sky-500/12"
+                        ></span>
+                        <p class="min-w-0 truncate text-sm font-medium text-ink">
+                          {providerLabel(provider, copy)}
+                        </p>
+                        <span
+                          class="theme-provider-badge inline-flex flex-none items-center rounded-full border border-sky-500/16 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700"
+                        >
+                          {copy.providerBadge}
                         </span>
-                      {/if}
-                      <span class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong">
-                        <span class="font-medium uppercase tracking-[0.08em]">Model</span>
-                        <span>{provider.model}</span>
-                      </span>
-                      <span class="theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[11px] text-muted-strong">
-                        <span class="font-medium uppercase tracking-[0.08em]">URL</span>
-                        <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
-                      </span>
+                        {#if provider.fastMode}
+                          <span
+                            class="theme-provider-fast-badge inline-flex flex-none items-center rounded-full border border-emerald-500/16 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                          >
+                            Fast
+                          </span>
+                        {/if}
+                      </div>
+                      <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                        <span
+                          class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                        >
+                          <span class="font-medium uppercase tracking-[0.08em]">Model</span>
+                          <span>{provider.model}</span>
+                        </span>
+                        <span
+                          class="theme-provider-meta theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                        >
+                          <span class="font-medium uppercase tracking-[0.08em]">URL</span>
+                          <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
+                        </span>
+                      </div>
                     </div>
                   {/if}
                 </div>
@@ -1150,7 +1300,9 @@
 
               <div class="flex items-center justify-end gap-1">
                 {#if editingProviderId === provider.id}
-                  <label class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2 text-sm text-ink">
+                  <label
+                    class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-2.5 py-1.5 text-sm text-ink"
+                  >
                     <input
                       type="checkbox"
                       bind:checked={providerDrafts[provider.id].fastMode}
@@ -1246,10 +1398,7 @@
               <span>{copy.callbackLogin}</span>
             </button>
 
-            <button
-              class={`${compactGhostButton} px-4 py-3`}
-              onclick={() => startLogin('device')}
-            >
+            <button class={`${compactGhostButton} px-4 py-3`} onclick={() => startLogin('device')}>
               <span class="i-lucide-key-round h-4.5 w-4.5"></span>
               <span>{copy.deviceLogin}</span>
             </button>
@@ -1284,12 +1433,55 @@
     transform: none;
   }
 
+  .theme-selection-toolbar-idle,
+  .theme-selection-toolbar-active {
+    opacity: 1;
+  }
+
+  .theme-selection-group-button:disabled,
+  .theme-selection-export:disabled,
+  .theme-selection-delete:disabled {
+    opacity: 1 !important;
+    cursor: not-allowed;
+  }
+
+  .theme-selection-group {
+    background: rgba(24, 24, 27, 0.04);
+    border-color: rgba(24, 24, 27, 0.08);
+  }
+
+  .theme-selection-group-button {
+    background: transparent;
+    color: var(--ink);
+  }
+
+  .theme-selection-group-button:hover:not(:disabled) {
+    background: rgba(24, 24, 27, 0.04);
+  }
+
+  .theme-selection-group-button:disabled,
+  .theme-selection-export:disabled {
+    color: var(--ink-faint) !important;
+  }
+
+  .theme-selection-group-button:disabled {
+    background: transparent !important;
+  }
+
+  .theme-selection-export:disabled {
+    background: rgba(24, 24, 27, 0.03) !important;
+    border-color: rgba(24, 24, 27, 0.1) !important;
+  }
+
+  .theme-selection-delete:disabled {
+    color: color-mix(in srgb, var(--danger) 72%, transparent) !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+  }
+
   :global(html[data-theme='dark']) .theme-view-toggle-active {
     background: var(--panel-strong) !important;
     color: var(--ink) !important;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.06) inset,
-      0 10px 22px rgba(0, 0, 0, 0.18) !important;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04) !important;
   }
 
   :global(html[data-theme='dark']) .theme-view-toggle-idle {
@@ -1391,6 +1583,11 @@
     color: var(--paper) !important;
   }
 
+  :global(html[data-theme='dark']) .theme-workbench-toolbar {
+    background: color-mix(in srgb, var(--surface-soft) 90%, var(--panel) 10%) !important;
+    border-color: var(--line) !important;
+  }
+
   :global(html[data-theme='dark']) .theme-filter-chip-idle {
     background: var(--surface-soft) !important;
     border-color: var(--line) !important;
@@ -1400,5 +1597,81 @@
   :global(html[data-theme='dark']) .theme-filter-chip-idle:hover {
     background: var(--surface-hover) !important;
     color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-toolbar-idle {
+    color: var(--ink) !important;
+    border-top-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-toolbar-active {
+    color: var(--ink) !important;
+    border-top-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-group,
+  :global(html[data-theme='dark']) .theme-selection-export {
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
+    border-color: color-mix(in srgb, var(--line) 78%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-divider {
+    background: color-mix(in srgb, var(--line) 72%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-group-button,
+  :global(html[data-theme='dark']) .theme-selection-export {
+    color: var(--ink) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-group-button:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--surface-hover) 86%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-group-button[disabled] {
+    background: transparent !important;
+    color: var(--ink-faint) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-group-button:hover,
+  :global(html[data-theme='dark']) .theme-selection-export:hover {
+    background: var(--surface-hover) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-export[disabled] {
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
+    color: var(--ink-faint) !important;
+    border-color: color-mix(in srgb, var(--line) 78%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-delete {
+    border-color: rgb(239 68 68 / 0.18) !important;
+    background: rgb(239 68 68 / 0.1) !important;
+    color: rgb(252 165 165) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-delete[disabled] {
+    border-color: rgb(239 68 68 / 0.12) !important;
+    background: rgb(239 68 68 / 0.08) !important;
+    color: rgb(252 165 165 / 0.76) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-account-card-selected {
+    background: var(--panel-strong) !important;
+    border-color: var(--line) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-account-selector {
+    border-color: var(--line) !important;
+    background: var(--panel-strong) !important;
+    color: var(--ink-soft) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-account-selector-input {
+    accent-color: var(--ink);
+  }
+
+  :global(html[data-theme='dark']) .theme-selection-danger:hover {
+    background: color-mix(in srgb, rgb(239 68 68) 12%, var(--surface-hover)) !important;
   }
 </style>

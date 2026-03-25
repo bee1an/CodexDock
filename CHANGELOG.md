@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.1 - 2026-03-25
+
+This patch release hardens desktop account storage, streamlines import and export, and refines bulk account management in the main app.
+
+- Added multi-select account actions in the desktop account list so filtered accounts can be exported or removed in bulk.
+- Simplified the desktop account template format, aligned import validation with the exported schema, and renamed exported files to the `ilovecodex-accounts-*.json` pattern.
+- Fixed saved account state corruption risks by serializing account-store writes, switching to atomic state-file replacement, and recovering from the backup file when the primary JSON is unreadable.
+- Improved account list layout and dark-theme behavior so tag filters, bulk-selection controls, and provider rows read more clearly with denser spacing and steadier contrast.
+- Refactored shared OpenAI auth parsing and desktop launcher/template modules to reduce duplication while keeping desktop behavior aligned across account, provider, and CLI entry points.
+
 ## 0.3.0 - 2026-03-23
 
 This release improves desktop account lifecycle management with import/export, persistent session status, and background token upkeep.

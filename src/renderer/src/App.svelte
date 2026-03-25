@@ -219,10 +219,7 @@
     }
   }
 
-  const localizeKnownError = (
-    error: unknown,
-    fallback: string
-  ): string => {
+  const localizeKnownError = (error: unknown, fallback: string): string => {
     if (!(error instanceof Error)) {
       return fallback
     }
@@ -259,10 +256,7 @@
     }
   }
 
-  const runAccountAction = async (
-    key: string,
-    task: () => Promise<AppSnapshot>
-  ): Promise<void> => {
+  const runAccountAction = async (key: string, task: () => Promise<AppSnapshot>): Promise<void> => {
     if (accountActionKey) {
       return
     }
@@ -291,7 +285,9 @@
   }
 
   const removeProvider = async (providerId: string): Promise<void> => {
-    await runAction(`provider:remove:${providerId}`, () => window.codexApp.removeProvider(providerId))
+    await runAction(`provider:remove:${providerId}`, () =>
+      window.codexApp.removeProvider(providerId)
+    )
   }
 
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
@@ -379,6 +375,32 @@
     }
 
     await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
+  }
+
+  const removeAccounts = async (accountIds: string[]): Promise<void> => {
+    const uniqueIds = [...new Set(accountIds)]
+    if (!uniqueIds.length) {
+      return
+    }
+
+    if (!window.confirm(copyForLanguage().removeSelectedConfirm(uniqueIds.length))) {
+      return
+    }
+
+    await runAction(`remove-many:${uniqueIds.join(',')}`, () =>
+      window.codexApp.removeAccounts(uniqueIds)
+    )
+  }
+
+  const exportSelectedAccounts = async (accountIds: string[]): Promise<void> => {
+    const uniqueIds = [...new Set(accountIds)]
+    if (!uniqueIds.length) {
+      return
+    }
+
+    await runAction(`export:selected:${uniqueIds.join(',')}`, () =>
+      window.codexApp.exportSelectedAccountsToFile(uniqueIds)
+    )
   }
 
   const reorderAccounts = async (accountIds: string[]): Promise<void> => {
@@ -774,17 +796,29 @@
         loginActionBusy={loginActionBusy()}
         {loginStarting}
         openAccountInCodex={(accountId) =>
-          runAccountAction(`open:${accountId}`, () => window.codexApp.openAccountInCodex(accountId))}
+          runAccountAction(`open:${accountId}`, () =>
+            window.codexApp.openAccountInCodex(accountId)
+          )}
         openAccountInIsolatedCodex={(accountId) =>
           runAccountAction(`open-isolated:${accountId}`, () =>
             window.codexApp.openAccountInIsolatedCodex(accountId)
           )}
         activateAccount={(accountId) =>
-          runAccountAction(`activate:${accountId}`, () => window.codexApp.activateAccount(accountId))}
-        openingAccountId={accountActionKey.startsWith('open:') ? accountActionKey.slice('open:'.length) : ''}
-        openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:') ? accountActionKey.slice('open-isolated:'.length) : ''}
-        activatingAccountId={accountActionKey.startsWith('activate:') ? accountActionKey.slice('activate:'.length) : ''}
-        openingProviderId={accountActionKey.startsWith('provider:open:') ? accountActionKey.slice('provider:open:'.length) : ''}
+          runAccountAction(`activate:${accountId}`, () =>
+            window.codexApp.activateAccount(accountId)
+          )}
+        openingAccountId={accountActionKey.startsWith('open:')
+          ? accountActionKey.slice('open:'.length)
+          : ''}
+        openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
+          ? accountActionKey.slice('open-isolated:'.length)
+          : ''}
+        activatingAccountId={accountActionKey.startsWith('activate:')
+          ? accountActionKey.slice('activate:'.length)
+          : ''}
+        openingProviderId={accountActionKey.startsWith('provider:open:')
+          ? accountActionKey.slice('provider:open:'.length)
+          : ''}
         {getProvider}
         {reorderProviders}
         {updateProvider}
@@ -797,6 +831,8 @@
         {updateAccountTags}
         refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
         {removeAccount}
+        {removeAccounts}
+        {exportSelectedAccounts}
         {startLogin}
         importCurrent={() => runAction('import', () => window.codexApp.importCurrentAccount())}
       />
@@ -925,16 +961,9 @@
   }
 
   :global(html[data-theme='dark'] .theme-provider-card) {
-    border-color: var(--line-strong) !important;
-    background:
-      linear-gradient(
-        180deg,
-        color-mix(in srgb, var(--panel-strong) 92%, white 8%),
-        color-mix(in srgb, var(--panel) 96%, black 4%)
-      ) !important;
-    box-shadow:
-      0 1px 0 rgba(255, 255, 255, 0.06) inset,
-      0 14px 36px color-mix(in srgb, var(--paper-shadow) 44%, transparent) !important;
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--panel) 8%) !important;
+    box-shadow: none !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-input),
@@ -944,23 +973,38 @@
   }
 
   :global(html[data-theme='dark'] .theme-provider-input) {
-    background: var(--panel-strong) !important;
+    background: color-mix(in srgb, var(--panel-strong) 86%, var(--surface-soft) 14%) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-input::placeholder) {
     color: var(--ink-faint) !important;
   }
 
+  :global(html[data-theme='dark'] .theme-provider-toggle) {
+    background: color-mix(in srgb, var(--surface-soft) 88%, var(--panel) 12%) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-status) {
+    background: rgb(96 165 250 / 0.7) !important;
+    box-shadow: 0 0 0 4px rgb(96 165 250 / 0.08) !important;
+  }
+
   :global(html[data-theme='dark'] .theme-provider-badge) {
-    border-color: rgb(56 189 248 / 0.24) !important;
-    background: rgb(14 165 233 / 0.18) !important;
-    color: rgb(186 230 253) !important;
+    border-color: rgb(56 189 248 / 0.16) !important;
+    background: rgb(14 165 233 / 0.1) !important;
+    color: rgb(186 230 253 / 0.88) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-fast-badge) {
-    border-color: rgb(16 185 129 / 0.24) !important;
-    background: rgb(16 185 129 / 0.18) !important;
-    color: rgb(167 243 208) !important;
+    border-color: rgb(16 185 129 / 0.16) !important;
+    background: rgb(16 185 129 / 0.1) !important;
+    color: rgb(167 243 208 / 0.88) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-provider-meta) {
+    border-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--surface-soft) 82%, var(--panel) 18%) !important;
+    color: var(--ink-soft) !important;
   }
 
   :global(html[data-theme='dark'] .theme-select option) {

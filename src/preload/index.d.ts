@@ -23,10 +23,12 @@ interface CodexDesktopApi {
   importCurrentAccount: () => Promise<AppSnapshot>
   importAccountsFromFile: () => Promise<AppSnapshot>
   exportAccountsToFile: () => Promise<AppSnapshot>
+  exportSelectedAccountsToFile: (accountIds: string[]) => Promise<AppSnapshot>
   activateAccount: (accountId: string) => Promise<AppSnapshot>
   activateBestAccount: () => Promise<AppSnapshot>
   reorderAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   removeAccount: (accountId: string) => Promise<AppSnapshot>
+  removeAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   updateAccountTags: (accountId: string, tagIds: string[]) => Promise<AppSnapshot>
   createTag: (name: string) => Promise<AppSnapshot>
   updateTag: (tagId: string, name: string) => Promise<AppSnapshot>

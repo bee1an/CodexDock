@@ -1,6 +1,7 @@
 import type { CodexAuthPayload } from './codex-auth'
 import type { AccountRateLimitEntry, AccountRateLimits, CreditsSnapshot } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
+import { resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
 
 interface RateLimitWindowApiPayload {
   used_percent: number
@@ -81,7 +82,9 @@ function windowMinutesFromSeconds(seconds?: number | null): number | null {
   return Math.ceil(seconds / 60)
 }
 
-function mapRateLimitWindow(window?: RateLimitWindowApiPayload | null): RateLimitWindowPayload | null {
+function mapRateLimitWindow(
+  window?: RateLimitWindowApiPayload | null
+): RateLimitWindowPayload | null {
   if (!window) {
     return null
   }
@@ -165,46 +168,12 @@ function mapRateLimits(payload: RateLimitStatusPayload): AccountRateLimits {
   }
 }
 
-function decodeJwtPayload(token?: string): Record<string, unknown> {
-  if (!token) {
-    return {}
-  }
-
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return {}
-  }
-
-  const payload = parts[1]
-  const padding = '='.repeat((4 - (payload.length % 4)) % 4)
-  const normalized = `${payload}${padding}`.replaceAll('-', '+').replaceAll('_', '/')
-
-  try {
-    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
-
 function extractChatGptAccountId(auth: CodexAuthPayload): string | undefined {
-  if (auth.tokens?.account_id) {
-    return auth.tokens.account_id
-  }
-
-  const claims = [decodeJwtPayload(auth.tokens?.id_token), decodeJwtPayload(auth.tokens?.access_token)]
-  for (const payload of claims) {
-    const authClaim = payload['https://api.openai.com/auth']
-    if (
-      authClaim &&
-      typeof authClaim === 'object' &&
-      'chatgpt_account_id' in authClaim &&
-      typeof authClaim.chatgpt_account_id === 'string'
-    ) {
-      return authClaim.chatgpt_account_id
-    }
-  }
-
-  return undefined
+  return resolveChatGptAccountIdFromTokens(
+    auth.tokens?.id_token,
+    auth.tokens?.access_token,
+    auth.tokens?.account_id
+  )
 }
 
 function normalizeChatGptBaseUrl(baseUrl: string): string {
@@ -213,7 +182,10 @@ function normalizeChatGptBaseUrl(baseUrl: string): string {
     normalized = normalized.slice(0, -1)
   }
 
-  if (CHATGPT_HOSTS.some((host) => normalized.startsWith(host)) && !normalized.includes('/backend-api')) {
+  if (
+    CHATGPT_HOSTS.some((host) => normalized.startsWith(host)) &&
+    !normalized.includes('/backend-api')
+  ) {
     normalized = `${normalized}/backend-api`
   }
 

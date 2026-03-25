@@ -1,8 +1,4 @@
-import { execFile as execFileCallback, spawn } from 'node:child_process'
-import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
-import { promisify } from 'node:util'
-import { parse as parseToml, stringify as stringifyToml } from '@iarna/toml'
 
 import {
   CodexAccountStore,
@@ -17,6 +13,23 @@ import {
   type PersistedCodexInstance,
   type PersistedDefaultCodexInstance
 } from './codex-instances'
+import {
+  buildAuthPayloadFromTemplate,
+  buildTemplateAccountExport,
+  buildTemplateRateLimits,
+  parseTemplateFileRecord,
+  type TemplateAccountRecord,
+  type TemplateFileRecord
+} from './codex-account-template'
+import {
+  launchCodexDesktop,
+  resolveManagedCodexPid,
+  resolveWindowsCodexDesktopExecutable,
+  stopCodexProcess,
+  writeAuthPayloadToCodexHome,
+  writeProviderApiKeyToCodexHome,
+  writeProviderConfigToCodexHome
+} from './codex-launcher'
 import { CodexProviderStore } from './codex-providers'
 import { AccountRateLimitLookupError, readAccountRateLimits } from './codex-app-server'
 import {
@@ -38,36 +51,10 @@ import {
   type UpdateCodexInstanceInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
+import { decodeJwtPayload } from '../shared/openai-auth'
 
-const execFile = promisify(execFileCallback)
 const DEFAULT_CODEX_INSTANCE_ID = '__default__'
-const macosCodexAppBinary = '/Applications/Codex.app/Contents/MacOS/Codex'
 const BACKGROUND_AUTH_REFRESH_SKEW_MS = 5 * 60_000
-const codexProcessPattern =
-  process.platform === 'darwin'
-    ? '(/Applications/Codex\\.app/Contents/MacOS/Codex|(^|/)codex( |$))'
-    : '(^|/)codex( |$)'
-
-function decodeJwtPayload(token?: string): Record<string, unknown> {
-  if (!token) {
-    return {}
-  }
-
-  const parts = token.split('.')
-  if (parts.length < 2) {
-    return {}
-  }
-
-  const payload = parts[1]
-  const padding = '='.repeat((4 - (payload.length % 4)) % 4)
-  const normalized = `${payload}${padding}`.replaceAll('-', '+').replaceAll('_', '/')
-
-  try {
-    return JSON.parse(Buffer.from(normalized, 'base64').toString('utf8')) as Record<string, unknown>
-  } catch {
-    return {}
-  }
-}
 
 function accessTokenExpiresSoon(token?: string, skewMs = 60_000): boolean {
   if (!token) {
@@ -80,346 +67,6 @@ function accessTokenExpiresSoon(token?: string, skewMs = 60_000): boolean {
   }
 
   return payload.exp * 1000 <= Date.now() + skewMs
-}
-
-interface TemplateCredentialRecord {
-  _token_version?: number
-  access_token?: string
-  chatgpt_account_id?: string
-  chatgpt_user_id?: string
-  client_id?: string
-  email?: string
-  expires_at?: string
-  expires_in?: number
-  id_token?: string
-  organization_id?: string
-  plan_type?: string
-  refresh_token?: string
-  scope?: string | null
-  token_type?: string | null
-}
-
-interface TemplateExtraRecord {
-  codex_5h_reset_after_seconds?: number
-  codex_5h_reset_at?: string
-  codex_5h_used_percent?: number
-  codex_5h_window_minutes?: number
-  codex_7d_reset_after_seconds?: number
-  codex_7d_reset_at?: string
-  codex_7d_used_percent?: number
-  codex_7d_window_minutes?: number
-  codex_primary_over_secondary_percent?: number
-  codex_primary_reset_after_seconds?: number
-  codex_primary_reset_at?: string
-  codex_primary_used_percent?: number
-  codex_primary_window_minutes?: number
-  codex_secondary_reset_after_seconds?: number
-  codex_secondary_reset_at?: string
-  codex_secondary_used_percent?: number
-  codex_secondary_window_minutes?: number
-  codex_usage_updated_at?: string
-  email?: string
-  privacy_mode?: string
-}
-
-interface TemplateAccountRecord {
-  name?: string
-  notes?: string
-  platform?: string
-  type?: string
-  credentials?: TemplateCredentialRecord
-  extra?: TemplateExtraRecord
-  concurrency?: number
-  priority?: number
-  rate_multiplier?: number
-  auto_pause_on_expired?: boolean
-}
-
-interface TemplateFileRecord {
-  exported_at?: string
-  proxies?: unknown[]
-  accounts?: TemplateAccountRecord[]
-}
-
-function toEpochSeconds(value?: string | number | null): number | null {
-  if (typeof value === 'number' && Number.isFinite(value)) {
-    return Math.max(0, Math.floor(value))
-  }
-
-  if (!value || typeof value !== 'string') {
-    return null
-  }
-
-  const parsed = Date.parse(value)
-  if (Number.isNaN(parsed)) {
-    return null
-  }
-
-  return Math.floor(parsed / 1000)
-}
-
-function toIsoFromEpochSeconds(value?: number | null): string | undefined {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    return undefined
-  }
-
-  return new Date(value * 1000).toISOString()
-}
-
-function normalizeWindowDuration(value?: number | null): number | null {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
-    return null
-  }
-
-  return Math.floor(value)
-}
-
-function normalizeUsedPercent(value?: number | null): number {
-  if (typeof value !== 'number' || !Number.isFinite(value)) {
-    return 0
-  }
-
-  return Math.max(0, Math.min(100, Math.round(value)))
-}
-
-function resolveClaimString(payload: Record<string, unknown>, key: string): string | undefined {
-  const value = payload[key]
-  return typeof value === 'string' && value.trim() ? value : undefined
-}
-
-function resolveAuthMetadata(auth: CodexAuthPayload): {
-  email?: string
-  userId?: string
-  organizationId?: string
-  scope?: string
-  tokenType?: string
-  expiresAt?: string
-} {
-  const idClaims = decodeJwtPayload(auth.tokens?.id_token)
-  const accessClaims = decodeJwtPayload(auth.tokens?.access_token)
-  const authClaims =
-    accessClaims['https://api.openai.com/auth'] &&
-    typeof accessClaims['https://api.openai.com/auth'] === 'object'
-      ? (accessClaims['https://api.openai.com/auth'] as Record<string, unknown>)
-      : {}
-  const expiresAt = toIsoFromEpochSeconds(
-    typeof accessClaims.exp === 'number' ? accessClaims.exp : undefined
-  )
-
-  return {
-    email:
-      resolveClaimString(idClaims, 'email') ??
-      resolveClaimString(accessClaims, 'email') ??
-      resolveClaimString(authClaims, 'email'),
-    userId:
-      resolveClaimString(idClaims, 'sub') ??
-      resolveClaimString(accessClaims, 'sub') ??
-      resolveClaimString(authClaims, 'chatgpt_user_id'),
-    organizationId:
-      resolveClaimString(authClaims, 'organization_id') ??
-      resolveClaimString(idClaims, 'organization_id') ??
-      resolveClaimString(accessClaims, 'organization_id'),
-    scope: resolveClaimString(accessClaims, 'scope'),
-    tokenType: resolveClaimString(accessClaims, 'token_type'),
-    expiresAt
-  }
-}
-
-function buildTemplateRateLimits(
-  extra: TemplateExtraRecord | undefined,
-  credentials: TemplateCredentialRecord | undefined,
-  exportedAt: string
-): AccountRateLimits | null {
-  if (!extra) {
-    return null
-  }
-
-  const primaryResetsAt =
-    toEpochSeconds(extra.codex_primary_reset_at) ??
-    (typeof extra.codex_primary_reset_after_seconds === 'number'
-      ? Math.floor(Date.now() / 1000) + Math.max(0, Math.floor(extra.codex_primary_reset_after_seconds))
-      : null)
-  const secondaryResetsAt =
-    toEpochSeconds(extra.codex_secondary_reset_at) ??
-    (typeof extra.codex_secondary_reset_after_seconds === 'number'
-      ? Math.floor(Date.now() / 1000) + Math.max(0, Math.floor(extra.codex_secondary_reset_after_seconds))
-      : null)
-
-  const hasPrimary =
-    primaryResetsAt !== null ||
-    typeof extra.codex_primary_used_percent === 'number' ||
-    typeof extra.codex_primary_window_minutes === 'number'
-  const hasSecondary =
-    secondaryResetsAt !== null ||
-    typeof extra.codex_secondary_used_percent === 'number' ||
-    typeof extra.codex_secondary_window_minutes === 'number'
-
-  if (!hasPrimary && !hasSecondary) {
-    return null
-  }
-
-  return {
-    limitId: 'codex',
-    limitName: null,
-    planType: credentials?.plan_type ?? null,
-    primary: hasPrimary
-      ? {
-          usedPercent: normalizeUsedPercent(extra.codex_primary_used_percent),
-          windowDurationMins: normalizeWindowDuration(extra.codex_primary_window_minutes),
-          resetsAt: primaryResetsAt
-        }
-      : null,
-    secondary: hasSecondary
-      ? {
-          usedPercent: normalizeUsedPercent(extra.codex_secondary_used_percent),
-          windowDurationMins: normalizeWindowDuration(extra.codex_secondary_window_minutes),
-          resetsAt: secondaryResetsAt
-        }
-      : null,
-    credits: {
-      hasCredits: false,
-      unlimited: false,
-      balance: null
-    },
-    limits: [
-      {
-        limitId: 'codex',
-        limitName: null,
-        planType: credentials?.plan_type ?? null,
-        primary: hasPrimary
-          ? {
-              usedPercent: normalizeUsedPercent(extra.codex_primary_used_percent),
-              windowDurationMins: normalizeWindowDuration(extra.codex_primary_window_minutes),
-              resetsAt: primaryResetsAt
-            }
-          : null,
-        secondary: hasSecondary
-          ? {
-              usedPercent: normalizeUsedPercent(extra.codex_secondary_used_percent),
-              windowDurationMins: normalizeWindowDuration(extra.codex_secondary_window_minutes),
-              resetsAt: secondaryResetsAt
-            }
-          : null
-      }
-    ],
-    fetchedAt: extra.codex_usage_updated_at ?? exportedAt
-  }
-}
-
-function buildAuthPayloadFromTemplate(
-  account: TemplateAccountRecord,
-  exportedAt: string
-): CodexAuthPayload {
-  const credentials = account.credentials
-  if (!credentials) {
-    throw new Error('Template account is missing credentials.')
-  }
-
-  return {
-    auth_mode: 'chatgpt',
-    OPENAI_API_KEY: null,
-    last_refresh: exportedAt,
-    tokens: {
-      access_token: credentials.access_token,
-      refresh_token: credentials.refresh_token,
-      id_token: credentials.id_token,
-      account_id: credentials.chatgpt_account_id
-    }
-  }
-}
-
-function buildTemplateAccountExport(
-  account: AccountSummary,
-  auth: CodexAuthPayload,
-  rateLimits: AccountRateLimits | undefined,
-  exportedAt: string
-): TemplateAccountRecord {
-  const metadata = resolveAuthMetadata(auth)
-  const primary = rateLimits?.primary
-  const secondary = rateLimits?.secondary
-
-  return {
-    name: account.name ?? account.email ?? account.accountId ?? account.id,
-    notes: '',
-    platform: 'openai',
-    type: 'oauth',
-    credentials: {
-      _token_version: 1,
-      access_token: auth.tokens?.access_token,
-      chatgpt_account_id: auth.tokens?.account_id ?? account.accountId,
-      chatgpt_user_id: metadata.userId,
-      client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
-      email: account.email ?? metadata.email,
-      expires_at: metadata.expiresAt,
-      expires_in:
-        metadata.expiresAt != null
-          ? Math.max(0, Math.floor((Date.parse(metadata.expiresAt) - Date.now()) / 1000))
-          : undefined,
-      id_token: auth.tokens?.id_token,
-      organization_id: metadata.organizationId,
-      plan_type: rateLimits?.planType ?? undefined,
-      refresh_token: auth.tokens?.refresh_token,
-      scope: metadata.scope ?? null,
-      token_type: metadata.tokenType ?? null
-    },
-    extra: {
-      codex_5h_reset_after_seconds:
-        typeof primary?.resetsAt === 'number'
-          ? Math.max(0, primary.resetsAt - Math.floor(Date.now() / 1000))
-          : undefined,
-      codex_5h_reset_at: toIsoFromEpochSeconds(primary?.resetsAt),
-      codex_5h_used_percent: primary?.usedPercent ?? undefined,
-      codex_5h_window_minutes: primary?.windowDurationMins ?? undefined,
-      codex_7d_reset_after_seconds:
-        typeof secondary?.resetsAt === 'number'
-          ? Math.max(0, secondary.resetsAt - Math.floor(Date.now() / 1000))
-          : undefined,
-      codex_7d_reset_at: toIsoFromEpochSeconds(secondary?.resetsAt),
-      codex_7d_used_percent: secondary?.usedPercent ?? undefined,
-      codex_7d_window_minutes: secondary?.windowDurationMins ?? undefined,
-      codex_primary_over_secondary_percent:
-        typeof primary?.usedPercent === 'number' && typeof secondary?.usedPercent === 'number'
-          ? Math.max(0, primary.usedPercent - secondary.usedPercent)
-          : undefined,
-      codex_primary_reset_after_seconds:
-        typeof primary?.resetsAt === 'number'
-          ? Math.max(0, primary.resetsAt - Math.floor(Date.now() / 1000))
-          : undefined,
-      codex_primary_reset_at: toIsoFromEpochSeconds(primary?.resetsAt),
-      codex_primary_used_percent: primary?.usedPercent ?? undefined,
-      codex_primary_window_minutes: primary?.windowDurationMins ?? undefined,
-      codex_secondary_reset_after_seconds:
-        typeof secondary?.resetsAt === 'number'
-          ? Math.max(0, secondary.resetsAt - Math.floor(Date.now() / 1000))
-          : undefined,
-      codex_secondary_reset_at: toIsoFromEpochSeconds(secondary?.resetsAt),
-      codex_secondary_used_percent: secondary?.usedPercent ?? undefined,
-      codex_secondary_window_minutes: secondary?.windowDurationMins ?? undefined,
-      codex_usage_updated_at: rateLimits?.fetchedAt ?? exportedAt,
-      email: account.email ?? metadata.email,
-      privacy_mode: 'training_off'
-    },
-    concurrency: 10,
-    priority: 1,
-    rate_multiplier: 1,
-    auto_pause_on_expired: false
-  }
-}
-
-function parseExtraArgs(raw: string): string[] {
-  const tokens = raw.match(/"([^"\\]|\\.)*"|'([^'\\]|\\.)*'|[^\s]+/g) ?? []
-  return tokens
-    .map((token) => {
-      if (
-        (token.startsWith('"') && token.endsWith('"')) ||
-        (token.startsWith("'") && token.endsWith("'"))
-      ) {
-        return token.slice(1, -1).replace(/\\(["'])/g, '$1')
-      }
-
-      return token
-    })
-    .filter(Boolean)
 }
 
 function accountErrorLabel(account: AccountSummary): string {
@@ -436,261 +83,6 @@ function customProviderLabel(provider: Pick<CustomProviderSummary, 'name' | 'bas
 
 function resolveOptionalAccountId(snapshot: AppSnapshot): string | null {
   return snapshot.activeAccountId ?? snapshot.accounts[0]?.id ?? null
-}
-
-async function pathExists(value: string): Promise<boolean> {
-  try {
-    await fs.access(value)
-    return true
-  } catch {
-    return false
-  }
-}
-
-export async function resolveWindowsCodexDesktopExecutable(): Promise<string | null> {
-  const powershellPath = 'C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe'
-
-  try {
-    const stdout = await new Promise<string>((resolveStdout, rejectStdout) => {
-      execFileCallback(
-        powershellPath,
-        [
-          '-NoProfile',
-          '-Command',
-          '(Get-AppxPackage *Codex* | Select-Object -ExpandProperty InstallLocation -First 1)'
-        ],
-        (error, commandStdout) => {
-          if (error) {
-            rejectStdout(error)
-            return
-          }
-
-          resolveStdout(commandStdout)
-        }
-      )
-    })
-    const installLocation = stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean)
-
-    if (installLocation) {
-      return join(installLocation, 'app', 'Codex.exe')
-    }
-  } catch {
-    // Fall through to explicit configuration or PATH-based fallback.
-  }
-
-  return null
-}
-
-async function listCodexProcessIds(): Promise<number[]> {
-  try {
-    const { stdout } = await execFile('pgrep', ['-f', codexProcessPattern])
-    return stdout
-      .split('\n')
-      .map((line) => Number(line.trim()))
-      .filter((pid) => Number.isInteger(pid) && pid > 0)
-  } catch {
-    return []
-  }
-}
-
-function isPidRunning(pid?: number): boolean {
-  if (!pid || pid <= 0) {
-    return false
-  }
-
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function pidTouchesCodexHome(pid: number, codexHome: string): Promise<boolean> {
-  try {
-    const { stdout } = await execFile('lsof', ['-Fn', '-p', String(pid)])
-    const normalizedPath = resolve(codexHome)
-
-    return stdout
-      .split('\n')
-      .filter((line) => line.startsWith('n'))
-      .map((line) => line.slice(1))
-      .some((openedPath) => openedPath === normalizedPath || openedPath.startsWith(`${normalizedPath}/`))
-  } catch {
-    return false
-  }
-}
-
-async function resolveRunningCodexPid(
-  codexHome: string,
-  lastPid?: number
-): Promise<number | undefined> {
-  if (lastPid && isPidRunning(lastPid) && (await pidTouchesCodexHome(lastPid, codexHome))) {
-    return lastPid
-  }
-
-  for (const pid of await listCodexProcessIds()) {
-    if (await pidTouchesCodexHome(pid, codexHome)) {
-      return pid
-    }
-  }
-
-  return undefined
-}
-
-async function resolveManagedCodexPid(
-  codexHome: string,
-  lastPid?: number
-): Promise<number | undefined> {
-  if (lastPid && isPidRunning(lastPid)) {
-    return lastPid
-  }
-
-  return resolveRunningCodexPid(codexHome, lastPid)
-}
-
-async function stopCodexProcess(pid: number): Promise<void> {
-  if (!isPidRunning(pid)) {
-    return
-  }
-
-  try {
-    process.kill(pid, 'SIGTERM')
-  } catch {
-    return
-  }
-
-  for (let attempt = 0; attempt < 10; attempt += 1) {
-    if (!isPidRunning(pid)) {
-      return
-    }
-
-    await new Promise((resolveSleep) => setTimeout(resolveSleep, 200))
-  }
-
-  if (isPidRunning(pid)) {
-    try {
-      process.kill(pid, 'SIGKILL')
-    } catch {
-      // Ignore a process that exited between checks.
-    }
-  }
-}
-
-async function resolveCodexLaunchCommand(options?: {
-  preferAppBundle?: boolean
-  requireDesktopExecutable?: boolean
-  desktopExecutablePath?: string
-}): Promise<string> {
-  const explicitPath = process.env['ILOVECODEX_CODEX_BIN']?.trim()
-  if (explicitPath) {
-    return explicitPath
-  }
-
-  const configuredDesktopPath = options?.desktopExecutablePath?.trim()
-  if (configuredDesktopPath) {
-    return configuredDesktopPath
-  }
-
-  if (options?.preferAppBundle && process.platform === 'darwin' && (await pathExists(macosCodexAppBinary))) {
-    return macosCodexAppBinary
-  }
-
-  if (options?.requireDesktopExecutable) {
-    const detectedWindowsExecutable = await resolveWindowsCodexDesktopExecutable()
-    if (detectedWindowsExecutable) {
-      return detectedWindowsExecutable
-    }
-  }
-
-  if (options?.requireDesktopExecutable) {
-    throw new Error(
-      process.platform === 'darwin'
-        ? 'Codex app bundle not found. Install Codex.app or set ILOVECODEX_CODEX_BIN.'
-        : 'Codex desktop executable not configured. Set ILOVECODEX_CODEX_BIN to the Codex desktop executable path.'
-    )
-  }
-
-  try {
-    const locator = process.platform === 'win32' ? 'where.exe' : 'which'
-    const { stdout } = await execFile(locator, ['codex'])
-    const resolved = stdout
-      .split('\n')
-      .map((line) => line.trim())
-      .find(Boolean)
-
-    if (resolved) {
-      return resolved
-    }
-  } catch {
-    // Fall through to bundle fallback.
-  }
-
-  if (process.platform === 'darwin' && (await pathExists(macosCodexAppBinary))) {
-    return macosCodexAppBinary
-  }
-
-  throw new Error(
-    'Codex executable not found. Install Codex, add `codex` to PATH, or set ILOVECODEX_CODEX_BIN.'
-  )
-}
-
-async function launchCodexDesktop(options: {
-  workspacePath: string
-  codexHome: string
-  extraArgs: string
-  preferAppBundle?: boolean
-  requireDesktopExecutable?: boolean
-  desktopExecutablePath?: string
-}): Promise<number> {
-  const launchCommand = await resolveCodexLaunchCommand({
-    preferAppBundle: options.preferAppBundle,
-    requireDesktopExecutable: options.requireDesktopExecutable,
-    desktopExecutablePath: options.desktopExecutablePath
-  })
-  const args = [...parseExtraArgs(options.extraArgs), 'app', options.workspacePath]
-
-  return await new Promise<number>((resolveLaunch, rejectLaunch) => {
-    const child = spawn(launchCommand, args, {
-      cwd: options.workspacePath,
-      env: {
-        ...process.env,
-        CODEX_HOME: options.codexHome
-      },
-      detached: true,
-      stdio: 'ignore'
-    })
-
-    child.once('error', (error) => {
-      rejectLaunch(error)
-    })
-    child.once('spawn', () => {
-      const pid = child.pid
-      child.unref()
-
-      if (!pid) {
-        rejectLaunch(new Error('Codex process started without a PID.'))
-        return
-      }
-
-      resolveLaunch(pid)
-    })
-  }).catch((error: NodeJS.ErrnoException) => {
-    if (error?.code === 'ENOENT') {
-      throw new Error(
-        'Codex executable not found. Install Codex, add `codex` to PATH, or set ILOVECODEX_CODEX_BIN.'
-      )
-    }
-
-    if (error?.code === 'EACCES') {
-      throw new Error(`Codex executable is not runnable: ${launchCommand}`)
-    }
-
-    throw error
-  })
 }
 
 function shouldRefreshStoredAuth(error: unknown, refreshToken?: string): boolean {
@@ -738,82 +130,19 @@ function shouldClearStoredUsage(error: unknown): boolean {
   )
 }
 
-async function writeAuthPayloadToCodexHome(
-  codexHome: string,
-  authPayload: CodexAuthPayload
-): Promise<void> {
-  await fs.mkdir(codexHome, { recursive: true })
-  await fs.writeFile(join(codexHome, 'auth.json'), `${JSON.stringify(authPayload, null, 2)}\n`, 'utf8')
-}
-
-async function writeProviderApiKeyToCodexHome(
-  codexHome: string,
-  apiKey: string
-): Promise<void> {
-  await fs.mkdir(codexHome, { recursive: true })
-  await fs.writeFile(
-    join(codexHome, 'auth.json'),
-    `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
-    'utf8'
-  )
-}
-
-async function writeProviderConfigToCodexHome(
-  codexHome: string,
-  provider: Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'model' | 'fastMode'>
-): Promise<void> {
-  const configPath = join(codexHome, 'config.toml')
-  let nextConfig: Record<string, unknown> = {}
-
-  try {
-    const raw = await fs.readFile(configPath, 'utf8')
-    nextConfig = raw.trim() ? (parseToml(raw) as Record<string, unknown>) : {}
-  } catch {
-    nextConfig = {}
-  }
-
-  const modelProviders =
-    nextConfig['model_providers'] && typeof nextConfig['model_providers'] === 'object'
-      ? { ...(nextConfig['model_providers'] as Record<string, unknown>) }
-      : {}
-  modelProviders['custom'] = {
-    name: provider.name?.trim() || 'custom',
-    wire_api: 'responses',
-    requires_openai_auth: true,
-    base_url: provider.baseUrl
-  }
-
-  const feature =
-    nextConfig['feature'] && typeof nextConfig['feature'] === 'object'
-      ? { ...(nextConfig['feature'] as Record<string, unknown>) }
-      : {}
-  feature['fast_mode'] = provider.fastMode
-
-  nextConfig['model'] = provider.model?.trim() || '5.4'
-  nextConfig['model_provider'] = 'custom'
-  nextConfig['model_providers'] = modelProviders
-  nextConfig['feature'] = feature
-
-  await fs.mkdir(codexHome, { recursive: true })
-  await fs.writeFile(
-    configPath,
-    `${stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])}\n`,
-    'utf8'
-  )
-}
-
 export interface CodexServices {
   getSnapshot(): Promise<AppSnapshot>
   accounts: {
     list(): Promise<AppSnapshot>
     importCurrent(): Promise<AppSnapshot>
     importFromTemplate(raw: string): Promise<AppSnapshot>
-    exportToTemplate(): Promise<string>
+    exportToTemplate(accountIds?: string[]): Promise<string>
     activate(accountId: string): Promise<AppSnapshot>
     activateBest(): Promise<AppSnapshot>
     refreshExpiringSession(accountId: string): Promise<boolean>
     reorder(accountIds: string[]): Promise<AppSnapshot>
     remove(accountId: string): Promise<AppSnapshot>
+    removeMany(accountIds: string[]): Promise<AppSnapshot>
     updateTags(accountId: string, tagIds: string[]): Promise<AppSnapshot>
     get(accountId: string): Promise<AccountSummary>
   }
@@ -843,7 +172,9 @@ export interface CodexServices {
     read(accountId?: string): Promise<AccountRateLimits>
   }
   login: {
-    start(method: 'browser' | 'device'): Promise<{ attemptId: string; method: 'browser' | 'device' }>
+    start(
+      method: 'browser' | 'device'
+    ): Promise<{ attemptId: string; method: 'browser' | 'device' }>
     isRunning(): boolean
     getPortOccupant: typeof getOpenAiCallbackPortOccupant
     killPortOccupant: typeof killOpenAiCallbackPortOccupant
@@ -869,6 +200,8 @@ export interface CreateCodexServicesOptions {
   platform: CodexPlatformAdapter
   emitLoginEvent?: (event: LoginEvent) => void
 }
+
+export { resolveWindowsCodexDesktopExecutable }
 
 export function createCodexServices(options: CreateCodexServicesOptions): CodexServices {
   const store = new CodexAccountStore(options.userDataPath, options.platform)
@@ -934,7 +267,10 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   async function prepareLaunchAuthPayload(accountId: string): Promise<CodexAuthPayload> {
     const storedAuth = await store.getStoredAuthPayload(accountId)
 
-    if (!accessTokenExpiresSoon(storedAuth.tokens?.access_token) || !storedAuth.tokens?.refresh_token) {
+    if (
+      !accessTokenExpiresSoon(storedAuth.tokens?.access_token) ||
+      !storedAuth.tokens?.refresh_token
+    ) {
       return storedAuth
     }
 
@@ -960,8 +296,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       ])
       return true
     } catch (error) {
-      const detail =
-        error instanceof Error ? error.message : 'Failed to refresh account session.'
+      const detail = error instanceof Error ? error.message : 'Failed to refresh account session.'
       await store.saveAccountUsageError(accountId, detail)
       throw error
     }
@@ -979,6 +314,23 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     }
 
     return resolved
+  }
+
+  async function resolveAccountsForExport(accountIds?: string[]): Promise<AccountSummary[]> {
+    const snapshot = await getSnapshot()
+    if (!accountIds?.length) {
+      return snapshot.accounts
+    }
+
+    const accountsById = new Map(snapshot.accounts.map((account) => [account.id, account]))
+    return accountIds.map((accountId) => {
+      const account = accountsById.get(accountId)
+      if (!account) {
+        throw new Error(`Account not found: ${accountId}`)
+      }
+
+      return account
+    })
   }
 
   async function toInstanceSummary(
@@ -1220,25 +572,14 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return getSnapshot()
       },
       importFromTemplate: async (raw) => {
-        let parsed: TemplateFileRecord
-
-        try {
-          parsed = JSON.parse(raw) as TemplateFileRecord
-        } catch {
-          throw new Error('Invalid account template file.')
-        }
-
-        const accounts = Array.isArray(parsed.accounts) ? parsed.accounts : []
-        if (!accounts.length) {
-          throw new Error('Template file does not contain any accounts.')
-        }
-
+        const parsed: TemplateFileRecord = parseTemplateFileRecord(raw)
+        const accounts = parsed.accounts
         const exportedAt = parsed.exported_at ?? new Date().toISOString()
 
         for (const account of accounts) {
           const authPayload = buildAuthPayloadFromTemplate(account, exportedAt)
           const imported = await store.importAuthPayload(authPayload)
-          const rateLimits = buildTemplateRateLimits(account.extra, account.credentials, exportedAt)
+          const rateLimits = buildTemplateRateLimits(account.usage, exportedAt)
           if (rateLimits) {
             await store.saveAccountRateLimits(imported.id, rateLimits)
           }
@@ -1246,12 +587,13 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
 
         return getSnapshot()
       },
-      exportToTemplate: async () => {
+      exportToTemplate: async (accountIds) => {
+        const accountsToExport = await resolveAccountsForExport(accountIds)
         const snapshot = await getSnapshot()
         const exportedAt = new Date().toISOString()
         const accounts: TemplateAccountRecord[] = []
 
-        for (const account of snapshot.accounts) {
+        for (const account of accountsToExport) {
           const auth = await store.getStoredAuthPayload(account.id)
           accounts.push(
             buildTemplateAccountExport(
@@ -1266,7 +608,6 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return `${JSON.stringify(
           {
             exported_at: exportedAt,
-            proxies: [],
             accounts
           },
           null,
@@ -1299,6 +640,12 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       refreshExpiringSession: refreshExpiringAccountSession,
       remove: async (accountId) => {
         await store.removeAccount(accountId)
+        return getSnapshot()
+      },
+      removeMany: async (accountIds) => {
+        for (const accountId of [...new Set(accountIds)]) {
+          await store.removeAccount(accountId)
+        }
         return getSnapshot()
       },
       updateTags: async (accountId, tagIds) => {
@@ -1388,9 +735,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     },
     codex: {
       open: async (accountId, workspacePath = options.defaultWorkspacePath) => {
-        const resolvedAccountId = accountId
-          ? await resolveAccountIdOrThrow(accountId)
-          : undefined
+        const resolvedAccountId = accountId ? await resolveAccountIdOrThrow(accountId) : undefined
         await startDefaultInstance(workspacePath, resolvedAccountId)
         return getSnapshot()
       },
