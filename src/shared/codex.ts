@@ -110,6 +110,8 @@ export interface CreditsSnapshot {
   hasCredits: boolean
   unlimited: boolean
   balance: number | null
+  approxLocalMessages?: number | null
+  approxCloudMessages?: number | null
 }
 
 export interface RateLimitWindow {
@@ -311,6 +313,38 @@ function accountHasUsage(rateLimits?: AccountRateLimits): boolean {
   return Boolean(rateLimits?.primary || rateLimits?.secondary)
 }
 
+interface AccountQuotaScore {
+  hasUsage: boolean
+  hasBothWindows: boolean
+  hasAvailableQuota: boolean
+  bottleneckRemaining: number
+  combinedRemaining: number
+  primaryRemaining: number
+  secondaryRemaining: number
+}
+
+function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
+  const hasUsage = accountHasUsage(rateLimits)
+  const hasBothWindows = Boolean(rateLimits?.primary && rateLimits?.secondary)
+  const primaryRemaining = rateLimits?.primary
+    ? remainingPercent(rateLimits.primary.usedPercent)
+    : -1
+  const secondaryRemaining = rateLimits?.secondary
+    ? remainingPercent(rateLimits.secondary.usedPercent)
+    : -1
+  const hasAvailableQuota = hasBothWindows && primaryRemaining > 0 && secondaryRemaining > 0
+
+  return {
+    hasUsage,
+    hasBothWindows,
+    hasAvailableQuota,
+    bottleneckRemaining: hasBothWindows ? Math.min(primaryRemaining, secondaryRemaining) : -1,
+    combinedRemaining: hasBothWindows ? primaryRemaining + secondaryRemaining : -1,
+    primaryRemaining,
+    secondaryRemaining
+  }
+}
+
 function timestampScore(value?: string): number {
   if (!value) {
     return -1
@@ -329,26 +363,38 @@ export function resolveBestAccount(
     return null
   }
 
-  return [...accounts].sort((left, right) => {
+  const rankedAccounts = [...accounts].sort((left, right) => {
     const leftUsage = usageByAccountId[left.id]
     const rightUsage = usageByAccountId[right.id]
-    const leftHasUsage = accountHasUsage(leftUsage)
-    const rightHasUsage = accountHasUsage(rightUsage)
+    const leftQuota = accountQuotaScore(leftUsage)
+    const rightQuota = accountQuotaScore(rightUsage)
 
-    if (leftHasUsage !== rightHasUsage) {
-      return leftHasUsage ? -1 : 1
+    if (leftQuota.hasAvailableQuota !== rightQuota.hasAvailableQuota) {
+      return leftQuota.hasAvailableQuota ? -1 : 1
     }
 
-    const leftPrimary = remainingPercent(leftUsage?.primary?.usedPercent)
-    const rightPrimary = remainingPercent(rightUsage?.primary?.usedPercent)
-    if (leftPrimary !== rightPrimary) {
-      return rightPrimary - leftPrimary
+    if (leftQuota.hasBothWindows !== rightQuota.hasBothWindows) {
+      return leftQuota.hasBothWindows ? -1 : 1
     }
 
-    const leftSecondary = remainingPercent(leftUsage?.secondary?.usedPercent)
-    const rightSecondary = remainingPercent(rightUsage?.secondary?.usedPercent)
-    if (leftSecondary !== rightSecondary) {
-      return rightSecondary - leftSecondary
+    if (leftQuota.bottleneckRemaining !== rightQuota.bottleneckRemaining) {
+      return rightQuota.bottleneckRemaining - leftQuota.bottleneckRemaining
+    }
+
+    if (leftQuota.combinedRemaining !== rightQuota.combinedRemaining) {
+      return rightQuota.combinedRemaining - leftQuota.combinedRemaining
+    }
+
+    if (leftQuota.primaryRemaining !== rightQuota.primaryRemaining) {
+      return rightQuota.primaryRemaining - leftQuota.primaryRemaining
+    }
+
+    if (leftQuota.secondaryRemaining !== rightQuota.secondaryRemaining) {
+      return rightQuota.secondaryRemaining - leftQuota.secondaryRemaining
+    }
+
+    if (leftQuota.hasUsage !== rightQuota.hasUsage) {
+      return leftQuota.hasUsage ? -1 : 1
     }
 
     const leftIsActive = left.id === activeAccountId
@@ -372,7 +418,12 @@ export function resolveBestAccount(
     return (left.email ?? left.name ?? left.accountId ?? left.id).localeCompare(
       right.email ?? right.name ?? right.accountId ?? right.id
     )
-  })[0]
+  })
+
+  return (
+    rankedAccounts.find((account) => accountQuotaScore(usageByAccountId[account.id]).hasAvailableQuota) ??
+    null
+  )
 }
 
 export function statusBarAccounts(

@@ -87,6 +87,44 @@ describe('codex shared helpers', () => {
     expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('b')
   })
 
+  it('prefers accounts that still have both 5h and weekly quota remaining', () => {
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' })
+    ]
+    const usageByAccountId = {
+      a: createUsage({
+        primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 100, windowDurationMins: 10080, resetsAt: null }
+      }),
+      b: createUsage({
+        primary: { usedPercent: 35, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 40, windowDurationMins: 10080, resetsAt: null }
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('b')
+  })
+
+  it('uses the tighter quota window as the primary ranking signal', () => {
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' })
+    ]
+    const usageByAccountId = {
+      a: createUsage({
+        primary: { usedPercent: 55, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 45, windowDurationMins: 10080, resetsAt: null }
+      }),
+      b: createUsage({
+        primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 60, windowDurationMins: 10080, resetsAt: null }
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('a')
+  })
+
   it('falls back to the active account when usage is tied', () => {
     const accounts = [
       createAccount('a', { email: 'a@example.com', lastUsedAt: '2026-03-07T00:00:00.000Z' }),
@@ -98,6 +136,25 @@ describe('codex shared helpers', () => {
     }
 
     expect(resolveBestAccount(accounts, usageByAccountId, 'a')?.id).toBe('a')
+  })
+
+  it('returns null when no account has both 5h and weekly quota left', () => {
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' })
+    ]
+    const usageByAccountId = {
+      a: createUsage({
+        primary: { usedPercent: 100, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: null }
+      }),
+      b: createUsage({
+        primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null },
+        secondary: { usedPercent: 100, windowDurationMins: 10080, resetsAt: null }
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)).toBeNull()
   })
 
   it('resolves menu bar accounts from configured ids before falling back', () => {

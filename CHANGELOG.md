@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.2 - 2026-03-27
+
+This patch release sharpens desktop usage diagnostics and packages the upstream API reference for external tooling.
+
+- Fixed desktop account status errors so usage failures show the upstream detail directly, including a dedicated visual treatment for deactivated workspaces.
+- Improved ChatGPT usage parsing to capture code review limits and approximate local and cloud message counts from live successful responses.
+- Added an importable Postman collection for the upstream OpenAI and ChatGPT endpoints used by Ilovecodex, including real success and `deactivated_workspace` response samples.
+- Hardened usage error extraction so nested JSON detail codes surface cleanly instead of raw HTTP failure strings when upstream requests fail.
+
 ## 0.3.1 - 2026-03-25
 
 This patch release hardens desktop account storage, streamlines import and export, and refines bulk account management in the main app.

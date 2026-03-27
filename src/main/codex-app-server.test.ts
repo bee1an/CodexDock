@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { AccountRateLimitLookupError, readAccountRateLimits } from './codex-app-server'
+import { readAccountRateLimits } from './codex-app-server'
 
 describe('readAccountRateLimits', () => {
   const originalBaseUrl = process.env['ILOVECODEX_CHATGPT_BASE_URL']
@@ -36,6 +36,9 @@ describe('readAccountRateLimits', () => {
 
           return new Response(
             JSON.stringify({
+              user_id: 'user_123',
+              account_id: 'acct_123',
+              email: 'user@example.com',
               plan_type: 'education',
               rate_limit: {
                 allowed: true,
@@ -53,10 +56,22 @@ describe('readAccountRateLimits', () => {
                   reset_at: 1_746_450_000
                 }
               },
+              code_review_rate_limit: {
+                allowed: true,
+                limit_reached: false,
+                primary_window: {
+                  used_percent: 5,
+                  limit_window_seconds: 604800,
+                  reset_after_seconds: 300,
+                  reset_at: 1_746_493_000
+                }
+              },
               credits: {
                 has_credits: true,
                 unlimited: false,
-                balance: '12.5'
+                balance: '12.5',
+                approx_local_messages: 8,
+                approx_cloud_messages: 3
               },
               additional_rate_limits: [
                 {
@@ -73,7 +88,8 @@ describe('readAccountRateLimits', () => {
                     }
                   }
                 }
-              ]
+              ],
+              promo: null
             }),
             {
               status: 200,
@@ -92,10 +108,21 @@ describe('readAccountRateLimits', () => {
     expect(result.credits).toEqual({
       hasCredits: true,
       unlimited: false,
-      balance: 12.5
+      balance: 12.5,
+      approxLocalMessages: 8,
+      approxCloudMessages: 3
     })
-    expect(result.limits).toHaveLength(2)
+    expect(result.limits).toHaveLength(3)
     expect(result.limits[1]).toMatchObject({
+      limitId: 'code-review',
+      limitName: 'Code Review',
+      primary: {
+        usedPercent: 5,
+        windowDurationMins: 10080,
+        resetsAt: 1_746_493_000
+      }
+    })
+    expect(result.limits[2]).toMatchObject({
       limitId: 'gpt-4.1',
       limitName: 'GPT-4.1',
       primary: {
@@ -128,6 +155,32 @@ describe('readAccountRateLimits', () => {
             })
         }
       )
-    ).rejects.toBeInstanceOf(AccountRateLimitLookupError)
+    ).rejects.toMatchObject({
+      name: 'AccountRateLimitLookupError',
+      message: 'unauthorized'
+    })
+  })
+
+  it('extracts nested json detail from non-ok responses', async () => {
+    await expect(
+      readAccountRateLimits(
+        {
+          tokens: {
+            access_token: 'token',
+            account_id: 'acct_123'
+          }
+        },
+        {
+          fetch: async () =>
+            new Response(JSON.stringify({ detail: { code: 'deactivated_workspace' } }), {
+              status: 402,
+              headers: { 'content-type': 'application/json' }
+            })
+        }
+      )
+    ).rejects.toMatchObject({
+      name: 'AccountRateLimitLookupError',
+      message: 'deactivated_workspace'
+    })
   })
 })

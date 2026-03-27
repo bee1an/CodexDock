@@ -803,18 +803,11 @@
           runAccountAction(`open-isolated:${accountId}`, () =>
             window.codexApp.openAccountInIsolatedCodex(accountId)
           )}
-        activateAccount={(accountId) =>
-          runAccountAction(`activate:${accountId}`, () =>
-            window.codexApp.activateAccount(accountId)
-          )}
         openingAccountId={accountActionKey.startsWith('open:')
           ? accountActionKey.slice('open:'.length)
           : ''}
         openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
           ? accountActionKey.slice('open-isolated:'.length)
-          : ''}
-        activatingAccountId={accountActionKey.startsWith('activate:')
-          ? accountActionKey.slice('activate:'.length)
           : ''}
         openingProviderId={accountActionKey.startsWith('provider:open:')
           ? accountActionKey.slice('provider:open:'.length)

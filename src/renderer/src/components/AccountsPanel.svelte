@@ -13,6 +13,7 @@
   } from '../../../shared/codex'
   import { formatRelativeReset, remainingPercent } from '../../../shared/codex'
   import {
+    accountUsageBadge,
     accountCardTone,
     accountEmail,
     extraLimits,
@@ -21,7 +22,6 @@
     planTagClass,
     providerLabel,
     progressWidth,
-    usageErrorKind,
     type LocalizedCopy
   } from './app-view'
 
@@ -45,13 +45,11 @@
   export let loginStarting = false
   export let openingAccountId = ''
   export let openingIsolatedAccountId = ''
-  export let activatingAccountId = ''
   export let openingProviderId = ''
   export let openAccountInCodex: (accountId: string) => void
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openProviderInCodex: (providerId: string) => Promise<void>
   export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
-  export let activateAccount: (accountId: string) => void
   export let reorderProviders: (providerIds: string[]) => Promise<void>
   export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
   export let removeProvider: (providerId: string) => Promise<void>
@@ -197,40 +195,11 @@
   }
 
   function accountActionBusy(accountId: string): boolean {
-    return (
-      openingAccountId === accountId ||
-      openingIsolatedAccountId === accountId ||
-      activatingAccountId === accountId
-    )
+    return openingAccountId === accountId || openingIsolatedAccountId === accountId
   }
 
   function providerActionBusy(providerId: string): boolean {
     return openingProviderId === providerId || providerMutationBusy
-  }
-
-  function accountUsageBadge(
-    accountId: string
-  ): { kind: 'expired' | 'error'; label: string; title: string } | null {
-    const message = usageErrorByAccountId[accountId]
-    const kind = usageErrorKind(message)
-
-    if (!message || !kind) {
-      return null
-    }
-
-    if (kind === 'expired') {
-      return {
-        kind,
-        label: copy.accountExpired,
-        title: `${copy.accountExpiredHint}\n${message}`
-      }
-    }
-
-    return {
-      kind,
-      label: copy.accountUsageRefreshFailed,
-      title: message
-    }
   }
 
   async function runProviderMutation(task: () => Promise<void>): Promise<void> {
@@ -878,7 +847,7 @@
           aria-label={copy.accountCount(sortableAccounts.length)}
         >
           {#each sortableAccounts as account (account.id)}
-            {@const usageBadge = accountUsageBadge(account.id)}
+            {@const usageBadge = accountUsageBadge(usageErrorByAccountId[account.id], account, copy)}
             <article
               class={`group grid items-center gap-3 rounded-[0.95rem] border px-3 py-2.5 transition-[border-color,box-shadow,transform,background-color] duration-180 md:grid-cols-[auto_minmax(0,1fr)_auto] ${
                 selectedAccountIds.includes(account.id)
@@ -937,21 +906,18 @@
                     </span>
                   {/if}
                   {#if usageBadge}
-                    {#if usageBadge.kind === 'expired'}
-                      <span
-                        class="inline-flex flex-none items-center rounded-full border border-red-700 bg-red-700 px-2 py-0.75 text-[10px] font-semibold text-white"
-                        title={usageBadge.title}
-                      >
-                        {usageBadge.label}
-                      </span>
-                    {:else}
-                      <span
-                        class="inline-flex flex-none items-center rounded-full border border-amber-500/18 bg-amber-500/10 px-2 py-0.75 text-[10px] font-medium text-amber-700"
-                        title={usageBadge.title}
-                      >
-                        {usageBadge.label}
-                      </span>
-                    {/if}
+                    <span
+                      class={`inline-flex min-w-0 max-w-[260px] items-center rounded-full border px-2 py-0.75 text-[11px] ${
+                        usageBadge.kind === 'expired'
+                          ? 'border-red-700/18 bg-red-700/8 text-red-700'
+                          : usageBadge.kind === 'workspace'
+                            ? 'border-orange-500/20 bg-orange-500/10 text-orange-700'
+                            : 'border-amber-500/18 bg-amber-500/10 text-amber-700'
+                      }`}
+                      title={usageBadge.title}
+                    >
+                      <span class="min-w-0 truncate">{usageBadge.detail}</span>
+                    </span>
                   {/if}
                   <span
                     class={`inline-flex flex-none items-center rounded-full px-2 py-0.75 text-[10px] font-medium ${planTagClass(usageByAccountId[account.id]?.planType)}`}
@@ -1139,21 +1105,6 @@
                     <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
                   {:else}
                     <span class="i-lucide-copy-plus h-4 w-4"></span>
-                  {/if}
-                </button>
-                <button
-                  class={iconRowButton}
-                  onclick={() => activateAccount(account.id)}
-                  disabled={loginActionBusy ||
-                    activeAccountId === account.id ||
-                    Boolean(accountActionBusy(account.id))}
-                  aria-label={`${copy.switchAccount} · ${accountEmail(account, copy)}`}
-                  title={copy.switchAccount}
-                >
-                  {#if activatingAccountId === account.id}
-                    <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                  {:else}
-                    <span class="i-lucide-repeat-2 h-4 w-4"></span>
                   {/if}
                 </button>
                 <button

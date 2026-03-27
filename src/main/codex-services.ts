@@ -579,7 +579,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         for (const account of accounts) {
           const authPayload = buildAuthPayloadFromTemplate(account, exportedAt)
           const imported = await store.importAuthPayload(authPayload)
-          const rateLimits = buildTemplateRateLimits(account.usage, exportedAt)
+          const rateLimits = buildTemplateRateLimits(account, exportedAt)
           if (rateLimits) {
             await store.saveAccountRateLimits(imported.id, rateLimits)
           }
@@ -608,6 +608,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return `${JSON.stringify(
           {
             exported_at: exportedAt,
+            proxies: [],
             accounts
           },
           null,

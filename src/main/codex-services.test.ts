@@ -477,7 +477,7 @@ describe('createCodexServices', () => {
       })
     )
 
-    await expect(services.usage.read(account.id)).rejects.toThrow('failed: 401')
+    await expect(services.usage.read(account.id)).rejects.toThrow('unauthorized')
 
     const nextSnapshot = await services.getSnapshot()
     expect(nextSnapshot.usageByAccountId[account.id]).toBeUndefined()
@@ -523,36 +523,54 @@ describe('createCodexServices', () => {
     }
 
     expect(typeof exported.exported_at).toBe('string')
-    expect(exported.proxies).toBeUndefined()
+    expect(exported.proxies).toEqual([])
     expect(exported.accounts).toHaveLength(1)
     expect(exported.accounts[0]).toEqual({
-      auth: {
+      name: 'a@example.com',
+      notes: '',
+      platform: 'openai',
+      type: 'oauth',
+      credentials: {
+        _token_version: 1,
         access_token: expect.any(String),
         refresh_token: 'refresh-acct-a',
         id_token: expect.any(String),
-        chatgpt_account_id: 'acct-a'
-      },
-      usage: {
+        chatgpt_account_id: 'acct-a',
+        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        email: 'a@example.com',
+        expires_at: expect.any(String),
+        expires_in: expect.any(Number),
         plan_type: 'plus',
-        primary: {
-          used_percent: 12,
-          window_minutes: 300,
-          reset_at: '2027-01-15T08:00:00.000Z'
-        },
-        secondary: {
-          used_percent: 34,
-          window_minutes: 10080,
-          reset_at: '2027-01-21T02:53:20.000Z'
-        },
-        updated_at: '2026-03-19T00:00:00.000Z'
-      }
+        scope: null,
+        token_type: null
+      },
+      extra: {
+        codex_5h_reset_after_seconds: expect.any(Number),
+        codex_5h_reset_at: '2027-01-15T08:00:00.000Z',
+        codex_5h_used_percent: 12,
+        codex_5h_window_minutes: 300,
+        codex_7d_reset_after_seconds: expect.any(Number),
+        codex_7d_reset_at: '2027-01-21T02:53:20.000Z',
+        codex_7d_used_percent: 34,
+        codex_7d_window_minutes: 10080,
+        codex_primary_over_secondary_percent: -22,
+        codex_primary_reset_after_seconds: expect.any(Number),
+        codex_primary_reset_at: '2027-01-15T08:00:00.000Z',
+        codex_primary_used_percent: 12,
+        codex_primary_window_minutes: 300,
+        codex_secondary_reset_after_seconds: expect.any(Number),
+        codex_secondary_reset_at: '2027-01-21T02:53:20.000Z',
+        codex_secondary_used_percent: 34,
+        codex_secondary_window_minutes: 10080,
+        codex_usage_updated_at: '2026-03-19T00:00:00.000Z',
+        email: 'a@example.com',
+        privacy_mode: 'training_off'
+      },
+      concurrency: 10,
+      priority: 1,
+      rate_multiplier: 1,
+      auto_pause_on_expired: false
     })
-    expect(exported.accounts[0]).not.toHaveProperty('name')
-    expect(exported.accounts[0]).not.toHaveProperty('notes')
-    expect(exported.accounts[0]).not.toHaveProperty('concurrency')
-    expect(exported.accounts[0]).not.toHaveProperty('priority')
-    expect(exported.accounts[0]).not.toHaveProperty('rate_multiplier')
-    expect(exported.accounts[0]).not.toHaveProperty('auto_pause_on_expired')
   })
 
   it('exports only the selected accounts', async () => {
@@ -574,17 +592,17 @@ describe('createCodexServices', () => {
 
     const exported = JSON.parse(await services.accounts.exportToTemplate([accountA!.id])) as {
       accounts: Array<{
-        auth: {
+        credentials: {
           chatgpt_account_id: string
         }
       }>
     }
 
     expect(exported.accounts).toHaveLength(1)
-    expect(exported.accounts[0]?.auth.chatgpt_account_id).toBe('acct-a')
+    expect(exported.accounts[0]?.credentials.chatgpt_account_id).toBe('acct-a')
   })
 
-  it('imports the aligned template schema and rejects missing auth fields', async () => {
+  it('imports the reference template schema and rejects missing credentials fields', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
       userDataPath: env.userDataPath,
@@ -595,9 +613,15 @@ describe('createCodexServices', () => {
     await services.accounts.importFromTemplate(
       JSON.stringify({
         exported_at: '2026-03-24T08:00:00.000Z',
+        proxies: [],
         accounts: [
           {
-            auth: {
+            name: 'b@example.com',
+            notes: '',
+            platform: 'openai',
+            type: 'oauth',
+            credentials: {
+              _token_version: 1,
               access_token: createJwt({
                 exp: Math.floor(Date.now() / 1000) + 3600,
                 'https://api.openai.com/auth': {
@@ -612,22 +636,41 @@ describe('createCodexServices', () => {
                   chatgpt_account_id: 'acct-b'
                 }
               }),
-              chatgpt_account_id: 'acct-b'
-            },
-            usage: {
+              chatgpt_account_id: 'acct-b',
+              client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+              email: 'b@example.com',
+              expires_at: '2026-03-24T09:00:00.000Z',
+              expires_in: 3600,
               plan_type: 'pro',
-              primary: {
-                used_percent: 20,
-                window_minutes: 300,
-                reset_at: '2026-03-24T10:00:00.000Z'
-              },
-              secondary: {
-                used_percent: 40,
-                window_minutes: 10080,
-                reset_at: '2026-03-31T08:00:00.000Z'
-              },
-              updated_at: '2026-03-24T08:00:00.000Z'
-            }
+              scope: null,
+              token_type: null
+            },
+            extra: {
+              codex_5h_reset_after_seconds: 7200,
+              codex_5h_reset_at: '2026-03-24T10:00:00.000Z',
+              codex_5h_used_percent: 20,
+              codex_5h_window_minutes: 300,
+              codex_7d_reset_after_seconds: 604800,
+              codex_7d_reset_at: '2026-03-31T08:00:00.000Z',
+              codex_7d_used_percent: 40,
+              codex_7d_window_minutes: 10080,
+              codex_primary_over_secondary_percent: -20,
+              codex_primary_reset_after_seconds: 7200,
+              codex_primary_reset_at: '2026-03-24T10:00:00.000Z',
+              codex_primary_used_percent: 20,
+              codex_primary_window_minutes: 300,
+              codex_secondary_reset_after_seconds: 604800,
+              codex_secondary_reset_at: '2026-03-31T08:00:00.000Z',
+              codex_secondary_used_percent: 40,
+              codex_secondary_window_minutes: 10080,
+              codex_usage_updated_at: '2026-03-24T08:00:00.000Z',
+              email: 'b@example.com',
+              privacy_mode: 'training_off'
+            },
+            concurrency: 10,
+            priority: 1,
+            rate_multiplier: 1,
+            auto_pause_on_expired: false
           }
         ]
       })
@@ -651,10 +694,11 @@ describe('createCodexServices', () => {
       services.accounts.importFromTemplate(
         JSON.stringify({
           exported_at: '2026-03-24T08:00:00.000Z',
+          proxies: [],
           accounts: [{}]
         })
       )
-    ).rejects.toThrow('missing required field: auth')
+    ).rejects.toThrow('missing required field: credentials')
   })
 
   it('removes multiple accounts in one call', async () => {

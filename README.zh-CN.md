@@ -51,3 +51,7 @@ ilc settings set <key> <value>
 - `--help`
 
 打包后的应用也会在 `resources/bin/` 下附带 `ilc` wrapper。安装后的应用启动一次后，会尝试把用户级 `ilc` shim 安装到一个可写的 `PATH` 目录中，这样之后就可以在终端里直接执行 `ilc ...`。
+
+## 接口文档
+
+- [Postman Collection](./docs/postman-collection.json)

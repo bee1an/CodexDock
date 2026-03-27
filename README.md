@@ -51,3 +51,7 @@ Global CLI options:
 - `--help`
 
 Packaged app builds also ship `ilc` wrappers under `resources/bin/`. After an installed app starts once, it will try to install a user-level `ilc` shim into a writable `PATH` directory so `ilc ...` can be run directly from later shells.
+
+## API Reference
+
+- [Postman collection](./docs/postman-collection.json)

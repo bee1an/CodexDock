@@ -425,12 +425,16 @@ export function accountCardTone(active: boolean): string {
     : 'theme-account-card border-black/8 bg-white'
 }
 
-export function usageErrorKind(message?: string): 'expired' | 'error' | null {
+export function usageErrorKind(message?: string): 'expired' | 'workspace' | 'error' | null {
   if (!message) {
     return null
   }
 
   const normalized = message.toLowerCase()
+
+  if (normalized.includes('deactivated_workspace')) {
+    return 'workspace'
+  }
 
   if (
     normalized.includes('invalid_grant') ||
@@ -444,6 +448,58 @@ export function usageErrorKind(message?: string): 'expired' | 'error' | null {
   }
 
   return 'error'
+}
+
+function usageErrorDetail(
+  message: string,
+  account?: Pick<AccountSummary, 'id' | 'email' | 'name' | 'accountId'>
+): string {
+  const normalized = message.trim()
+  if (!normalized || !account) {
+    return normalized
+  }
+
+  const prefixes = [account.email, account.name, account.accountId, account.id].filter(
+    (value): value is string => Boolean(value)
+  )
+  for (const prefix of prefixes) {
+    if (normalized.startsWith(`${prefix}: `)) {
+      return normalized.slice(prefix.length + 2).trim()
+    }
+  }
+
+  return normalized
+}
+
+export function accountUsageBadge(
+  message: string | undefined,
+  account: Pick<AccountSummary, 'id' | 'email' | 'name' | 'accountId'>,
+  copy: Pick<
+    LocalizedCopy,
+    'accountExpired' | 'accountExpiredHint' | 'accountUsageRefreshFailed'
+  >
+): { kind: 'expired' | 'workspace' | 'error'; title: string; detail: string } | null {
+  const kind = usageErrorKind(message)
+
+  if (!message || !kind) {
+    return null
+  }
+
+  const detail = usageErrorDetail(message, account)
+
+  if (kind === 'expired') {
+    return {
+      kind,
+      detail,
+      title: `${copy.accountExpiredHint}\n${detail}`
+    }
+  }
+
+  return {
+    kind,
+    detail,
+    title: detail
+  }
 }
 
 export function progressWidth(value?: number | null): string {
@@ -506,5 +562,16 @@ export function extraLimits(
     return []
   }
 
-  return rateLimits.limits.filter((limit) => limit.limitId !== rateLimits.limitId)
+  return rateLimits.limits.filter((limit) => {
+    if (limit.limitId === rateLimits.limitId) {
+      return false
+    }
+
+    const raw = (limit.limitName ?? limit.limitId ?? '').toLowerCase()
+    if (raw.includes('review')) {
+      return false
+    }
+
+    return true
+  })
 }

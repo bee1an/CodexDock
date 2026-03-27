@@ -27,13 +27,20 @@ interface CreditsApiPayload {
   has_credits: boolean
   unlimited: boolean
   balance?: string | null
+  approx_local_messages?: number | null
+  approx_cloud_messages?: number | null
 }
 
 interface RateLimitStatusPayload {
+  user_id?: string | null
+  account_id?: string | null
+  email?: string | null
   plan_type?: string | null
   rate_limit?: RateLimitStatusApiPayload | null
+  code_review_rate_limit?: RateLimitStatusApiPayload | null
   credits?: CreditsApiPayload | null
   additional_rate_limits?: AdditionalRateLimitApiPayload[] | null
+  promo?: unknown | null
 }
 
 interface RateLimitWindowPayload {
@@ -63,6 +70,68 @@ export class AccountRateLimitLookupError extends Error {
 
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 const CHATGPT_HOSTS = ['https://chatgpt.com', 'https://chat.openai.com'] as const
+
+function extractErrorDetail(value: unknown): string | null {
+  if (typeof value === 'string') {
+    const normalized = value.trim()
+    return normalized || null
+  }
+
+  if (!value || typeof value !== 'object') {
+    return null
+  }
+
+  if (Array.isArray(value)) {
+    const details = value
+      .map((entry) => extractErrorDetail(entry))
+      .filter((entry): entry is string => Boolean(entry))
+    return details.length ? details.join(', ') : null
+  }
+
+  const detail = extractErrorDetail((value as { detail?: unknown }).detail)
+  if (detail) {
+    return detail
+  }
+
+  const error = extractErrorDetail((value as { error?: unknown }).error)
+  if (error) {
+    return error
+  }
+
+  const message = extractErrorDetail((value as { message?: unknown }).message)
+  if (message) {
+    return message
+  }
+
+  const code = extractErrorDetail((value as { code?: unknown }).code)
+  if (code) {
+    return code
+  }
+
+  return null
+}
+
+function extractResponseErrorDetail(body: string, contentType: string): string | null {
+  const normalized = body.trim()
+  if (!normalized) {
+    return null
+  }
+
+  const looksLikeJson =
+    contentType.toLowerCase().includes('application/json') ||
+    normalized.startsWith('{') ||
+    normalized.startsWith('[')
+
+  if (!looksLikeJson) {
+    return normalized
+  }
+
+  try {
+    return extractErrorDetail(JSON.parse(normalized)) ?? normalized
+  } catch {
+    return normalized
+  }
+}
 
 function mapRateLimitEntry(payload: RateLimitSnapshotPayload): AccountRateLimitEntry {
   return {
@@ -106,7 +175,11 @@ function mapCredits(credits?: CreditsApiPayload | null): CreditsSnapshot | null 
   return {
     hasCredits: credits.has_credits,
     unlimited: credits.unlimited,
-    balance: Number.isFinite(balance) ? balance : null
+    balance: Number.isFinite(balance) ? balance : null,
+    approxLocalMessages:
+      typeof credits.approx_local_messages === 'number' ? credits.approx_local_messages : null,
+    approxCloudMessages:
+      typeof credits.approx_cloud_messages === 'number' ? credits.approx_cloud_messages : null
   }
 }
 
@@ -146,6 +219,7 @@ function mapRateLimits(payload: RateLimitStatusPayload): AccountRateLimits {
   const primary = mapSnapshot('codex', null, planType, payload.rate_limit, payload.credits)
   const limits = [
     primary,
+    mapSnapshot('code-review', 'Code Review', planType, payload.code_review_rate_limit),
     ...(payload.additional_rate_limits ?? []).map((limit) =>
       mapSnapshot(
         limit.metered_feature ?? null,
@@ -154,7 +228,9 @@ function mapRateLimits(payload: RateLimitStatusPayload): AccountRateLimits {
         limit.rate_limit
       )
     )
-  ].map(mapRateLimitEntry)
+  ]
+    .filter((limit) => limit.primary || limit.secondary || limit.credits)
+    .map(mapRateLimitEntry)
 
   return {
     limitId: primary.limitId,
@@ -237,8 +313,9 @@ export async function readAccountRateLimits(
   const body = await response.text()
 
   if (!response.ok) {
+    const detail = extractResponseErrorDetail(body, contentType)
     throw new AccountRateLimitLookupError(
-      `GET ${url} failed: ${response.status}; content-type=${contentType}; body=${body}`,
+      detail ?? `GET ${url} failed (${response.status})`,
       response.status
     )
   }

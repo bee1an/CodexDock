@@ -1,0 +1,469 @@
+{
+  "info": {
+    "_postman_id": "6c9821b5-8170-41f4-af32-1b537df3dc72",
+    "name": "Ilovecodex Upstream APIs",
+    "description": "Ilovecodex 当前实际调用的上游 HTTP 接口集合，可直接导入 Postman，也可被 Apifox 导入。当前已补齐真实成功返回中的 user_id、account_id、email、code_review_rate_limit、credits.approx_*、promo，以及已知错误 detail.code=deactivated_workspace。",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "authBaseUrl",
+      "value": "https://auth.openai.com",
+      "type": "string"
+    },
+    {
+      "key": "chatgptBaseUrl",
+      "value": "https://chatgpt.com/backend-api",
+      "type": "string"
+    },
+    {
+      "key": "clientId",
+      "value": "app_EMoamEEZ73f0CkXaXp7hrann",
+      "type": "string"
+    },
+    {
+      "key": "redirectUri",
+      "value": "http://127.0.0.1:1455/callback",
+      "type": "string"
+    },
+    {
+      "key": "scope",
+      "value": "openid profile email offline_access api.connectors.read api.connectors.invoke",
+      "type": "string"
+    },
+    {
+      "key": "state",
+      "value": "example-state",
+      "type": "string"
+    },
+    {
+      "key": "codeChallenge",
+      "value": "example-code-challenge",
+      "type": "string"
+    },
+    {
+      "key": "codeVerifier",
+      "value": "example-code-verifier",
+      "type": "string"
+    },
+    {
+      "key": "authorizationCode",
+      "value": "example-auth-code",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "example-refresh-token",
+      "type": "string"
+    },
+    {
+      "key": "deviceAuthId",
+      "value": "example-device-auth-id",
+      "type": "string"
+    },
+    {
+      "key": "userCode",
+      "value": "ABCD-EFGH",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "Bearer eyJhbGciOi...",
+      "type": "string"
+    },
+    {
+      "key": "chatgptAccountId",
+      "value": "acct_123",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "浏览器授权和 token 换取相关接口",
+      "item": [
+        {
+          "name": "Authorize Page",
+          "request": {
+            "method": "GET",
+            "description": "浏览器回调登录时打开的授权页入口",
+            "url": {
+              "raw": "{{authBaseUrl}}/oauth/authorize?response_type=code&client_id={{clientId}}&redirect_uri={{redirectUri}}&scope={{scope}}&code_challenge={{codeChallenge}}&code_challenge_method=S256&id_token_add_organizations=true&codex_cli_simplified_flow=true&state={{state}}&originator=Codex%20Desktop",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "oauth",
+                "authorize"
+              ],
+              "query": [
+                {
+                  "key": "response_type",
+                  "value": "code"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirectUri}}"
+                },
+                {
+                  "key": "scope",
+                  "value": "{{scope}}"
+                },
+                {
+                  "key": "code_challenge",
+                  "value": "{{codeChallenge}}"
+                },
+                {
+                  "key": "code_challenge_method",
+                  "value": "S256"
+                },
+                {
+                  "key": "id_token_add_organizations",
+                  "value": "true"
+                },
+                {
+                  "key": "codex_cli_simplified_flow",
+                  "value": "true"
+                },
+                {
+                  "key": "state",
+                  "value": "{{state}}"
+                },
+                {
+                  "key": "originator",
+                  "value": "Codex Desktop"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Exchange Authorization Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "description": "浏览器登录或设备码登录最终使用授权码换取 token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "authorization_code",
+                  "type": "text"
+                },
+                {
+                  "key": "code",
+                  "value": "{{authorizationCode}}",
+                  "type": "text"
+                },
+                {
+                  "key": "redirect_uri",
+                  "value": "{{redirectUri}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}",
+                  "type": "text"
+                },
+                {
+                  "key": "code_verifier",
+                  "value": "{{codeVerifier}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/oauth/token",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "oauth",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Refresh Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "description": "已保存账号使用 refresh_token 刷新 token",
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "refresh_token",
+                  "type": "text"
+                },
+                {
+                  "key": "refresh_token",
+                  "value": "{{refreshToken}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{clientId}}",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/oauth/token",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "oauth",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Device Auth",
+      "description": "设备码登录流程相关接口",
+      "item": [
+        {
+          "name": "Request Device Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "description": "申请 device_auth_id 和 user_code",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_id\": \"{{clientId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/accounts/deviceauth/usercode",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "deviceauth",
+                "usercode"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Poll Device Token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "description": "轮询设备码授权状态，成功后返回 authorization_code 和 code_verifier",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"device_auth_id\": \"{{deviceAuthId}}\",\n  \"user_code\": \"{{userCode}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{authBaseUrl}}/api/accounts/deviceauth/token",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "api",
+                "accounts",
+                "deviceauth",
+                "token"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Open Device Verification Page",
+          "request": {
+            "method": "GET",
+            "description": "在浏览器打开该页面，输入 user_code 完成授权",
+            "url": {
+              "raw": "{{authBaseUrl}}/codex/device",
+              "host": [
+                "{{authBaseUrl}}"
+              ],
+              "path": [
+                "codex",
+                "device"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Usage",
+      "description": "ChatGPT 额度读取接口",
+      "item": [
+        {
+          "name": "Read Usage",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "authorization",
+                "value": "{{accessToken}}"
+              },
+              {
+                "key": "chatgpt-account-id",
+                "value": "{{chatgptAccountId}}"
+              },
+              {
+                "key": "user-agent",
+                "value": "ilovecodex"
+              }
+            ],
+            "description": "读取账号额度、plan、credits、code_review_rate_limit、additional_rate_limits 和 promo。当前已确认错误返回中可能出现 detail.code=deactivated_workspace。",
+            "url": {
+              "raw": "{{chatgptBaseUrl}}/wham/usage",
+              "host": [
+                "{{chatgptBaseUrl}}"
+              ],
+              "path": [
+                "wham",
+                "usage"
+              ]
+            }
+          },
+          "response": [
+            {
+              "name": "200 OK - Real Success Sample",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "authorization",
+                    "value": "{{accessToken}}"
+                  },
+                  {
+                    "key": "chatgpt-account-id",
+                    "value": "{{chatgptAccountId}}"
+                  },
+                  {
+                    "key": "user-agent",
+                    "value": "ilovecodex"
+                  }
+                ],
+                "url": {
+                  "raw": "{{chatgptBaseUrl}}/wham/usage",
+                  "host": [
+                    "{{chatgptBaseUrl}}"
+                  ],
+                  "path": [
+                    "wham",
+                    "usage"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "content-type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"user_id\": \"user-fKN5xT4tcvbxmu4qYc2S4BLk\",\n  \"account_id\": \"0d136aa4-8ae5-4084-b7c3-965692f56f3b\",\n  \"email\": \"m0326-1@clippc.com\",\n  \"plan_type\": \"team\",\n  \"rate_limit\": {\n    \"allowed\": true,\n    \"limit_reached\": false,\n    \"primary_window\": {\n      \"used_percent\": 29,\n      \"limit_window_seconds\": 18000,\n      \"reset_after_seconds\": 10285,\n      \"reset_at\": 1774595763\n    },\n    \"secondary_window\": {\n      \"used_percent\": 9,\n      \"limit_window_seconds\": 604800,\n      \"reset_after_seconds\": 597085,\n      \"reset_at\": 1775182563\n    }\n  },\n  \"code_review_rate_limit\": {\n    \"allowed\": true,\n    \"limit_reached\": false,\n    \"primary_window\": {\n      \"used_percent\": 0,\n      \"limit_window_seconds\": 604800,\n      \"reset_after_seconds\": 604800,\n      \"reset_at\": 1775190278\n    },\n    \"secondary_window\": null\n  },\n  \"additional_rate_limits\": null,\n  \"credits\": {\n    \"has_credits\": false,\n    \"unlimited\": false,\n    \"balance\": null,\n    \"approx_local_messages\": null,\n    \"approx_cloud_messages\": null\n  },\n  \"promo\": null\n}"
+            },
+            {
+              "name": "402 - deactivated_workspace",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "authorization",
+                    "value": "{{accessToken}}"
+                  },
+                  {
+                    "key": "chatgpt-account-id",
+                    "value": "{{chatgptAccountId}}"
+                  },
+                  {
+                    "key": "user-agent",
+                    "value": "ilovecodex"
+                  }
+                ],
+                "url": {
+                  "raw": "{{chatgptBaseUrl}}/wham/usage",
+                  "host": [
+                    "{{chatgptBaseUrl}}"
+                  ],
+                  "path": [
+                    "wham",
+                    "usage"
+                  ]
+                }
+              },
+              "status": "Payment Required",
+              "code": 402,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "content-type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"detail\": {\n    \"code\": \"deactivated_workspace\"\n  }\n}"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
