@@ -214,7 +214,9 @@
       case 'available':
         return copyForLanguage().updateAvailableVersion(updateState.availableVersion)
       case 'downloading':
-        return copyForLanguage().updateDownloadProgress(updateState.downloadProgress)
+        return updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
+          ? copyForLanguage().updatingViaHomebrew
+          : copyForLanguage().updateDownloadProgress(updateState.downloadProgress)
       case 'downloaded':
         return copyForLanguage().updateReady
       case 'up-to-date':
@@ -232,7 +234,9 @@
     switch (updateState.status) {
       case 'available':
         return updateState.delivery === 'external'
-          ? copyForLanguage().openReleasePage(updateState.availableVersion)
+          ? updateState.externalAction === 'homebrew'
+            ? copyForLanguage().updateViaHomebrew(updateState.availableVersion)
+            : copyForLanguage().openReleasePage(updateState.availableVersion)
           : copyForLanguage().downloadUpdate(updateState.availableVersion)
       case 'downloaded':
         return copyForLanguage().restartToInstallUpdate
@@ -615,7 +619,7 @@
   }
 
   const downloadUpdate = async (): Promise<void> => {
-    if (updateState.delivery === 'external') {
+    if (updateState.delivery === 'external' && updateState.externalAction !== 'homebrew') {
       openExternalLink(updateState.externalDownloadUrl ?? appMeta.githubUrl ?? undefined)
       return
     }

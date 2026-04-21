@@ -22,6 +22,7 @@ import icon from '../../resources/icon.png?asset'
 import { runCli } from '../cli/run-cli'
 import { createAppUpdaterService, type AppUpdaterService } from './app-updater'
 import { createAuthRefreshController, type AuthRefreshController } from './auth-poller'
+import { isHomebrewCaskInstalled, launchHomebrewCaskUpgrade } from './homebrew-updater'
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
@@ -76,6 +77,8 @@ function localeText(language: AppSettings['language']): {
   checkForUpdates: string
   checkingForUpdates: string
   downloadUpdate: (version?: string) => string
+  updatingViaHomebrew: string
+  updateViaHomebrew: (version?: string) => string
   openReleasePage: (version?: string) => string
   installUpdate: string
   downloadingUpdate: (progress?: number) => string
@@ -104,6 +107,12 @@ function localeText(language: AppSettings['language']): {
       language === 'en'
         ? `Download update${version ? ` v${version}` : ''}`
         : `下载更新${version ? ` v${version}` : ''}`,
+    updateViaHomebrew: (version) =>
+      language === 'en'
+        ? `Update with Homebrew${version ? ` v${version}` : ''}`
+        : `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
+    updatingViaHomebrew:
+      language === 'en' ? 'Updating through Homebrew…' : '正在通过 Homebrew 更新…',
     openReleasePage: (version) =>
       language === 'en'
         ? `Open download page${version ? ` v${version}` : ''}`
@@ -423,6 +432,8 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     checkForUpdates: text.checkForUpdates,
     checkingForUpdates: text.checkingForUpdates,
     downloadUpdate: text.downloadUpdate,
+    updatingViaHomebrew: text.updatingViaHomebrew,
+    updateViaHomebrew: text.updateViaHomebrew,
     openReleasePage: text.openReleasePage,
     installUpdate: text.installUpdate,
     unsupported: text.updatesUnsupported,
@@ -432,7 +443,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     },
     onDownload: () => {
       const updateState = resolveUpdateState()
-      if (updateState.delivery === 'external') {
+      if (updateState.delivery === 'external' && updateState.externalAction !== 'homebrew') {
         const downloadUrl = updateState.externalDownloadUrl ?? getAppMeta().githubUrl ?? undefined
         if (downloadUrl) {
           void shell.openExternal(downloadUrl)
@@ -440,7 +451,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
         return
       }
 
-      void appUpdaterService?.downloadUpdate()
+      void triggerUpdateDownload()
     },
     onInstall: () => {
       void appUpdaterService?.installUpdate()
@@ -656,6 +667,21 @@ function emitUpdateState(updateState: AppUpdateState): void {
   }
 }
 
+async function triggerUpdateDownload(): Promise<AppUpdateState> {
+  const updateState = await requireAppUpdaterService().downloadUpdate()
+  if (
+    updateState.delivery === 'external' &&
+    updateState.externalAction === 'homebrew' &&
+    updateState.status === 'downloading'
+  ) {
+    setTimeout(() => {
+      app.quit()
+    }, 120)
+  }
+
+  return updateState
+}
+
 function showMainWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) {
     mainWindow = null
@@ -802,7 +828,17 @@ app.whenReady().then(async () => {
     githubUrl: resolveGithubUrl(),
     isPackaged: app.isPackaged,
     platform: process.platform,
-    env: process.env
+    env: process.env,
+    isHomebrewCaskInstalled: async () =>
+      isHomebrewCaskInstalled({
+        caskToken: 'ilovecodex'
+      }),
+    launchHomebrewUpdate: async () =>
+      launchHomebrewCaskUpgrade({
+        appName: app.getName(),
+        caskToken: 'ilovecodex',
+        executablePath: app.getPath('exe')
+      })
   })
   appUpdaterService.subscribe((updateState) => {
     emitUpdateState(updateState)
@@ -1040,7 +1076,7 @@ app.whenReady().then(async () => {
     }
   })
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
-  ipcMain.handle('codex:download-update', () => requireAppUpdaterService().downloadUpdate())
+  ipcMain.handle('codex:download-update', () => triggerUpdateDownload())
   ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())
   ipcMain.handle('codex:start-login', (_, method: LoginMethod) => codexServices.login.start(method))
   ipcMain.handle('codex:get-login-port-occupant', () => codexServices.login.getPortOccupant())

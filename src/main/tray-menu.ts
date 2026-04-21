@@ -76,6 +76,8 @@ export function buildTrayUpdateMenuItem(
     checkForUpdates: string
     checkingForUpdates: string
     downloadUpdate: (version?: string) => string
+    updatingViaHomebrew: string
+    updateViaHomebrew: (version?: string) => string
     openReleasePage: (version?: string) => string
     installUpdate: string
     unsupported: string
@@ -102,13 +104,18 @@ export function buildTrayUpdateMenuItem(
       return {
         label:
           updateState.delivery === 'external'
-            ? options.openReleasePage(updateState.availableVersion)
+            ? updateState.externalAction === 'homebrew'
+              ? options.updateViaHomebrew(updateState.availableVersion)
+              : options.openReleasePage(updateState.availableVersion)
             : options.downloadUpdate(updateState.availableVersion),
         click: () => options.onDownload()
       }
     case 'downloading':
       return {
-        label: options.downloadingUpdate(updateState.downloadProgress),
+        label:
+          updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
+            ? options.updatingViaHomebrew
+            : options.downloadingUpdate(updateState.downloadProgress),
         enabled: false
       }
     case 'downloaded':

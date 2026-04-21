@@ -205,7 +205,47 @@ describe('app updater service', () => {
       status: 'available',
       delivery: 'external',
       availableVersion: '0.2.5',
+      externalAction: 'release',
       externalDownloadUrl: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+    })
+  })
+
+  it('prefers Homebrew updates for macOS cask installs and starts the upgrade flow', async () => {
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            tag_name: 'v0.2.5',
+            html_url: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+    ) as typeof fetch
+    const launchHomebrewUpdate = vi.fn(async () => undefined)
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl,
+      isHomebrewCaskInstalled: async () => true,
+      launchHomebrewUpdate
+    })
+
+    await service.checkForUpdates()
+    expect(service.getState()).toMatchObject({
+      status: 'available',
+      delivery: 'external',
+      availableVersion: '0.2.5',
+      externalAction: 'homebrew'
+    })
+
+    await service.downloadUpdate()
+    expect(launchHomebrewUpdate).toHaveBeenCalledOnce()
+    expect(service.getState()).toMatchObject({
+      status: 'downloading',
+      externalAction: 'homebrew'
     })
   })
 

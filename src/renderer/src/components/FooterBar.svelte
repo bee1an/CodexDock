@@ -25,7 +25,9 @@
     switch (updateState.status) {
       case 'available':
         return updateState.delivery === 'external'
-          ? copy.openReleasePage(updateState.availableVersion)
+          ? updateState.externalAction === 'homebrew'
+            ? copy.updateViaHomebrew(updateState.availableVersion)
+            : copy.openReleasePage(updateState.availableVersion)
           : copy.downloadUpdate(updateState.availableVersion)
       case 'downloaded':
         return copy.restartToInstallUpdate
@@ -52,7 +54,9 @@
       case 'available':
         return copy.updateAvailableVersion(updateState.availableVersion)
       case 'downloading':
-        return copy.updateDownloadProgress(updateState.downloadProgress)
+        return updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
+          ? copy.updatingViaHomebrew
+          : copy.updateDownloadProgress(updateState.downloadProgress)
       case 'downloaded':
         return copy.updateReady
       case 'up-to-date':

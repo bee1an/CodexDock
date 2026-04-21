@@ -37,7 +37,9 @@
         return copy.checkingUpdates
       case 'available':
         return updateState.delivery === 'external'
-          ? copy.openReleasePage(updateState.availableVersion)
+          ? updateState.externalAction === 'homebrew'
+            ? copy.updateViaHomebrew(updateState.availableVersion)
+            : copy.openReleasePage(updateState.availableVersion)
           : copy.downloadUpdate(updateState.availableVersion)
       case 'downloaded':
         return copy.restartToInstallUpdate

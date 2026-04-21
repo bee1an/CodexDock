@@ -131,6 +131,8 @@ describe('tray menu helpers', () => {
       checkForUpdates: '检查更新',
       checkingForUpdates: '检查更新中…',
       downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
+      updatingViaHomebrew: '正在通过 Homebrew 更新…',
+      updateViaHomebrew: (version?: string) => `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
       openReleasePage: (version?: string) => `前往下载${version ? ` v${version}` : ''}`,
       installUpdate: '重启安装更新',
       unsupported: '当前构建不支持自动更新',
@@ -225,5 +227,22 @@ describe('tray menu helpers', () => {
       throw new Error('external item should render a release page action')
     }
     expect(externalItem.label).toBe('前往下载 v0.2.5')
+
+    const homebrewItem = buildTrayUpdateMenuItem(
+      {
+        status: 'available',
+        delivery: 'external',
+        currentVersion: '0.2.4',
+        availableVersion: '0.2.5',
+        supported: true,
+        externalAction: 'homebrew'
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(homebrewItem).not.toBeNull()
+    if (!homebrewItem) {
+      throw new Error('homebrew item should render a Homebrew update action')
+    }
+    expect(homebrewItem.label).toBe('通过 Homebrew 更新 v0.2.5')
   })
 })

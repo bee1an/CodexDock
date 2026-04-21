@@ -93,6 +93,7 @@ export type AppUpdateStatus =
   | 'error'
 
 export type AppUpdateDelivery = 'auto' | 'external'
+export type AppUpdateExternalAction = 'release' | 'homebrew'
 
 export interface AppUpdateState {
   status: AppUpdateStatus
@@ -103,6 +104,7 @@ export interface AppUpdateState {
   checkedAt?: string
   message?: string
   externalDownloadUrl?: string
+  externalAction?: AppUpdateExternalAction
   supported: boolean
 }
 
