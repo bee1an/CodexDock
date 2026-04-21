@@ -231,6 +231,7 @@ function createTemplateImport(options: {
 describe('createCodexServices', () => {
   const createdDirectories: string[] = []
   let originalHome: string | undefined
+  let originalCodexBin: string | undefined
   const originalPlatform = process.platform
   let processKillSpy: ReturnType<typeof vi.spyOn>
 
@@ -241,6 +242,8 @@ describe('createCodexServices', () => {
     mockedProcessState.pidHomes.clear()
     mockedProcessState.spawnedCommands.splice(0)
     mockedProcessState.nextPid = 4000
+    originalCodexBin = process.env.ILOVECODEX_CODEX_BIN
+    process.env.ILOVECODEX_CODEX_BIN = '/Applications/Codex.app/Contents/MacOS/Codex'
 
     mockedProcessState.execFile.mockImplementation(
       (
@@ -340,6 +343,11 @@ describe('createCodexServices', () => {
   afterEach(async () => {
     processKillSpy.mockRestore()
     Object.defineProperty(process, 'platform', { value: originalPlatform })
+    if (originalCodexBin === undefined) {
+      delete process.env.ILOVECODEX_CODEX_BIN
+    } else {
+      process.env.ILOVECODEX_CODEX_BIN = originalCodexBin
+    }
     process.env.HOME = originalHome
     await Promise.all(
       createdDirectories
@@ -487,6 +495,7 @@ describe('createCodexServices', () => {
 
   it('uses the configured desktop executable path for isolated launches when provided', async () => {
     const env = await createEnvironment()
+    delete process.env.ILOVECODEX_CODEX_BIN
     const services = createCodexServices({
       userDataPath: env.userDataPath,
       defaultWorkspacePath: env.workspacePath,
