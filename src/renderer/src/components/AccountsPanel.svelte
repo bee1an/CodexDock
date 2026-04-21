@@ -42,6 +42,7 @@
     portal,
     stopFloatingPointerPropagation
   } from './floating'
+  import { animateProgress, cascadeIn, reveal } from './gsap-motion'
 
   const untaggedFilterId = '__untagged__'
   const flipDurationMs = 160
@@ -604,8 +605,12 @@
   }}
 />
 
-<section class={`${panelClass} flex min-h-0 flex-1 flex-col gap-4 overflow-hidden`}>
-  <div class="flex flex-wrap items-center justify-between gap-3">
+<section
+  class={`${panelClass} flex h-full min-h-0 flex-1 w-full flex-col gap-4 overflow-hidden`}
+  use:reveal={{ y: 12, blur: 8, duration: 0.46 }}
+  use:cascadeIn={{ selector: '[data-panel-motion]', y: 8, blur: 4, duration: 0.28, stagger: 0.028 }}
+>
+  <div class="flex flex-wrap items-center justify-between gap-3" data-panel-motion>
     <div class="min-w-0 flex flex-1 items-center gap-3">
       <div class="min-w-0 grid gap-0.5">
         <div class="min-w-0 flex items-center gap-2">
@@ -1035,7 +1040,7 @@
     </div>
 
     {#if visibleAccounts.length}
-      <div class="grid min-h-0 overflow-y-auto pr-1">
+      <div class="min-h-0 flex-1 overflow-y-auto pr-1">
         <div
           class="grid"
           use:dragHandleZone={{
@@ -1160,6 +1165,10 @@
                         <span
                           class="theme-progress-fill block h-full rounded-full bg-black/70"
                           style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
+                          use:animateProgress={{
+                            delay: Math.min(accountIndex * 0.028, 0.14),
+                            duration: 0.46
+                          }}
                         ></span>
                       </span>
                       {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
@@ -1205,6 +1214,10 @@
                         <span
                           class="theme-progress-fill block h-full rounded-full bg-black/70"
                           style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
+                          use:animateProgress={{
+                            delay: Math.min(accountIndex * 0.028 + 0.03, 0.18),
+                            duration: 0.5
+                          }}
                         ></span>
                       </span>
                       {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
@@ -1492,7 +1505,7 @@
     {/if}
   {:else if currentView === 'providers'}
     {#if providers.length}
-      <div class="grid min-h-0 gap-2 overflow-y-auto pr-1">
+      <div class="min-h-0 flex-1 overflow-y-auto pr-1">
         <div
           class="grid gap-2"
           use:dragHandleZone={{

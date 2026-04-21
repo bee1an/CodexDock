@@ -7,6 +7,7 @@
     WakeAccountRequestResult
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
+  import { cascadeIn, reveal } from './gsap-motion'
   import { formatWakeScheduleLastTriggeredAt, nextWakeScheduleLabel } from './wake-schedule'
 
   export let copy: LocalizedCopy
@@ -122,15 +123,24 @@
 
 <div
   class="wake-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6 backdrop-blur-sm"
+  use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
 >
   <div
     class="theme-surface wake-dialog-panel flex w-full max-w-4xl flex-col overflow-hidden rounded-[1.25rem] border border-black/8 bg-white p-6 shadow-[0_32px_120px_rgba(0,0,0,0.12)] md:p-8"
+    use:reveal={{ y: 12, scale: 0.992, blur: 6, duration: 0.34 }}
+    use:cascadeIn={{
+      selector: '[data-wake-motion]',
+      y: 8,
+      blur: 4,
+      duration: 0.28,
+      stagger: 0.024
+    }}
     role="dialog"
     aria-modal="true"
     aria-labelledby="wake-dialog-title"
   >
     <div class="grid gap-6 md:gap-7">
-      <div class="grid gap-1.5">
+      <div class="grid gap-1.5" data-wake-motion>
         <p id="wake-dialog-title" class="text-lg font-semibold tracking-tight text-ink">
           {copy.wakeDialogTitle}
         </p>
@@ -142,6 +152,7 @@
 
       <div
         class="inline-flex w-fit items-center gap-1.5 rounded-[0.85rem] border border-black/5 bg-black/[0.02] p-1 shadow-inner"
+        data-wake-motion
       >
         <button
           class={`wake-tab-button inline-flex items-center gap-2 rounded-[0.6rem] px-4 py-2 text-sm font-medium transition-colors duration-150 ${
@@ -182,7 +193,7 @@
       </div>
 
       {#if activeTab === 'session'}
-        <div class="grid gap-4">
+        <div class="grid gap-4" data-wake-motion use:reveal={{ y: 6, blur: 3, duration: 0.22 }}>
           <div class="flex items-center justify-between gap-3">
             <div class="grid gap-1">
               <p class="text-sm font-medium text-ink">{copy.wakeQuotaDialogTitle}</p>
@@ -270,7 +281,7 @@
             </div>
           </div>
 
-          <div class="flex justify-end gap-2">
+          <div class="flex justify-end gap-2" data-wake-motion>
             <button
               class={compactGhostButton}
               type="button"
@@ -293,7 +304,7 @@
           </div>
         </div>
       {:else}
-        <div class="grid gap-4">
+        <div class="grid gap-4" data-wake-motion use:reveal={{ y: 6, blur: 3, duration: 0.22 }}>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="grid gap-1">
               <p class="text-sm font-medium text-ink">{copy.wakeScheduleDialogTitle}</p>
@@ -409,7 +420,7 @@
             </div>
           </div>
 
-          <div class="flex items-center justify-between gap-3">
+          <div class="flex items-center justify-between gap-3" data-wake-motion>
             <button
               class="theme-select rounded-md border border-black/10 px-3 py-2 text-sm"
               type="button"
@@ -448,34 +459,6 @@
 </div>
 
 <style>
-  @keyframes dialog-enter {
-    from {
-      opacity: 0;
-      transform: scale(0.96) translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1) translateY(0);
-    }
-  }
-
-  @keyframes backdrop-enter {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-
-  .wake-dialog-backdrop {
-    animation: backdrop-enter 0.2s ease-out;
-  }
-
-  .wake-dialog-panel {
-    animation: dialog-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
   .wake-status-running {
     background: rgb(59 130 246 / 0.1);
     color: rgb(37 99 235);

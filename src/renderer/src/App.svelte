@@ -3,6 +3,7 @@
   import brandMark from './assets/brand-mark.png'
   import AccountsPanel from './components/AccountsPanel.svelte'
   import AppSider from './components/AppSider.svelte'
+  import { cascadeIn, reveal } from './components/gsap-motion'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
   import WakeDialog from './components/WakeDialog.svelte'
@@ -1110,7 +1111,7 @@
   {/if}
 
   <div
-    class={`mx-auto ${isTrayView ? 'grid gap-4 max-w-[420px] px-3 pb-3 pt-2' : 'flex min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-5 lg:px-8 lg:pb-8'}`}
+    class={`mx-auto ${isTrayView ? 'grid gap-4 max-w-[420px] px-3 pb-3 pt-2' : 'flex h-0 min-h-0 w-full max-w-6xl flex-1 flex-col gap-4 px-4 pb-4 pt-4 sm:px-6 sm:pb-6 sm:pt-5 lg:px-8 lg:pb-8'}`}
   >
     {#if isTrayView}
       <TrayPanel
@@ -1132,37 +1133,41 @@
         {updatePollingInterval}
       />
     {:else}
-      <div class="grid min-h-0 flex-1 items-stretch gap-4 grid-cols-[minmax(0,1fr)_44px]">
-        <div class="flex min-h-0 flex-col gap-4">
-          <HeroPanel
-            {heroClass}
-            {compactGhostButton}
-            copy={copyForLanguage()}
-            {loginEvent}
-            onClose={() => closeExpandablePanels()}
-            {showSettings}
-            {showProviderComposer}
-            {showCallbackLoginDetails}
-            {showDeviceLoginDetails}
-            loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
-            {pollingOptions}
-            settings={snapshot.settings}
-            {updateState}
-            {createProvider}
-            {updatePollingInterval}
-            {updateCheckForUpdatesOnStartup}
-            {updateCodexDesktopExecutablePath}
-            showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
-            {checkForUpdates}
-            {downloadUpdate}
-            {installUpdate}
-            {copyAuthUrl}
-            {copyDeviceCode}
-            {openExternalLink}
-          />
+      <div class="grid h-full min-h-0 flex-1 items-stretch gap-4 grid-cols-[minmax(0,1fr)_44px]">
+        <div class="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
+          <div use:reveal={{ y: 8, blur: 6, duration: 0.42, delay: 0.02 }}>
+            <HeroPanel
+              {heroClass}
+              {compactGhostButton}
+              copy={copyForLanguage()}
+              {loginEvent}
+              onClose={() => closeExpandablePanels()}
+              {showSettings}
+              {showProviderComposer}
+              {showCallbackLoginDetails}
+              {showDeviceLoginDetails}
+              loginActionBusy={loginActionBusy() ||
+                (!snapshot.accounts.length && refreshingAllUsage)}
+              {pollingOptions}
+              settings={snapshot.settings}
+              {updateState}
+              {createProvider}
+              {updatePollingInterval}
+              {updateCheckForUpdatesOnStartup}
+              {updateCodexDesktopExecutablePath}
+              showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
+              {checkForUpdates}
+              {downloadUpdate}
+              {installUpdate}
+              {copyAuthUrl}
+              {copyDeviceCode}
+              {openExternalLink}
+            />
+          </div>
 
           {#if pageError}
             <section
+              use:reveal={{ y: 6, blur: 4, duration: 0.3 }}
               class="theme-surface theme-error-panel rounded-[1rem] border border-danger/18 bg-white px-4 py-4 text-base text-danger"
             >
               <div class="grid gap-2">
@@ -1188,70 +1193,79 @@
             </section>
           {/if}
 
-          <AccountsPanel
-            {panelClass}
-            {primaryActionButton}
-            {compactGhostButton}
-            {iconRowButton}
-            copy={copyForLanguage()}
-            workspaceVersion={appMeta.version}
-            workspaceStatusText={loginEvent?.message ?? ''}
-            workspaceStatusToneClass={loginEvent
-              ? loginTone(loginEvent.phase)
-              : 'text-muted-strong'}
-            updateSummary={inlineUpdateSummary()}
-            updateActionLabel={inlineUpdateActionLabel()}
-            runUpdateAction={runInlineUpdateAction}
-            language={snapshot.settings.language}
-            accounts={snapshot.accounts}
-            providers={snapshot.providers}
-            tags={snapshot.tags}
-            activeAccountId={snapshot.activeAccountId}
-            {usageByAccountId}
-            {usageLoadingByAccountId}
-            {usageErrorByAccountId}
-            wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
-            loginActionBusy={loginActionBusy()}
-            {loginStarting}
-            openAccountInCodex={(accountId) =>
-              runAccountAction(`open:${accountId}`, () =>
-                window.codexApp.openAccountInCodex(accountId)
-              )}
-            openAccountInIsolatedCodex={(accountId) =>
-              runAccountAction(`open-isolated:${accountId}`, () =>
-                window.codexApp.openAccountInIsolatedCodex(accountId)
-              )}
-            openingAccountId={accountActionKey.startsWith('open:')
-              ? accountActionKey.slice('open:'.length)
-              : ''}
-            openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
-              ? accountActionKey.slice('open-isolated:'.length)
-              : ''}
-            {wakingAccountId}
-            openingProviderId={accountActionKey.startsWith('provider:open:')
-              ? accountActionKey.slice('provider:open:'.length)
-              : ''}
-            {getProvider}
-            {reorderProviders}
-            {updateProvider}
-            {removeProvider}
-            {openProviderInCodex}
-            {reorderAccounts}
-            {createTag}
-            {updateTag}
-            {deleteTag}
-            {updateAccountTags}
-            refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
-            {openWakeDialog}
-            {removeAccount}
-            {removeAccounts}
-            {exportSelectedAccounts}
-            {startLogin}
-            importCurrent={() => runAction('import', () => window.codexApp.importCurrentAccount())}
-          />
+          <div
+            class="flex h-0 min-h-0 flex-1 flex-col overflow-hidden"
+            use:reveal={{ y: 10, blur: 7, duration: 0.46, delay: 0.05 }}
+          >
+            <AccountsPanel
+              {panelClass}
+              {primaryActionButton}
+              {compactGhostButton}
+              {iconRowButton}
+              copy={copyForLanguage()}
+              workspaceVersion={appMeta.version}
+              workspaceStatusText={loginEvent?.message ?? ''}
+              workspaceStatusToneClass={loginEvent
+                ? loginTone(loginEvent.phase)
+                : 'text-muted-strong'}
+              updateSummary={inlineUpdateSummary()}
+              updateActionLabel={inlineUpdateActionLabel()}
+              runUpdateAction={runInlineUpdateAction}
+              language={snapshot.settings.language}
+              accounts={snapshot.accounts}
+              providers={snapshot.providers}
+              tags={snapshot.tags}
+              activeAccountId={snapshot.activeAccountId}
+              {usageByAccountId}
+              {usageLoadingByAccountId}
+              {usageErrorByAccountId}
+              wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
+              loginActionBusy={loginActionBusy()}
+              {loginStarting}
+              openAccountInCodex={(accountId) =>
+                runAccountAction(`open:${accountId}`, () =>
+                  window.codexApp.openAccountInCodex(accountId)
+                )}
+              openAccountInIsolatedCodex={(accountId) =>
+                runAccountAction(`open-isolated:${accountId}`, () =>
+                  window.codexApp.openAccountInIsolatedCodex(accountId)
+                )}
+              openingAccountId={accountActionKey.startsWith('open:')
+                ? accountActionKey.slice('open:'.length)
+                : ''}
+              openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
+                ? accountActionKey.slice('open-isolated:'.length)
+                : ''}
+              {wakingAccountId}
+              openingProviderId={accountActionKey.startsWith('provider:open:')
+                ? accountActionKey.slice('provider:open:'.length)
+                : ''}
+              {getProvider}
+              {reorderProviders}
+              {updateProvider}
+              {removeProvider}
+              {openProviderInCodex}
+              {reorderAccounts}
+              {createTag}
+              {updateTag}
+              {deleteTag}
+              {updateAccountTags}
+              refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
+              {openWakeDialog}
+              {removeAccount}
+              {removeAccounts}
+              {exportSelectedAccounts}
+              {startLogin}
+              importCurrent={() =>
+                runAction('import', () => window.codexApp.importCurrentAccount())}
+            />
+          </div>
         </div>
 
-        <div class="sticky top-0 self-start">
+        <div
+          class="sticky top-0 self-start"
+          use:reveal={{ x: 10, y: 4, blur: 6, duration: 0.42, delay: 0.08 }}
+        >
           <AppSider
             copy={copyForLanguage()}
             {appMeta}
@@ -1306,19 +1320,33 @@
   <div
     class="fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6 backdrop-blur-[2px]"
     role="presentation"
+    tabindex="-1"
     on:click={(event) => {
       if (event.target === event.currentTarget) {
+        closeExportFormatDialog()
+      }
+    }}
+    on:keydown={(event) => {
+      if (event.key === 'Escape') {
         closeExportFormatDialog()
       }
     }}
   >
     <div
       class="theme-surface w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:p-6"
+      use:reveal={{ y: 10, scale: 0.992, blur: 6, duration: 0.34 }}
+      use:cascadeIn={{
+        selector: '[data-motion-item]',
+        y: 6,
+        blur: 4,
+        duration: 0.26,
+        stagger: 0.024
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="export-format-dialog-title"
     >
-      <div class="grid gap-1">
+      <div class="grid gap-1" data-motion-item>
         <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
           {exportDialogScopeLabel()}
         </p>
@@ -1333,6 +1361,7 @@
       <div class="mt-5 grid gap-3">
         {#each exportFormatOptionOrder as format (format)}
           <label
+            data-motion-item
             class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-black/14 bg-black/[0.045]' : 'border-black/8 bg-transparent'}`}
           >
             <div class="flex items-start gap-3">
@@ -1358,10 +1387,10 @@
       </div>
 
       {#if exportDialogError}
-        <p class="mt-4 text-sm text-danger">{exportDialogError}</p>
+        <p class="mt-4 text-sm text-danger" data-motion-item>{exportDialogError}</p>
       {/if}
 
-      <div class="mt-6 flex flex-wrap justify-end gap-3">
+      <div class="mt-6 flex flex-wrap justify-end gap-3" data-motion-item>
         <button
           class={compactGhostButton}
           on:click={closeExportFormatDialog}

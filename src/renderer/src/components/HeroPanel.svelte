@@ -6,6 +6,7 @@
     LoginEvent
   } from '../../../shared/codex'
   import { type LocalizedCopy } from './app-view'
+  import { cascadeIn, reveal } from './gsap-motion'
 
   export let heroClass: string
   export let compactGhostButton: string
@@ -174,20 +175,38 @@
 {#if hasDetailContent}
   <div
     class="fixed inset-0 z-[55] flex items-center justify-center bg-black/38 px-4 py-6 backdrop-blur-[2px]"
+    use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
     role="presentation"
+    tabindex="-1"
     onclick={(event) => {
       if (event.target === event.currentTarget) {
+        onClose()
+      }
+    }}
+    onkeydown={(event) => {
+      if (event.key === 'Escape') {
         onClose()
       }
     }}
   >
     <div
       class={`${heroClass} w-full max-w-4xl max-h-[calc(100vh-3rem)] overflow-y-auto shadow-[0_24px_80px_rgba(15,23,42,0.18)]`}
+      use:reveal={{ y: 10, scale: 0.992, blur: 6, duration: 0.34 }}
+      use:cascadeIn={{
+        selector: '[data-hero-motion]',
+        y: 8,
+        blur: 4,
+        duration: 0.26,
+        stagger: 0.024
+      }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="hero-panel-dialog-title"
     >
-      <div class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4">
+      <div
+        class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4"
+        data-hero-motion
+      >
         <div class="grid gap-1">
           <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
             {copy.toolbarDialogTitle}
@@ -203,7 +222,7 @@
       </div>
 
       {#if showSettings}
-        <div class="grid gap-3">
+        <div class="grid gap-3" data-hero-motion>
           <div class="flex flex-wrap items-center gap-3">
             <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
             <select
@@ -281,7 +300,10 @@
       {/if}
 
       {#if showProviderComposer}
-        <div class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-4 mt-4' : ''}`}>
+        <div
+          class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
+          data-hero-motion
+        >
           <p class="text-sm font-medium text-ink">{copy.createProvider}</p>
 
           <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
@@ -352,6 +374,7 @@
       {#if showBrowserLoginDetails || showDeviceLoginDetailsPanel}
         <div
           class={`grid gap-2 ${showSettings || showProviderComposer ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
+          data-hero-motion
         >
           {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
             <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">

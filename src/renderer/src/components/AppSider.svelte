@@ -13,6 +13,7 @@
     themeTitle,
     type LocalizedCopy
   } from './app-view'
+  import { cascadeIn, reveal } from './gsap-motion'
   import FloatingSelect from './FloatingSelect.svelte'
 
   const compactLanguageOptions: Array<{ value: AppLanguage; label: string }> = [
@@ -44,11 +45,23 @@
   export let openExternalLink: (url?: string) => void
 </script>
 
-<div class="theme-app-sider-rail flex h-fit w-full flex-col gap-2.5">
+<div
+  class="theme-app-sider-rail flex h-fit w-full flex-col gap-2.5"
+  use:reveal={{ x: 10, blur: 6, duration: 0.4 }}
+>
   <div
     class="theme-sider-group theme-toolbar theme-sider-dock grid gap-0.75 rounded-xl border border-black/6 bg-black/[0.02] p-1"
+    use:cascadeIn={{
+      selector: '[data-sider-item]',
+      x: 6,
+      y: 0,
+      blur: 4,
+      duration: 0.28,
+      stagger: 0.02
+    }}
   >
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={() => startLogin('browser')}
       aria-label={copy.callbackLogin}
@@ -59,6 +72,7 @@
       ></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={() => startLogin('device')}
       aria-label={copy.deviceLogin}
@@ -67,6 +81,7 @@
       <span class="i-lucide-key-round h-4.5 w-4.5"></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={importCurrent}
       disabled={loginActionBusy}
@@ -76,6 +91,7 @@
       <span class="i-lucide-monitor-down h-4.5 w-4.5"></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={importAccountsFile}
       disabled={loginActionBusy}
@@ -85,6 +101,7 @@
       <span class="i-lucide-file-up h-4.5 w-4.5"></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={exportAccountsFile}
       aria-label={copy.exportAccountsFile}
@@ -93,6 +110,7 @@
       <span class="i-lucide-file-down h-4.5 w-4.5"></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={refreshAllRateLimits}
       disabled={loginActionBusy || refreshingAllUsage}
@@ -104,6 +122,7 @@
       ></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={activateBestAccount}
       disabled={loginActionBusy || !bestAccount || bestAccount.id === activeAccountId}
@@ -117,6 +136,7 @@
       <span class="i-lucide-sparkles h-4.5 w-4.5"></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={toggleProviderComposer}
       aria-label={copy.createProvider}
@@ -127,6 +147,7 @@
       ></span>
     </button>
     <button
+      data-sider-item
       class={`${iconToolbarButton} theme-sider-tool-button`}
       on:click={toggleSettings}
       aria-label={copy.settings}
@@ -138,8 +159,17 @@
 
   <div
     class="theme-sider-group theme-sider-utility grid gap-1.5 rounded-xl border border-black/6 bg-black/[0.02] p-1"
+    use:cascadeIn={{
+      selector: '[data-sider-item]',
+      x: 5,
+      y: 0,
+      blur: 4,
+      duration: 0.26,
+      stagger: 0.028,
+      delay: 0.04
+    }}
   >
-    <div class="theme-sider-language relative">
+    <div class="theme-sider-language relative" data-sider-item>
       <FloatingSelect
         options={compactLanguageOptions}
         value={language}
@@ -155,6 +185,7 @@
 
     <div class="grid grid-cols-1 gap-1.5">
       <button
+        data-sider-item
         class={`${iconToolbarButton} theme-sider-utility-button`}
         on:click={() => updateTheme(nextTheme(theme))}
         aria-label={copy.switchTheme(themeTitle(theme, copy))}
@@ -164,6 +195,7 @@
       </button>
 
       <button
+        data-sider-item
         class={`${iconToolbarButton} theme-sider-utility-button`}
         on:click={() => openExternalLink(appMeta.githubUrl ?? undefined)}
         disabled={!appMeta.githubUrl}
@@ -192,10 +224,7 @@
     width: 100%;
     height: 2.25rem;
     border-radius: 0.7rem;
-    transition:
-      background-color 140ms ease,
-      transform 140ms ease,
-      scale 140ms ease;
+    transition: background-color 140ms ease;
   }
 
   .theme-sider-language-select,
@@ -212,16 +241,7 @@
     width: 100%;
     height: 2.25rem;
     border-radius: 0.7rem;
-    transition:
-      background-color 140ms ease,
-      transform 140ms ease,
-      scale 140ms ease;
-  }
-
-  .theme-sider-tool-button:hover:not(:disabled),
-  .theme-sider-utility-button:hover:not(:disabled) {
-    transform: translateY(-1px);
-    scale: 1.02;
+    transition: background-color 140ms ease;
   }
 
   .theme-sider-tool-button:active:not(:disabled),
