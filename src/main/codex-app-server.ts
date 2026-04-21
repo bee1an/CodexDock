@@ -1,5 +1,11 @@
 import type { CodexAuthPayload } from './codex-auth'
-import type { AccountRateLimitEntry, AccountRateLimits, CreditsSnapshot } from '../shared/codex'
+import type {
+  AccountRateLimitEntry,
+  AccountRateLimits,
+  CreditsSnapshot,
+  WakeAccountRequestResult,
+  WakeAccountRateLimitsInput
+} from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
 
@@ -70,6 +76,9 @@ export class AccountRateLimitLookupError extends Error {
 
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 const CHATGPT_HOSTS = ['https://chatgpt.com', 'https://chat.openai.com'] as const
+const CODEX_WAKE_MODEL = 'gpt-5.4'
+const CODEX_WAKE_PROMPT = 'ping'
+const CODEX_WAKE_INSTRUCTIONS = 'Start or refresh this Codex session timer. Reply briefly.'
 
 function extractErrorDetail(value: unknown): string | null {
   if (typeof value === 'string') {
@@ -131,6 +140,107 @@ function extractResponseErrorDetail(body: string, contentType: string): string |
   } catch {
     return normalized
   }
+}
+
+function formatWakeResponseBody(body: string, contentType: string): string {
+  const normalized = body.trim()
+  if (!normalized) {
+    return ''
+  }
+
+  const looksLikeSse =
+    contentType.toLowerCase().includes('text/event-stream') ||
+    normalized.startsWith('event:') ||
+    normalized.includes('\nevent:')
+
+  if (looksLikeSse) {
+    const summary = summarizeWakeSseBody(normalized)
+    if (summary) {
+      return summary
+    }
+  }
+
+  const looksLikeJson =
+    contentType.toLowerCase().includes('application/json') ||
+    normalized.startsWith('{') ||
+    normalized.startsWith('[')
+
+  if (!looksLikeJson) {
+    return normalized
+  }
+
+  try {
+    return JSON.stringify(JSON.parse(normalized), null, 2)
+  } catch {
+    return normalized
+  }
+}
+
+function summarizeWakeSseBody(body: string): string {
+  const eventNames: string[] = []
+  const outputChunks: string[] = []
+  let completedText = ''
+  let responseStatus = ''
+  let totalTokens: number | null = null
+
+  for (const rawLine of body.split(/\r?\n/)) {
+    const line = rawLine.trim()
+    if (!line.startsWith('data: ')) {
+      continue
+    }
+
+    try {
+      const payload = JSON.parse(line.slice(6)) as {
+        type?: string
+        delta?: string
+        text?: string
+        response?: { status?: string; usage?: { total_tokens?: number | null } | null }
+      }
+
+      if (payload.type && !eventNames.includes(payload.type)) {
+        eventNames.push(payload.type)
+      }
+
+      if (payload.type === 'response.output_text.delta' && typeof payload.delta === 'string') {
+        outputChunks.push(payload.delta)
+      }
+
+      if (payload.type === 'response.output_text.done' && typeof payload.text === 'string') {
+        completedText = payload.text.trim()
+      }
+
+      if (payload.type === 'response.completed') {
+        responseStatus = payload.response?.status ?? responseStatus
+        totalTokens =
+          typeof payload.response?.usage?.total_tokens === 'number'
+            ? payload.response.usage.total_tokens
+            : totalTokens
+      }
+    } catch {
+      continue
+    }
+  }
+
+  const message = completedText || outputChunks.join('').trim()
+  const summary: string[] = []
+
+  if (message) {
+    summary.push(message)
+  }
+
+  if (responseStatus) {
+    summary.push(`status: ${responseStatus}`)
+  }
+
+  if (typeof totalTokens === 'number') {
+    summary.push(`tokens: ${totalTokens}`)
+  }
+
+  if (!summary.length && eventNames.length) {
+    summary.push(`events: ${eventNames.join(', ')}`)
+  }
+
+  return summary.join('\n')
 }
 
 function mapRateLimitEntry(payload: RateLimitSnapshotPayload): AccountRateLimitEntry {
@@ -279,6 +389,29 @@ function resolveUsageUrl(): string {
   return `${baseUrl}/api/codex/usage`
 }
 
+function resolveResponsesUrl(): string {
+  const configuredBaseUrl = process.env['ILOVECODEX_CHATGPT_BASE_URL'] ?? DEFAULT_CHATGPT_BASE_URL
+  const baseUrl = normalizeChatGptBaseUrl(configuredBaseUrl)
+
+  if (baseUrl.includes('/backend-api')) {
+    return `${baseUrl}/codex/responses`
+  }
+
+  return `${baseUrl}/api/codex/responses`
+}
+
+function buildCodexAuthHeaders(
+  accessToken: string,
+  chatgptAccountId: string
+): Record<string, string> {
+  return {
+    authorization: `Bearer ${accessToken}`,
+    'chatgpt-account-id': chatgptAccountId,
+    'user-agent': 'ilovecodex',
+    originator: 'codex_cli_rs'
+  }
+}
+
 function isRateLimitStatusPayload(value: unknown): value is RateLimitStatusPayload {
   return Boolean(value && typeof value === 'object')
 }
@@ -301,11 +434,7 @@ export async function readAccountRateLimits(
   const url = resolveUsageUrl()
   const response = await platform.fetch(url, {
     method: 'GET',
-    headers: {
-      authorization: `Bearer ${accessToken}`,
-      'chatgpt-account-id': chatgptAccountId,
-      'user-agent': 'ilovecodex'
-    },
+    headers: buildCodexAuthHeaders(accessToken, chatgptAccountId),
     signal: AbortSignal.timeout(15000)
   })
 
@@ -336,4 +465,69 @@ export async function readAccountRateLimits(
   }
 
   return mapRateLimits(payload)
+}
+
+export async function wakeAccountRateLimits(
+  auth: CodexAuthPayload,
+  platform: Pick<CodexPlatformAdapter, 'fetch'>,
+  input?: WakeAccountRateLimitsInput
+): Promise<WakeAccountRequestResult> {
+  const accessToken = auth.tokens?.access_token
+  const chatgptAccountId = extractChatGptAccountId(auth)
+
+  if (!accessToken) {
+    throw new Error('Missing access token required for rate-limit wake-up.')
+  }
+
+  if (!chatgptAccountId) {
+    throw new Error('Missing ChatGPT account id required for rate-limit wake-up.')
+  }
+
+  const url = resolveResponsesUrl()
+  const model = input?.model?.trim() || CODEX_WAKE_MODEL
+  const prompt = input?.prompt?.trim() || CODEX_WAKE_PROMPT
+  const response = await platform.fetch(url, {
+    method: 'POST',
+    headers: {
+      ...buildCodexAuthHeaders(accessToken, chatgptAccountId),
+      'content-type': 'application/json'
+    },
+    body: JSON.stringify({
+      model,
+      instructions: CODEX_WAKE_INSTRUCTIONS,
+      store: false,
+      stream: true,
+      input: [
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'input_text',
+              text: prompt
+            }
+          ]
+        }
+      ]
+    }),
+    signal: AbortSignal.timeout(15000)
+  })
+
+  const contentType = response.headers.get('content-type') ?? ''
+  const body = await response.text()
+
+  if (response.ok || response.status === 429) {
+    return {
+      status: response.status,
+      accepted: true,
+      model,
+      prompt,
+      body: formatWakeResponseBody(body, contentType)
+    }
+  }
+
+  const detail = extractResponseErrorDetail(body, contentType)
+  throw new AccountRateLimitLookupError(
+    detail ?? `POST ${url} failed (${response.status})`,
+    response.status
+  )
 }

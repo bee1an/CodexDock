@@ -1,6 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  AccountWakeSchedule,
+  AccountTransferFormat,
   AppMeta,
   AppSettings,
   AppSnapshot,
@@ -10,7 +12,9 @@ import type {
   UpdateCustomProviderInput,
   LoginEvent,
   LoginMethod,
-  PortOccupant
+  PortOccupant,
+  UpdateAccountWakeScheduleInput,
+  WakeAccountRateLimitsInput
 } from '../shared/codex'
 
 // Custom APIs for renderer
@@ -24,9 +28,10 @@ const codexApp = {
   openCodex: () => ipcRenderer.invoke('codex:open-codex'),
   importCurrentAccount: () => ipcRenderer.invoke('codex:import-current-account'),
   importAccountsFromFile: () => ipcRenderer.invoke('codex:import-accounts-from-file'),
-  exportAccountsToFile: () => ipcRenderer.invoke('codex:export-accounts-to-file'),
-  exportSelectedAccountsToFile: (accountIds: string[]) =>
-    ipcRenderer.invoke('codex:export-selected-accounts-to-file', accountIds),
+  exportAccountsToFile: (format?: AccountTransferFormat) =>
+    ipcRenderer.invoke('codex:export-accounts-to-file', format),
+  exportSelectedAccountsToFile: (accountIds: string[], format?: AccountTransferFormat) =>
+    ipcRenderer.invoke('codex:export-selected-accounts-to-file', accountIds, format),
   activateAccount: (accountId: string) => ipcRenderer.invoke('codex:activate-account', accountId),
   activateBestAccount: () => ipcRenderer.invoke('codex:activate-best-account'),
   reorderAccounts: (accountIds: string[]) =>
@@ -35,6 +40,12 @@ const codexApp = {
   removeAccounts: (accountIds: string[]) => ipcRenderer.invoke('codex:remove-accounts', accountIds),
   updateAccountTags: (accountId: string, tagIds: string[]) =>
     ipcRenderer.invoke('codex:update-account-tags', accountId, tagIds),
+  getAccountWakeSchedule: (accountId: string): Promise<AccountWakeSchedule | null> =>
+    ipcRenderer.invoke('codex:get-account-wake-schedule', accountId),
+  updateAccountWakeSchedule: (accountId: string, input: UpdateAccountWakeScheduleInput) =>
+    ipcRenderer.invoke('codex:update-account-wake-schedule', accountId, input),
+  deleteAccountWakeSchedule: (accountId: string) =>
+    ipcRenderer.invoke('codex:delete-account-wake-schedule', accountId),
   createTag: (name: string) => ipcRenderer.invoke('codex:create-tag', name),
   updateTag: (tagId: string, name: string) => ipcRenderer.invoke('codex:update-tag', tagId, name),
   deleteTag: (tagId: string) => ipcRenderer.invoke('codex:delete-tag', tagId),
@@ -56,6 +67,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:open-account-in-isolated-codex', accountId),
   readAccountRateLimits: (accountId: string) =>
     ipcRenderer.invoke('codex:read-account-rate-limits', accountId),
+  wakeAccountRateLimits: (accountId: string, input?: WakeAccountRateLimitsInput) =>
+    ipcRenderer.invoke('codex:wake-account-rate-limits', accountId, input),
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
   downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),

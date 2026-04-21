@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+
 import { mkdir, writeFile } from 'node:fs/promises'
 import path from 'node:path'
 

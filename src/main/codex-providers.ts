@@ -106,7 +106,10 @@ export class CodexProviderStore {
     return toProviderSummary(provider)
   }
 
-  async update(providerId: string, input: UpdateCustomProviderInput): Promise<CustomProviderSummary> {
+  async update(
+    providerId: string,
+    input: UpdateCustomProviderInput
+  ): Promise<CustomProviderSummary> {
     const state = await this.readState()
     const provider = state.providers.find((item) => item.id === providerId)
     if (!provider) {

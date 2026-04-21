@@ -91,6 +91,31 @@ brew update
 brew upgrade --cask ilovecodex
 ```
 
+### 如果第一次打开时被 macOS 拦截
+
+当前构建还没有经过 Apple 公证，所以第一次打开时，macOS Gatekeeper 可能会弹出“Apple 无法验证 `Ilovecodex.app` 是否包含恶意软件”之类的提示。
+
+推荐处理方式：
+
+1. 在弹窗里先点“完成”，不要点“移到废纸篓”。
+2. 打开“系统设置 -> 隐私与安全性”。
+3. 滚动到“安全性”区域，点“仍要打开”或“打开”。
+
+如果你更习惯命令行，并且只想放行这个 App，可以执行：
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Ilovecodex.app"
+open "/Applications/Ilovecodex.app"
+```
+
+如果想先确认是否带有隔离标记，可以先执行：
+
+```bash
+xattr -l "/Applications/Ilovecodex.app"
+```
+
+不建议为了这个问题全局关闭 Gatekeeper。
+
 现在 release workflow 已经预留了“发版后自动更新 tap 仓库”的流程。具体配置方法见 [docs/homebrew-tap.md](./docs/homebrew-tap.md)。
 
 ## 接口文档

@@ -70,7 +70,8 @@ function createSnapshot(): AppSnapshot {
       b: createUsage({ primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null } }),
       c: createUsage({ primary: { usedPercent: 80, windowDurationMins: 300, resetsAt: null } })
     },
-    usageErrorByAccountId: {}
+    usageErrorByAccountId: {},
+    wakeSchedulesByAccountId: {}
   }
 }
 

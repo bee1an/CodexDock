@@ -5,6 +5,7 @@
   import AppSider from './components/AppSider.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
+  import WakeDialog from './components/WakeDialog.svelte'
   import {
     accountLabel,
     loginTone,
@@ -13,13 +14,16 @@
     statusBarAccounts,
     usageErrorKind
   } from './components/app-view'
+  import { isValidWakeScheduleTime, normalizeWakeScheduleTimes } from './components/wake-schedule'
 
   import type {
     AppLanguage,
     AppMeta,
     AppTheme,
     AppUpdateState,
+    AccountWakeSchedule,
     AccountTag,
+    AccountTransferFormat,
     AccountRateLimits,
     AccountSummary,
     AppSnapshot,
@@ -28,9 +32,21 @@
     LoginEvent,
     LoginMethod,
     PortOccupant,
+    UpdateAccountWakeScheduleInput,
+    WakeAccountRequestResult,
+    WakeAccountRateLimitsInput,
     UpdateCustomProviderInput
   } from '../../shared/codex'
-  import { resolveBestAccount, shouldAutoPollUsage } from '../../shared/codex'
+  import {
+    accountTransferFormats,
+    formatRelativeReset,
+    resolveBestAccount,
+    shouldAutoPollUsage,
+    supportsWeeklyQuota
+  } from '../../shared/codex'
+
+  type WakeDialogStatus = 'idle' | 'running' | 'success' | 'skipped' | 'error'
+  type WakeDialogTab = 'session' | 'schedule'
 
   let snapshot: AppSnapshot = {
     accounts: [],
@@ -52,7 +68,8 @@
       codexDesktopExecutablePath: ''
     },
     usageByAccountId: {},
-    usageErrorByAccountId: {}
+    usageErrorByAccountId: {},
+    wakeSchedulesByAccountId: {}
   }
   let appMeta: AppMeta = {
     version: '--',
@@ -80,6 +97,27 @@
   let usageByAccountId: Record<string, AccountRateLimits> = {}
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
+  let wakingAccountId = ''
+  let wakeDialogAccount: AccountSummary | null = null
+  let wakeDialogTab: WakeDialogTab = 'session'
+  let wakePromptDraft = 'ping'
+  let wakeModelDraft = 'gpt-5.4'
+  let wakeDialogStatus: WakeDialogStatus = 'idle'
+  let wakeDialogLogs: string[] = []
+  let wakeRequestResult: WakeAccountRequestResult | null = null
+  let wakeRequestError = ''
+  let wakeRawResponseBody = ''
+  let showExportFormatDialog = false
+  let exportDialogBusy = false
+  let exportDialogError = ''
+  let exportDialogAccountIds: string[] | null = null
+  let exportDialogFormat: AccountTransferFormat = 'ilovecodex'
+  let wakeScheduleEnabledDraft = true
+  let wakeScheduleTimesDraft: string[] = ['09:00']
+  let wakeSchedulePromptDraft = 'ping'
+  let wakeScheduleModelDraft = 'gpt-5.4'
+  let wakeScheduleError = ''
+  let wakeScheduleSaving = false
   const isTrayView =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tray') === '1'
   let prefersDark = false
@@ -105,8 +143,56 @@
   const dragRegionStyle = '-webkit-app-region: drag; app-region: drag;'
 
   const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
+  const exportFormatOptionOrder = [...accountTransferFormats]
   const resolvedTheme = (theme: AppTheme): 'light' | 'dark' =>
     theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme
+
+  const exportFormatLabel = (format: AccountTransferFormat): string => {
+    const copy = copyForLanguage()
+
+    switch (format) {
+      case 'cockpit_tools':
+        return copy.exportFormatCockpitTools
+      case 'sub2api':
+        return copy.exportFormatSub2api
+      case 'cliproxyapi':
+        return copy.exportFormatCliProxyApi
+      case 'ilovecodex':
+      default:
+        return copy.exportFormatIlovecodex
+    }
+  }
+
+  const exportFormatDescription = (format: AccountTransferFormat): string => {
+    const copy = copyForLanguage()
+
+    switch (format) {
+      case 'cockpit_tools':
+        return copy.exportFormatCockpitToolsDescription
+      case 'sub2api':
+        return copy.exportFormatSub2apiDescription
+      case 'cliproxyapi':
+        return copy.exportFormatCliProxyApiDescription
+      case 'ilovecodex':
+      default:
+        return copy.exportFormatIlovecodexDescription
+    }
+  }
+
+  const exportDialogScopeLabel = (): string =>
+    exportDialogAccountIds?.length
+      ? copyForLanguage().exportFormatTargetSelected(exportDialogAccountIds.length)
+      : copyForLanguage().exportFormatTargetAll
+
+  const toolbarDialogOpen = (): boolean =>
+    showSettings ||
+    showProviderComposer ||
+    (showCallbackLoginDetails &&
+      loginEvent?.method === 'browser' &&
+      Boolean(loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput)) ||
+    (showDeviceLoginDetails &&
+      loginEvent?.method === 'device' &&
+      Boolean(loginEvent?.verificationUrl || loginEvent?.userCode || loginEvent?.rawOutput))
 
   const applyTheme = (theme: AppTheme): void => {
     if (typeof document === 'undefined') {
@@ -206,6 +292,42 @@
     delete nextState[accountId]
     usageErrorByAccountId = nextState
   }
+
+  const wakeTimestamp = (): string =>
+    new Intl.DateTimeFormat(snapshot.settings.language === 'en' ? 'en-US' : 'zh-CN', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(new Date())
+
+  const pushWakeLog = async (message: string): Promise<void> => {
+    wakeDialogLogs = [...wakeDialogLogs, `[${wakeTimestamp()}] ${message}`]
+  }
+
+  const resetWakeDialogState = (): void => {
+    wakeDialogStatus = 'idle'
+    wakeDialogLogs = []
+    wakeRequestResult = null
+    wakeRequestError = ''
+    wakeRawResponseBody = ''
+  }
+
+  const wakeResponsePreview = (body: string): string => {
+    const firstLine = body
+      .split('\n')
+      .map((line) => line.trim())
+      .find(Boolean)
+
+    if (!firstLine) {
+      return copyForLanguage().wakeQuotaResultEmpty
+    }
+
+    return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine
+  }
+
+  const currentWakeScheduleDialog = (): AccountWakeSchedule | null =>
+    wakeDialogAccount ? (snapshot.wakeSchedulesByAccountId[wakeDialogAccount.id] ?? null) : null
 
   const inlineUpdateSummary = (): string => {
     switch (updateState.status) {
@@ -444,15 +566,63 @@
     )
   }
 
+  const closeExportFormatDialog = (): void => {
+    if (exportDialogBusy) {
+      return
+    }
+
+    showExportFormatDialog = false
+    exportDialogError = ''
+    exportDialogAccountIds = null
+    exportDialogFormat = 'ilovecodex'
+  }
+
+  const openExportFormatDialog = (accountIds?: string[]): void => {
+    const uniqueIds = accountIds?.length ? [...new Set(accountIds)] : null
+    if (accountIds?.length && !uniqueIds?.length) {
+      return
+    }
+
+    exportDialogAccountIds = uniqueIds
+    exportDialogFormat = 'ilovecodex'
+    exportDialogError = ''
+    showExportFormatDialog = true
+  }
+
+  const submitExportFormatDialog = async (): Promise<void> => {
+    if (exportDialogBusy) {
+      return
+    }
+
+    exportDialogBusy = true
+    exportDialogError = ''
+
+    try {
+      const nextSnapshot = exportDialogAccountIds?.length
+        ? await window.codexApp.exportSelectedAccountsToFile(
+            exportDialogAccountIds,
+            exportDialogFormat
+          )
+        : await window.codexApp.exportAccountsToFile(exportDialogFormat)
+      applySnapshot(nextSnapshot)
+      showExportFormatDialog = false
+      exportDialogError = ''
+      exportDialogAccountIds = null
+      exportDialogFormat = 'ilovecodex'
+    } catch (error) {
+      exportDialogError = localizeKnownError(error, copyForLanguage().actionFailed)
+    } finally {
+      exportDialogBusy = false
+    }
+  }
+
   const exportSelectedAccounts = async (accountIds: string[]): Promise<void> => {
     const uniqueIds = [...new Set(accountIds)]
     if (!uniqueIds.length) {
       return
     }
 
-    await runAction(`export:selected:${uniqueIds.join(',')}`, () =>
-      window.codexApp.exportSelectedAccountsToFile(uniqueIds)
-    )
+    openExportFormatDialog(uniqueIds)
   }
 
   const reorderAccounts = async (accountIds: string[]): Promise<void> => {
@@ -553,6 +723,214 @@
       }
     } finally {
       clearUsageLoading(account.id)
+    }
+  }
+
+  const closeWakeDialog = (): void => {
+    if (wakingAccountId || wakeScheduleSaving) {
+      return
+    }
+
+    wakeDialogAccount = null
+    wakeDialogTab = 'session'
+    resetWakeDialogState()
+    wakeScheduleError = ''
+  }
+
+  const hydrateWakeScheduleDrafts = (account: AccountSummary): void => {
+    const schedule = snapshot.wakeSchedulesByAccountId[account.id]
+    wakeScheduleEnabledDraft = schedule?.enabled ?? true
+    wakeScheduleTimesDraft = schedule?.times.length ? [...schedule.times] : ['09:00']
+    wakeSchedulePromptDraft = schedule?.prompt ?? 'ping'
+    wakeScheduleModelDraft = schedule?.model ?? 'gpt-5.4'
+    wakeScheduleError = ''
+  }
+
+  const openWakeDialog = (account: AccountSummary, initialTab: WakeDialogTab = 'session'): void => {
+    if (wakingAccountId || wakeScheduleSaving || usageLoadingByAccountId[account.id]) {
+      return
+    }
+
+    wakeDialogAccount = account
+    wakeDialogTab = initialTab
+    resetWakeDialogState()
+    hydrateWakeScheduleDrafts(account)
+    void pushWakeLog(copyForLanguage().wakeQuotaLogReady(accountLabel(account, copyForLanguage())))
+  }
+
+  const handleGlobalKeydown = (event: KeyboardEvent): void => {
+    if (event.key !== 'Escape') {
+      return
+    }
+
+    if (showExportFormatDialog && !exportDialogBusy) {
+      closeExportFormatDialog()
+      return
+    }
+
+    if (toolbarDialogOpen()) {
+      closeExpandablePanels()
+      return
+    }
+
+    if (wakeDialogAccount && !wakingAccountId && !wakeScheduleSaving) {
+      closeWakeDialog()
+    }
+  }
+
+  const saveWakeSchedule = async (): Promise<void> => {
+    if (!wakeDialogAccount || wakeScheduleSaving || wakingAccountId) {
+      return
+    }
+
+    const times = normalizeWakeScheduleTimes(wakeScheduleTimesDraft)
+    if (!times.length) {
+      wakeScheduleError = copyForLanguage().wakeScheduleNoTimes
+      return
+    }
+
+    if (!times.every(isValidWakeScheduleTime)) {
+      wakeScheduleError = copyForLanguage().wakeScheduleInvalidTime
+      return
+    }
+
+    wakeScheduleSaving = true
+    wakeScheduleError = ''
+
+    const input: UpdateAccountWakeScheduleInput = {
+      enabled: wakeScheduleEnabledDraft,
+      times,
+      prompt: wakeSchedulePromptDraft.trim() || 'ping',
+      model: wakeScheduleModelDraft.trim() || 'gpt-5.4'
+    }
+
+    try {
+      applySnapshot(await window.codexApp.updateAccountWakeSchedule(wakeDialogAccount.id, input))
+      wakeScheduleError = ''
+    } catch (error) {
+      wakeScheduleError = localizeKnownError(error, copyForLanguage().actionFailed)
+    } finally {
+      wakeScheduleSaving = false
+    }
+  }
+
+  const deleteWakeSchedule = async (): Promise<void> => {
+    if (!wakeDialogAccount || wakeScheduleSaving || wakingAccountId) {
+      return
+    }
+
+    wakeScheduleSaving = true
+    wakeScheduleError = ''
+
+    try {
+      applySnapshot(await window.codexApp.deleteAccountWakeSchedule(wakeDialogAccount.id))
+      hydrateWakeScheduleDrafts(wakeDialogAccount)
+    } catch (error) {
+      wakeScheduleError = localizeKnownError(error, copyForLanguage().actionFailed)
+    } finally {
+      wakeScheduleSaving = false
+    }
+  }
+
+  const wakeRateLimitReset = async (
+    account: AccountSummary,
+    input?: WakeAccountRateLimitsInput
+  ): Promise<WakeAccountRequestResult | null> => {
+    if (wakingAccountId || usageLoadingByAccountId[account.id]) {
+      return null
+    }
+
+    wakingAccountId = account.id
+    usageLoadingByAccountId = {
+      ...usageLoadingByAccountId,
+      [account.id]: true
+    }
+    clearUsageError(account.id)
+
+    try {
+      const result = await window.codexApp.wakeAccountRateLimits(account.id, input)
+      usageByAccountId = {
+        ...usageByAccountId,
+        [account.id]: result.rateLimits
+      }
+      snapshot = {
+        ...snapshot,
+        usageByAccountId: {
+          ...snapshot.usageByAccountId,
+          [account.id]: result.rateLimits
+        }
+      }
+      return result.requestResult
+    } catch (error) {
+      if (usageErrorKind(error instanceof Error ? error.message : undefined) === 'expired') {
+        clearUsageData(account.id)
+      }
+
+      usageErrorByAccountId = {
+        ...usageErrorByAccountId,
+        [account.id]: localizeKnownError(error, copyForLanguage().readRateLimitFailed)
+      }
+      throw error
+    } finally {
+      clearUsageLoading(account.id)
+      if (wakingAccountId === account.id) {
+        wakingAccountId = ''
+      }
+    }
+  }
+
+  const submitWakeDialog = async (): Promise<void> => {
+    if (!wakeDialogAccount) {
+      return
+    }
+
+    resetWakeDialogState()
+    wakeDialogStatus = 'running'
+    await pushWakeLog(copyForLanguage().wakeQuotaLogStart(wakeModelDraft || 'gpt-5.4'))
+    await pushWakeLog(copyForLanguage().wakeQuotaLogPrompt(wakePromptDraft || 'ping'))
+    await pushWakeLog(copyForLanguage().wakeQuotaLogRequesting)
+
+    try {
+      wakeRequestResult = await wakeRateLimitReset(wakeDialogAccount, {
+        prompt: wakePromptDraft,
+        model: wakeModelDraft
+      })
+      wakeRawResponseBody = wakeRequestResult?.body ?? ''
+
+      if (!wakeRequestResult) {
+        wakeDialogStatus = 'skipped'
+        await pushWakeLog(copyForLanguage().wakeQuotaLogSkipped)
+        return
+      }
+
+      await pushWakeLog(copyForLanguage().wakeQuotaLogAccepted(wakeRequestResult.status))
+      await pushWakeLog(
+        copyForLanguage().wakeQuotaLogResponse(wakeResponsePreview(wakeRequestResult.body))
+      )
+      await pushWakeLog(copyForLanguage().wakeQuotaLogRefreshingUsage)
+
+      const nextRateLimits = usageByAccountId[wakeDialogAccount.id]
+      if (nextRateLimits?.primary?.resetsAt != null) {
+        await pushWakeLog(
+          copyForLanguage().wakeQuotaLogSessionReset(
+            formatRelativeReset(nextRateLimits.primary.resetsAt, snapshot.settings.language)
+          )
+        )
+      }
+      if (supportsWeeklyQuota(nextRateLimits) && nextRateLimits?.secondary?.resetsAt != null) {
+        await pushWakeLog(
+          copyForLanguage().wakeQuotaLogWeeklyReset(
+            formatRelativeReset(nextRateLimits.secondary.resetsAt, snapshot.settings.language)
+          )
+        )
+      }
+
+      wakeDialogStatus = 'success'
+      await pushWakeLog(copyForLanguage().wakeQuotaLogCompleted)
+    } catch (error) {
+      wakeRequestError = localizeKnownError(error, copyForLanguage().readRateLimitFailed)
+      wakeDialogStatus = 'error'
+      await pushWakeLog(copyForLanguage().wakeQuotaLogFailed(wakeRequestError))
     }
   }
 
@@ -724,6 +1102,8 @@
   <title>Ilovecodex</title>
 </svelte:head>
 
+<svelte:window on:keydown={handleGlobalKeydown} />
+
 <div class={`app-shell ${isTrayView ? 'min-h-screen' : 'h-screen overflow-hidden'} flex flex-col`}>
   {#if !isTrayView}
     <div class="h-7 w-full select-none sm:h-8" style={dragRegionStyle} aria-hidden="true"></div>
@@ -752,13 +1132,14 @@
         {updatePollingInterval}
       />
     {:else}
-      <div class="grid min-h-0 flex-1 items-stretch gap-4 grid-cols-[minmax(0,1fr)_72px]">
+      <div class="grid min-h-0 flex-1 items-stretch gap-4 grid-cols-[minmax(0,1fr)_44px]">
         <div class="flex min-h-0 flex-col gap-4">
           <HeroPanel
             {heroClass}
             {compactGhostButton}
             copy={copyForLanguage()}
             {loginEvent}
+            onClose={() => closeExpandablePanels()}
             {showSettings}
             {showProviderComposer}
             {showCallbackLoginDetails}
@@ -829,6 +1210,7 @@
             {usageByAccountId}
             {usageLoadingByAccountId}
             {usageErrorByAccountId}
+            wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
             loginActionBusy={loginActionBusy()}
             {loginStarting}
             openAccountInCodex={(accountId) =>
@@ -845,6 +1227,7 @@
             openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
               ? accountActionKey.slice('open-isolated:'.length)
               : ''}
+            {wakingAccountId}
             openingProviderId={accountActionKey.startsWith('provider:open:')
               ? accountActionKey.slice('provider:open:'.length)
               : ''}
@@ -859,6 +1242,7 @@
             {deleteTag}
             {updateAccountTags}
             refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
+            {openWakeDialog}
             {removeAccount}
             {removeAccounts}
             {exportSelectedAccounts}
@@ -891,7 +1275,7 @@
             }}
             exportAccountsFile={() => {
               closeExpandablePanels()
-              return runAction('export:file', () => window.codexApp.exportAccountsToFile())
+              openExportFormatDialog()
             }}
             {refreshAllRateLimits}
             activateBestAccount={() => {
@@ -917,6 +1301,115 @@
     {/if}
   </div>
 </div>
+
+{#if showExportFormatDialog}
+  <div
+    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6 backdrop-blur-[2px]"
+    role="presentation"
+    on:click={(event) => {
+      if (event.target === event.currentTarget) {
+        closeExportFormatDialog()
+      }
+    }}
+  >
+    <div
+      class="theme-surface w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:p-6"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="export-format-dialog-title"
+    >
+      <div class="grid gap-1">
+        <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
+          {exportDialogScopeLabel()}
+        </p>
+        <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-ink">
+          {copyForLanguage().exportFormatDialogTitle}
+        </h2>
+        <p class="text-sm leading-6 text-muted-strong">
+          {copyForLanguage().exportFormatDialogDescription}
+        </p>
+      </div>
+
+      <div class="mt-5 grid gap-3">
+        {#each exportFormatOptionOrder as format (format)}
+          <label
+            class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-black/14 bg-black/[0.045]' : 'border-black/8 bg-transparent'}`}
+          >
+            <div class="flex items-start gap-3">
+              <input
+                class="mt-1 h-4 w-4 accent-black"
+                type="radio"
+                name="account-export-format"
+                value={format}
+                checked={exportDialogFormat === format}
+                on:change={() => {
+                  exportDialogFormat = format
+                }}
+              />
+              <div class="grid gap-1">
+                <span class="text-sm font-medium text-ink">{exportFormatLabel(format)}</span>
+                <span class="text-xs leading-5 text-muted-strong">
+                  {exportFormatDescription(format)}
+                </span>
+              </div>
+            </div>
+          </label>
+        {/each}
+      </div>
+
+      {#if exportDialogError}
+        <p class="mt-4 text-sm text-danger">{exportDialogError}</p>
+      {/if}
+
+      <div class="mt-6 flex flex-wrap justify-end gap-3">
+        <button
+          class={compactGhostButton}
+          on:click={closeExportFormatDialog}
+          disabled={exportDialogBusy}
+        >
+          {copyForLanguage().exportFormatCancel}
+        </button>
+        <button
+          class={primaryActionButton}
+          on:click={submitExportFormatDialog}
+          disabled={exportDialogBusy}
+        >
+          {copyForLanguage().exportFormatConfirm}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if wakeDialogAccount}
+  <WakeDialog
+    copy={copyForLanguage()}
+    language={snapshot.settings.language}
+    accountLabelText={accountLabel(wakeDialogAccount, copyForLanguage())}
+    {compactGhostButton}
+    {primaryActionButton}
+    bind:activeTab={wakeDialogTab}
+    bind:sessionPrompt={wakePromptDraft}
+    bind:sessionModel={wakeModelDraft}
+    sessionStatus={wakeDialogStatus}
+    sessionLogs={wakeDialogLogs}
+    requestResult={wakeRequestResult}
+    requestError={wakeRequestError}
+    rawResponseBody={wakeRawResponseBody}
+    sessionBusy={Boolean(wakingAccountId)}
+    schedule={currentWakeScheduleDialog()}
+    bind:scheduleEnabled={wakeScheduleEnabledDraft}
+    bind:scheduleTimes={wakeScheduleTimesDraft}
+    bind:schedulePrompt={wakeSchedulePromptDraft}
+    bind:scheduleModel={wakeScheduleModelDraft}
+    scheduleError={wakeScheduleError}
+    scheduleSaving={wakeScheduleSaving}
+    onClose={closeWakeDialog}
+    onSubmitSession={submitWakeDialog}
+    onSaveSchedule={saveWakeSchedule}
+    onDeleteSchedule={deleteWakeSchedule}
+  />
+{/if}
 
 <style>
   :global(.text-muted) {
@@ -1100,6 +1593,11 @@
   :global(html[data-theme='dark'] .theme-account-card-active) {
     border-color: var(--line-strong) !important;
     background: color-mix(in srgb, var(--surface-soft) 66%, var(--panel-strong)) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-export-format-option) {
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--panel) 8%) !important;
   }
 
   :global(html[data-theme='dark'] .theme-progress-track) {

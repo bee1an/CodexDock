@@ -4,342 +4,43 @@ import {
   CodexAccountStore,
   CodexLoginCoordinator,
   getOpenAiCallbackPortOccupant,
-  killOpenAiCallbackPortOccupant,
-  refreshCodexAuthPayload,
-  type CodexAuthPayload
+  killOpenAiCallbackPortOccupant
 } from './codex-auth'
-import {
-  CodexInstanceStore,
-  type PersistedCodexInstance,
-  type PersistedDefaultCodexInstance
-} from './codex-instances'
+import { CodexInstanceStore } from './codex-instances'
 import {
   buildAuthPayloadFromTemplate,
-  buildTemplateAccountExport,
   buildTemplateRateLimits,
   parseTemplateFileRecord,
-  type TemplateAccountRecord,
+  serializeAccountExport,
   type TemplateFileRecord
 } from './codex-account-template'
-import {
-  launchCodexDesktop,
-  revealCodexDesktop,
-  resolveAnyCodexDesktopPid,
-  resolveCodexLaunchCommand,
-  resolveManagedCodexPid,
-  resolveWindowsCodexDesktopExecutable,
-  stopCodexProcess,
-  writeAuthPayloadToCodexHome,
-  writeProviderApiKeyToCodexHome,
-  writeProviderConfigToCodexHome
-} from './codex-launcher'
 import { CodexProviderStore } from './codex-providers'
-import { AccountRateLimitLookupError, readAccountRateLimits } from './codex-app-server'
 import {
+  isLocalMockAccount,
   resolveBestAccount,
-  type AccountTag,
-  type AccountRateLimits,
-  type AccountSummary,
-  type AppSettings,
-  type AppSnapshot,
-  type CodexInstanceDefaults,
-  type CodexInstanceSummary,
-  type CreateCodexInstanceInput,
-  type CreateCustomProviderInput,
-  type CustomProviderDetail,
-  type CurrentSessionSummary,
-  type DoctorReport,
-  type HealthCheckResult,
-  type LoginEvent,
-  type ProviderCheckReport,
-  type CustomProviderSummary,
-  type UpdateCustomProviderInput,
-  type UpdateCodexInstanceInput
+  supportsWakeSessionQuota,
+  type WakeAccountRateLimitsResult
 } from '../shared/codex'
-import type { CodexPlatformAdapter } from '../shared/codex-platform'
-import { decodeJwtPayload } from '../shared/openai-auth'
+import type {
+  CodexServices,
+  CreateCodexServicesOptions,
+  StoredAuthRefreshResult
+} from './codex-services-shared'
+import { DEFAULT_CODEX_INSTANCE_ID } from './codex-services-shared'
+import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
+import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
+import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
 
-const DEFAULT_CODEX_INSTANCE_ID = '__default__'
-const CODEX_TOKEN_REFRESH_INTERVAL_MS = 8 * 24 * 60 * 60_000
-const BACKGROUND_AUTH_REFRESH_SKEW_MS = 5 * 60_000
-
-function accessTokenExpiresSoon(token?: string, skewMs = 60_000): boolean {
-  if (!token) {
-    return true
-  }
-
-  const payload = decodeJwtPayload(token)
-  if (typeof payload.exp !== 'number') {
-    return false
-  }
-
-  return payload.exp * 1000 <= Date.now() + skewMs
-}
-
-function lastRefreshIsStale(
-  lastRefresh?: string,
-  intervalMs = CODEX_TOKEN_REFRESH_INTERVAL_MS
-): boolean {
-  if (!lastRefresh) {
-    return false
-  }
-
-  const refreshedAt = Date.parse(lastRefresh)
-  if (!Number.isFinite(refreshedAt)) {
-    return true
-  }
-
-  return refreshedAt <= Date.now() - intervalMs
-}
-
-function authRefreshReason(
-  auth: CodexAuthPayload,
-  skewMs = 60_000
-): 'expires-soon' | 'stale' | null {
-  if (!auth.tokens?.refresh_token) {
-    return null
-  }
-
-  if (accessTokenExpiresSoon(auth.tokens.access_token, skewMs)) {
-    return 'expires-soon'
-  }
-
-  if (lastRefreshIsStale(auth.last_refresh)) {
-    return 'stale'
-  }
-
-  return null
-}
-
-function comparableAuthPayload(auth: CodexAuthPayload): unknown {
-  return {
-    auth_mode: auth.auth_mode,
-    OPENAI_API_KEY: auth.OPENAI_API_KEY,
-    last_refresh: auth.last_refresh,
-    tokens: {
-      access_token: auth.tokens?.access_token,
-      refresh_token: auth.tokens?.refresh_token,
-      id_token: auth.tokens?.id_token,
-      account_id: auth.tokens?.account_id
-    }
-  }
-}
-
-function authPayloadsEqualForRefresh(left: CodexAuthPayload, right: CodexAuthPayload): boolean {
-  return (
-    JSON.stringify(comparableAuthPayload(left)) === JSON.stringify(comparableAuthPayload(right))
-  )
-}
-
-function accountErrorLabel(account: AccountSummary): string {
-  return account.email ?? account.name ?? account.accountId ?? account.id
-}
-
-function accountInstanceLabel(account: AccountSummary): string {
-  return `Account ${account.email ?? account.name ?? account.accountId ?? account.id}`
-}
-
-function customProviderLabel(provider: Pick<CustomProviderSummary, 'name' | 'baseUrl'>): string {
-  return provider.name?.trim() || provider.baseUrl || 'custom'
-}
-
-function resolveOptionalAccountId(snapshot: AppSnapshot): string | null {
-  return snapshot.activeAccountId ?? snapshot.accounts[0]?.id ?? null
-}
-
-function shouldRefreshStoredAuth(error: unknown, refreshToken?: string): boolean {
-  if (!refreshToken || !(error instanceof Error)) {
-    return false
-  }
-
-  if (error.message === 'Missing access token required for rate-limit lookup.') {
-    return true
-  }
-
-  if (!(error instanceof AccountRateLimitLookupError)) {
-    return false
-  }
-
-  return error.status === 401 || error.status === 403
-}
-
-function shouldClearStoredUsage(error: unknown): boolean {
-  if (error instanceof AccountRateLimitLookupError) {
-    return error.status === 401 || error.status === 403
-  }
-
-  if (!(error instanceof Error)) {
-    return false
-  }
-
-  const message = error.message.toLowerCase()
-  if (
-    message.includes('missing access token required for rate-limit lookup') ||
-    message.includes('missing refresh token required for token refresh')
-  ) {
-    return true
-  }
-
-  if (!message.includes('openai token refresh failed')) {
-    return false
-  }
-
-  return (
-    message.includes('invalid_grant') ||
-    message.includes('refresh_token_expired') ||
-    message.includes('refresh_token_reused') ||
-    message.includes('refresh_token_invalidated') ||
-    message.includes('expired') ||
-    message.includes('revoked') ||
-    message.includes('already used') ||
-    message.includes('invalid token')
-  )
-}
-
-function makeHealthCheck(
-  id: string,
-  status: HealthCheckResult['status'],
-  summary: string,
-  detail?: string
-): HealthCheckResult {
-  return {
-    id,
-    status,
-    summary,
-    detail
-  }
-}
-
-function reportIsOk(checks: HealthCheckResult[]): boolean {
-  return !checks.some((check) => check.status === 'fail')
-}
-
-function appendPathSegment(baseUrl: string, segment: string): string {
-  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl : `${baseUrl}/`
-  return new URL(segment.replace(/^\/+/, ''), normalizedBaseUrl).toString()
-}
-
-function parseProviderModels(raw: string): string[] {
-  try {
-    const parsed = JSON.parse(raw) as { data?: Array<{ id?: unknown }> }
-    return (parsed.data ?? [])
-      .map((entry) => (typeof entry.id === 'string' ? entry.id.trim() : ''))
-      .filter(Boolean)
-  } catch {
-    return []
-  }
-}
-
-function extractProviderErrorDetail(raw: string): string | undefined {
-  const normalized = raw.trim()
-  if (!normalized) {
-    return undefined
-  }
-
-  try {
-    const parsed = JSON.parse(normalized) as {
-      error?: unknown
-      detail?: unknown
-      message?: unknown
-    }
-    const candidate =
-      (typeof parsed.detail === 'string' && parsed.detail) ||
-      (typeof parsed.message === 'string' && parsed.message) ||
-      (typeof parsed.error === 'string' && parsed.error) ||
-      normalized
-    return candidate.trim() || undefined
-  } catch {
-    return normalized
-  }
-}
-
-export interface CodexServices {
-  getSnapshot(): Promise<AppSnapshot>
-  accounts: {
-    list(): Promise<AppSnapshot>
-    importCurrent(): Promise<AppSnapshot>
-    importFromTemplate(raw: string): Promise<AppSnapshot>
-    exportToTemplate(accountIds?: string[]): Promise<string>
-    activate(accountId: string): Promise<AppSnapshot>
-    activateBest(): Promise<AppSnapshot>
-    refreshExpiringSession(accountId: string): Promise<boolean>
-    reorder(accountIds: string[]): Promise<AppSnapshot>
-    remove(accountId: string): Promise<AppSnapshot>
-    removeMany(accountIds: string[]): Promise<AppSnapshot>
-    updateTags(accountId: string, tagIds: string[]): Promise<AppSnapshot>
-    get(accountId: string): Promise<AccountSummary>
-  }
-  tags: {
-    create(name: string): Promise<AppSnapshot>
-    update(tagId: string, name: string): Promise<AppSnapshot>
-    remove(tagId: string): Promise<AppSnapshot>
-    getAll(): Promise<AccountTag[]>
-  }
-  providers: {
-    list(): Promise<CustomProviderSummary[]>
-    create(input: CreateCustomProviderInput): Promise<AppSnapshot>
-    reorder(providerIds: string[]): Promise<AppSnapshot>
-    update(providerId: string, input: UpdateCustomProviderInput): Promise<AppSnapshot>
-    remove(providerId: string): Promise<AppSnapshot>
-    get(providerId: string): Promise<CustomProviderDetail>
-    check(providerId: string): Promise<ProviderCheckReport>
-    open(providerId: string, workspacePath?: string): Promise<AppSnapshot>
-  }
-  doctor: {
-    run(): Promise<DoctorReport>
-  }
-  session: {
-    current(): Promise<CurrentSessionSummary | null>
-  }
-  settings: {
-    get(): Promise<AppSettings>
-    update(nextSettings: Partial<AppSettings>): Promise<AppSnapshot>
-  }
-  usage: {
-    read(accountId?: string): Promise<AccountRateLimits>
-  }
-  login: {
-    start(
-      method: 'browser' | 'device'
-    ): Promise<{ attemptId: string; method: 'browser' | 'device' }>
-    isRunning(): boolean
-    getPortOccupant: typeof getOpenAiCallbackPortOccupant
-    killPortOccupant: typeof killOpenAiCallbackPortOccupant
-  }
-  codex: {
-    show(workspacePath?: string): Promise<AppSnapshot>
-    open(accountId?: string, workspacePath?: string): Promise<AppSnapshot>
-    openIsolated(accountId: string, workspacePath?: string): Promise<AppSnapshot>
-    instances: {
-      list(): Promise<CodexInstanceSummary[]>
-      getDefaults(): Promise<CodexInstanceDefaults>
-      create(input: CreateCodexInstanceInput): Promise<CodexInstanceSummary>
-      update(instanceId: string, input: UpdateCodexInstanceInput): Promise<CodexInstanceSummary>
-      remove(instanceId: string): Promise<void>
-      start(instanceId: string, workspacePath?: string): Promise<CodexInstanceSummary>
-      stop(instanceId: string): Promise<CodexInstanceSummary>
-    }
-  }
-}
-
-export interface CreateCodexServicesOptions {
-  userDataPath: string
-  defaultWorkspacePath: string
-  platform: CodexPlatformAdapter
-  emitLoginEvent?: (event: LoginEvent) => void
-}
-
-export { resolveWindowsCodexDesktopExecutable }
-
-interface StoredAuthRefreshResult {
-  accountId: string
-  auth: CodexAuthPayload
-  refreshed: boolean
-}
+export type { CodexServices, CreateCodexServicesOptions } from './codex-services-shared'
+export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
 
 export function createCodexServices(options: CreateCodexServicesOptions): CodexServices {
-  const store = new CodexAccountStore(options.userDataPath, options.platform)
-  const instanceStore = new CodexInstanceStore(options.userDataPath)
+  const store = new CodexAccountStore(
+    options.userDataPath,
+    options.platform,
+    options.defaultCodexHome
+  )
+  const instanceStore = new CodexInstanceStore(options.userDataPath, options.defaultCodexHome)
   const providerStore = new CodexProviderStore(options.userDataPath, options.platform)
   const loginCoordinator = new CodexLoginCoordinator(
     store,
@@ -347,726 +48,45 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     options.platform
   )
   const authRefreshTasksByAccountId = new Map<string, Promise<StoredAuthRefreshResult>>()
-
-  async function persistRefreshedAuth(
-    accountId: string,
-    refreshedAuth: CodexAuthPayload
-  ): Promise<{ accountId: string; auth: CodexAuthPayload }> {
-    await store.syncCurrentAuthPayload(accountId, refreshedAuth)
-    const refreshedAccount = await store.importAuthPayload(refreshedAuth)
-    return {
-      accountId: refreshedAccount.id,
-      auth: refreshedAuth
-    }
+  const wakeTasksByAccountId = new Map<string, Promise<WakeAccountRateLimitsResult>>()
+  const context = {
+    store,
+    instanceStore,
+    providerStore,
+    loginCoordinator,
+    options,
+    authRefreshTasksByAccountId,
+    wakeTasksByAccountId
   }
 
-  async function refreshStoredAuthGuarded(
-    accountId: string,
-    expectedAuth: CodexAuthPayload
-  ): Promise<StoredAuthRefreshResult> {
-    const existingTask = authRefreshTasksByAccountId.get(accountId)
-    if (existingTask) {
-      return existingTask
-    }
-
-    const task = (async (): Promise<StoredAuthRefreshResult> => {
-      const currentAuth = await store.importCurrentAuthPayloadForAccount(accountId)
-      if (currentAuth?.changed) {
-        return {
-          accountId: currentAuth.account.id,
-          auth: currentAuth.auth,
-          refreshed: false
-        }
-      }
-
-      const latestAuth = await store.getStoredAuthPayload(accountId)
-      if (!authPayloadsEqualForRefresh(latestAuth, expectedAuth)) {
-        return {
-          accountId,
-          auth: latestAuth,
-          refreshed: false
-        }
-      }
-
-      const refreshedAuth = await refreshCodexAuthPayload(latestAuth, options.platform)
-      const persisted = await persistRefreshedAuth(accountId, refreshedAuth)
-      return {
-        ...persisted,
-        refreshed: true
-      }
-    })()
-
-    authRefreshTasksByAccountId.set(accountId, task)
-    try {
-      return await task
-    } finally {
-      if (authRefreshTasksByAccountId.get(accountId) === task) {
-        authRefreshTasksByAccountId.delete(accountId)
-      }
-    }
-  }
-
-  async function refreshAuthForUse(
-    accountId: string,
-    auth: CodexAuthPayload,
-    options?: { skewMs?: number; allowStaleFallback?: boolean }
-  ): Promise<StoredAuthRefreshResult> {
-    const skewMs = options?.skewMs ?? 60_000
-    const reason = authRefreshReason(auth, skewMs)
-    if (!reason) {
-      return {
-        accountId,
-        auth,
-        refreshed: false
-      }
-    }
-
-    try {
-      return await refreshStoredAuthGuarded(accountId, auth)
-    } catch (error) {
-      if (
-        options?.allowStaleFallback &&
-        reason === 'stale' &&
-        !accessTokenExpiresSoon(auth.tokens?.access_token, skewMs)
-      ) {
-        return {
-          accountId,
-          auth,
-          refreshed: false
-        }
-      }
-
-      throw error
-    }
-  }
-
-  async function readUsageForAuth(
-    accountId: string,
-    account: AccountSummary,
-    auth: CodexAuthPayload
-  ): Promise<AccountRateLimits> {
-    let targetAccountId = accountId
-    let targetAuth = auth
-
-    try {
-      const prepared = await refreshAuthForUse(targetAccountId, targetAuth, {
-        allowStaleFallback: true
-      })
-      targetAccountId = prepared.accountId
-      targetAuth = prepared.auth
-
-      let rateLimits: AccountRateLimits
-
-      try {
-        rateLimits = await readAccountRateLimits(targetAuth, options.platform)
-      } catch (error) {
-        if (!shouldRefreshStoredAuth(error, targetAuth.tokens?.refresh_token)) {
-          throw error
-        }
-
-        const refreshed = await refreshStoredAuthGuarded(targetAccountId, targetAuth)
-        targetAccountId = refreshed.accountId
-        targetAuth = refreshed.auth
-        rateLimits = await readAccountRateLimits(targetAuth, options.platform)
-      }
-
-      await Promise.all([
-        store.saveAccountRateLimits(targetAccountId, rateLimits),
-        store.clearAccountUsageError(targetAccountId)
-      ])
-      return rateLimits
-    } catch (error) {
-      if (shouldClearStoredUsage(error)) {
-        await store.clearAccountRateLimits(targetAccountId)
-      }
-
-      const detail = error instanceof Error ? error.message : 'Failed to read account limits.'
-      await store.saveAccountUsageError(targetAccountId, detail)
-      throw new Error(`${accountErrorLabel(account)}: ${detail}`)
-    }
-  }
-
-  async function prepareLaunchAuthPayload(accountId: string): Promise<CodexAuthPayload> {
-    const storedAuth = await store.getStoredAuthPayload(accountId)
-
-    return (
-      await refreshAuthForUse(accountId, storedAuth, {
-        allowStaleFallback: true
-      })
-    ).auth
-  }
-
-  async function refreshExpiringAccountSession(accountId: string): Promise<boolean> {
-    const storedAuth = await store.getStoredAuthPayload(accountId)
-
-    if (!authRefreshReason(storedAuth, BACKGROUND_AUTH_REFRESH_SKEW_MS)) {
-      return false
-    }
-
-    try {
-      const refreshed = await refreshStoredAuthGuarded(accountId, storedAuth)
-      if (refreshed.refreshed) {
-        await store.clearAccountUsageError(refreshed.accountId)
-      }
-      return refreshed.refreshed
-    } catch (error) {
-      const detail = error instanceof Error ? error.message : 'Failed to refresh account session.'
-      await store.saveAccountUsageError(accountId, detail)
-      throw error
-    }
-  }
-
-  async function resolveAccountIdOrThrow(explicitAccountId?: string): Promise<string> {
-    if (explicitAccountId) {
-      return explicitAccountId
-    }
-
-    const snapshot = await getSnapshot()
-    const resolved = resolveOptionalAccountId(snapshot)
-    if (!resolved) {
-      throw new Error('Account not found.')
-    }
-
-    return resolved
-  }
-
-  async function resolveAccountsForExport(accountIds?: string[]): Promise<AccountSummary[]> {
-    const snapshot = await getSnapshot()
-    if (!accountIds?.length) {
-      return snapshot.accounts
-    }
-
-    const accountsById = new Map(snapshot.accounts.map((account) => [account.id, account]))
-    return accountIds.map((accountId) => {
-      const account = accountsById.get(accountId)
-      if (!account) {
-        throw new Error(`Account not found: ${accountId}`)
-      }
-
-      return account
-    })
-  }
-
-  async function toInstanceSummary(
-    instance: PersistedCodexInstance
-  ): Promise<CodexInstanceSummary> {
-    const runningPid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
-    if (runningPid !== instance.lastPid) {
-      await instanceStore.setInstancePid(instance.id, runningPid ?? null)
-      instance = {
-        ...instance,
-        lastPid: runningPid
-      }
-    }
-
-    return {
-      id: instance.id,
-      name: instance.name,
-      codexHome: instance.codexHome,
-      bindAccountId: instance.bindAccountId,
-      extraArgs: instance.extraArgs,
-      isDefault: false,
-      createdAt: instance.createdAt,
-      updatedAt: instance.updatedAt,
-      lastLaunchedAt: instance.lastLaunchedAt,
-      lastPid: runningPid,
-      running: Boolean(runningPid),
-      initialized: await instanceStore.isInitialized(instance.codexHome)
-    }
-  }
-
-  async function toDefaultInstanceSummary(
-    instance: PersistedDefaultCodexInstance
-  ): Promise<CodexInstanceSummary> {
-    const { defaultCodexHome } = instanceStore.getDefaults()
-    const runningPid = await resolveManagedCodexPid(defaultCodexHome, instance.lastPid)
-    if (runningPid !== instance.lastPid) {
-      instance = await instanceStore.updateDefaultInstance({
-        lastPid: runningPid ?? null
-      })
-    }
-
-    return {
-      id: DEFAULT_CODEX_INSTANCE_ID,
-      name: '',
-      codexHome: defaultCodexHome,
-      bindAccountId: instance.bindAccountId,
-      extraArgs: instance.extraArgs,
-      isDefault: true,
-      createdAt: instance.updatedAt,
-      updatedAt: instance.updatedAt,
-      lastLaunchedAt: instance.lastLaunchedAt,
-      lastPid: runningPid,
-      running: Boolean(runningPid),
-      initialized: await instanceStore.isInitialized(defaultCodexHome)
-    }
-  }
-
-  async function listCodexInstances(): Promise<CodexInstanceSummary[]> {
-    const defaultInstance = await instanceStore.getDefaultInstance()
-    const instances = await instanceStore.list()
-    return Promise.all([
-      toDefaultInstanceSummary(defaultInstance),
-      ...instances.map((instance) => toInstanceSummary(instance))
-    ])
-  }
-
-  async function getSnapshot(): Promise<AppSnapshot> {
-    const [snapshot, providers, codexInstances] = await Promise.all([
-      store.getSnapshot(loginCoordinator.isRunning()),
-      providerStore.list(),
-      listCodexInstances()
-    ])
-
-    return {
-      ...snapshot,
-      providers,
-      codexInstances,
-      codexInstanceDefaults: instanceStore.getDefaults()
-    }
-  }
-
-  async function getDesktopExecutablePathOverride(): Promise<string | undefined> {
-    const snapshot = await store.getSnapshot(loginCoordinator.isRunning())
-    const value = snapshot.settings.codexDesktopExecutablePath.trim()
-    return value || undefined
-  }
-
-  async function startDefaultInstance(
-    workspacePath: string,
-    accountId?: string
-  ): Promise<CodexInstanceSummary> {
-    const defaultInstance = await instanceStore.getDefaultInstance()
-    const targetAccountId = accountId ?? defaultInstance.bindAccountId
-
-    if (targetAccountId) {
-      await prepareLaunchAuthPayload(targetAccountId)
-      await store.activateAccount(targetAccountId)
-    }
-
-    const { defaultCodexHome } = instanceStore.getDefaults()
-    const runningPid = await resolveManagedCodexPid(defaultCodexHome, defaultInstance.lastPid)
-    if (runningPid) {
-      await stopCodexProcess(runningPid)
-    }
-
-    const pid = await launchCodexDesktop({
-      workspacePath,
-      codexHome: defaultCodexHome,
-      extraArgs: defaultInstance.extraArgs,
-      preferAppBundle: false,
-      requireDesktopExecutable: false,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
-    })
-
-    const updated = await instanceStore.updateDefaultInstance({
-      lastPid: pid,
-      touchLaunch: true
-    })
-
-    return toDefaultInstanceSummary(updated)
-  }
-
-  async function revealRunningCodex(): Promise<void> {
-    await revealCodexDesktop({
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
-    })
-  }
-
-  async function showDefaultCodex(workspacePath: string): Promise<CodexInstanceSummary> {
-    const defaultInstance = await instanceStore.getDefaultInstance()
-    const { defaultCodexHome } = instanceStore.getDefaults()
-
-    const defaultRunningPid = await resolveManagedCodexPid(
-      defaultCodexHome,
-      defaultInstance.lastPid
-    )
-    if (defaultRunningPid) {
-      await revealRunningCodex()
-      return toDefaultInstanceSummary(defaultInstance)
-    }
-
-    for (const instance of await instanceStore.list()) {
-      if (resolve(instance.codexHome) === resolve(defaultCodexHome)) {
-        continue
-      }
-
-      const runningPid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
-      if (runningPid) {
-        await revealRunningCodex()
-        return toDefaultInstanceSummary(defaultInstance)
-      }
-    }
-
-    const anyRunningPid = await resolveAnyCodexDesktopPid()
-    if (anyRunningPid) {
-      await revealRunningCodex()
-      return toDefaultInstanceSummary(defaultInstance)
-    }
-
-    const pid = await launchCodexDesktop({
-      workspacePath,
-      codexHome: defaultCodexHome,
-      extraArgs: defaultInstance.extraArgs,
-      preferAppBundle: false,
-      requireDesktopExecutable: false,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
-    })
-
-    const updated = await instanceStore.updateDefaultInstance({
-      lastPid: pid,
-      touchLaunch: true
-    })
-
-    return toDefaultInstanceSummary(updated)
-  }
-
-  async function startNamedInstance(
-    instanceId: string,
-    workspacePath: string
-  ): Promise<CodexInstanceSummary> {
-    const instance = await instanceStore.getInstance(instanceId)
-    await instanceStore.ensureInitialized(instance.codexHome)
-    await instanceStore.syncConfigFromDefault(instance.codexHome)
-
-    if (instance.bindAccountId) {
-      const authPayload = await prepareLaunchAuthPayload(instance.bindAccountId)
-      await writeAuthPayloadToCodexHome(instance.codexHome, authPayload)
-    }
-
-    const runningPid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
-    if (runningPid) {
-      await stopCodexProcess(runningPid)
-    }
-
-    const pid = await launchCodexDesktop({
-      workspacePath,
-      codexHome: instance.codexHome,
-      extraArgs: instance.extraArgs,
-      preferAppBundle: true,
-      requireDesktopExecutable: true,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
-    })
-
-    return toInstanceSummary(await instanceStore.markLaunched(instance.id, pid))
-  }
-
-  async function startAccountInstance(
-    accountId: string,
-    workspacePath: string
-  ): Promise<CodexInstanceSummary> {
-    const account = await store.getAccountSummary(accountId)
-    const instance = await instanceStore.ensureAccountInstance({
-      accountId,
-      label: accountInstanceLabel(account)
-    })
-
-    return startNamedInstance(instance.id, workspacePath)
-  }
-
-  async function ensureProviderInstance(
-    providerId: string,
-    label: string
-  ): Promise<PersistedCodexInstance> {
-    const { rootDir } = instanceStore.getDefaults()
-    const providerCodexHome = join(rootDir, `provider-${providerId}`)
-    const existing = (await instanceStore.list()).find(
-      (instance) => resolve(instance.codexHome) === resolve(providerCodexHome)
-    )
-    if (existing) {
-      return existing
-    }
-
-    return instanceStore.create({
-      name: `Provider ${label}`,
-      codexHome: providerCodexHome
-    })
-  }
-
-  async function startProviderInstance(
-    providerId: string,
-    workspacePath: string
-  ): Promise<CustomProviderSummary> {
-    const provider = await providerStore.getResolvedProvider(providerId)
-    const instance = await ensureProviderInstance(providerId, customProviderLabel(provider.summary))
-    await instanceStore.ensureInitialized(instance.codexHome)
-    await instanceStore.syncConfigFromDefault(instance.codexHome)
-    await writeProviderApiKeyToCodexHome(instance.codexHome, provider.apiKey)
-    await writeProviderConfigToCodexHome(instance.codexHome, provider.summary)
-
-    const runningPid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
-    if (runningPid) {
-      await stopCodexProcess(runningPid)
-    }
-
-    const pid = await launchCodexDesktop({
-      workspacePath,
-      codexHome: instance.codexHome,
-      extraArgs: instance.extraArgs,
-      preferAppBundle: true,
-      requireDesktopExecutable: true,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
-    })
-
-    await instanceStore.markLaunched(instance.id, pid)
-    return providerStore.markUsed(providerId)
-  }
-
-  async function checkProvider(providerId: string): Promise<ProviderCheckReport> {
-    const provider = await providerStore.getResolvedProvider(providerId)
-    const modelsUrl = appendPathSegment(provider.summary.baseUrl, 'models')
-    const checks: HealthCheckResult[] = []
-    const checkedAt = new Date().toISOString()
-
-    let latencyMs: number | null = null
-    let httpStatus: number | null = null
-    let availableModels: string[] = []
-
-    try {
-      const startedAt = Date.now()
-      const response = await options.platform.fetch(modelsUrl, {
-        method: 'GET',
-        headers: {
-          authorization: `Bearer ${provider.apiKey}`
-        }
-      })
-      latencyMs = Date.now() - startedAt
-      httpStatus = response.status
-
-      const raw = await response.text()
-      const errorDetail = extractProviderErrorDetail(raw)
-
-      checks.push(
-        makeHealthCheck(
-          'connectivity',
-          response.status >= 500 ? 'fail' : 'pass',
-          response.status >= 500
-            ? `Provider responded with HTTP ${response.status}.`
-            : `Provider responded in ${latencyMs} ms.`,
-          errorDetail
-        )
-      )
-
-      if (response.status === 401 || response.status === 403) {
-        checks.push(
-          makeHealthCheck('authentication', 'fail', 'Provider rejected the API key.', errorDetail)
-        )
-      } else {
-        checks.push(
-          makeHealthCheck('authentication', 'pass', 'Provider accepted the authentication request.')
-        )
-      }
-
-      if (response.status === 404) {
-        checks.push(
-          makeHealthCheck(
-            'model',
-            'warn',
-            'Provider does not expose a /models endpoint; model validation was skipped.'
-          )
-        )
-      } else if (!response.ok) {
-        checks.push(
-          makeHealthCheck(
-            'model',
-            'fail',
-            `Provider model probe failed with HTTP ${response.status}.`,
-            errorDetail
-          )
-        )
-      } else {
-        availableModels = parseProviderModels(raw)
-        if (!availableModels.length) {
-          checks.push(
-            makeHealthCheck(
-              'model',
-              'warn',
-              'Provider returned no model list; configured model could not be verified.'
-            )
-          )
-        } else if (availableModels.includes(provider.summary.model)) {
-          checks.push(
-            makeHealthCheck(
-              'model',
-              'pass',
-              `Configured model "${provider.summary.model}" is available.`
-            )
-          )
-        } else {
-          checks.push(
-            makeHealthCheck(
-              'model',
-              'fail',
-              `Configured model "${provider.summary.model}" was not found in /models.`,
-              availableModels.slice(0, 10).join(', ')
-            )
-          )
-        }
-      }
-    } catch (error) {
-      checks.push(
-        makeHealthCheck(
-          'connectivity',
-          'fail',
-          'Provider request failed before receiving an HTTP response.',
-          error instanceof Error ? error.message : 'Unknown error'
-        )
-      )
-      checks.push(
-        makeHealthCheck('authentication', 'warn', 'Authentication could not be verified.')
-      )
-      checks.push(makeHealthCheck('model', 'warn', 'Model validation was skipped.'))
-    }
-
-    return {
-      checkedAt,
-      providerId: provider.summary.id,
-      providerName: provider.summary.name,
-      baseUrl: provider.summary.baseUrl,
-      model: provider.summary.model,
-      ok: reportIsOk(checks),
-      latencyMs,
-      httpStatus,
-      availableModels,
-      checks
-    }
-  }
-
-  async function stopInstance(instanceId: string): Promise<CodexInstanceSummary> {
-    if (instanceId === DEFAULT_CODEX_INSTANCE_ID) {
-      const defaultInstance = await instanceStore.getDefaultInstance()
-      const { defaultCodexHome } = instanceStore.getDefaults()
-      const pid = await resolveManagedCodexPid(defaultCodexHome, defaultInstance.lastPid)
-      if (pid) {
-        await stopCodexProcess(pid)
-      }
-
-      return toDefaultInstanceSummary(
-        await instanceStore.updateDefaultInstance({
-          lastPid: null
-        })
-      )
-    }
-
-    const instance = await instanceStore.getInstance(instanceId)
-    const pid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
-    if (pid) {
-      await stopCodexProcess(pid)
-    }
-
-    return toInstanceSummary(await instanceStore.setInstancePid(instance.id, null))
-  }
-
-  async function runDoctor(): Promise<DoctorReport> {
-    const checkedAt = new Date().toISOString()
-    const checks: HealthCheckResult[] = []
-    const snapshot = await getSnapshot()
-
-    const loginPortOccupant = await getOpenAiCallbackPortOccupant()
-    if (loginPortOccupant) {
-      checks.push(
-        makeHealthCheck(
-          'login-port',
-          'warn',
-          `Login callback port 1455 is occupied by ${loginPortOccupant.command} (${loginPortOccupant.pid}).`
-        )
-      )
-    } else {
-      checks.push(makeHealthCheck('login-port', 'pass', 'Login callback port 1455 is available.'))
-    }
-
-    try {
-      const command = await resolveCodexLaunchCommand({
-        preferAppBundle: true,
-        requireDesktopExecutable: true,
-        desktopExecutablePath: await getDesktopExecutablePathOverride()
-      })
-      checks.push(
-        makeHealthCheck('codex-desktop', 'pass', `Codex desktop executable resolved: ${command}`)
-      )
-    } catch (error) {
-      checks.push(
-        makeHealthCheck(
-          'codex-desktop',
-          'fail',
-          'Codex desktop executable could not be resolved.',
-          error instanceof Error ? error.message : 'Unknown error'
-        )
-      )
-    }
-
-    if (!snapshot.currentSession) {
-      checks.push(
-        makeHealthCheck('current-session', 'warn', 'No current global Codex session was detected.')
-      )
-    } else if (!snapshot.currentSession.storedAccountId) {
-      checks.push(
-        makeHealthCheck(
-          'current-session',
-          'warn',
-          'Current global Codex session is not imported into Ilovecodex.'
-        )
-      )
-    } else {
-      try {
-        await prepareLaunchAuthPayload(snapshot.currentSession.storedAccountId)
-        const account = await store.getAccountSummary(snapshot.currentSession.storedAccountId)
-        checks.push(
-          makeHealthCheck(
-            'current-session',
-            'pass',
-            `Current managed session is ready: ${accountErrorLabel(account)}`
-          )
-        )
-      } catch (error) {
-        checks.push(
-          makeHealthCheck(
-            'current-session',
-            'fail',
-            'Current managed session could not be prepared for launch.',
-            error instanceof Error ? error.message : 'Unknown error'
-          )
-        )
-      }
-    }
-
-    const providers = await providerStore.list()
-    if (!providers.length) {
-      checks.push(makeHealthCheck('providers', 'pass', 'No custom providers are configured.'))
-    } else {
-      const brokenProviders: string[] = []
-      for (const provider of providers) {
-        try {
-          await providerStore.getResolvedProvider(provider.id)
-        } catch (error) {
-          brokenProviders.push(
-            `${customProviderLabel(provider)}: ${error instanceof Error ? error.message : 'Unknown error'}`
-          )
-        }
-      }
-
-      checks.push(
-        brokenProviders.length
-          ? makeHealthCheck(
-              'providers',
-              'fail',
-              `${brokenProviders.length} custom provider(s) need attention.`,
-              brokenProviders.join('\n')
-            )
-          : makeHealthCheck(
-              'providers',
-              'pass',
-              `All ${providers.length} custom provider(s) can be loaded locally.`
-            )
-      )
-    }
-
-    return {
-      checkedAt,
-      ok: reportIsOk(checks),
-      checks
-    }
-  }
+  const authRuntime = createCodexServicesAuthRuntime(context)
+  const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime)
+  const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
+
+  const {
+    readStoredMockUsage,
+    readUsageForAuth,
+    readUsageForAuthResult,
+    wakeMockUsage,
+    wakeUsageForAuth,
+    wakeUsageGuarded
+  } = authRuntime
+  const {
+    getSnapshot,
+    listCodexInstances,
+    refreshExpiringAccountSession,
+    resolveAccountIdOrThrow,
+    resolveAccountsForExport,
+    showDefaultCodex,
+    startAccountInstance,
+    startDefaultInstance,
+    startNamedInstance,
+    startProviderInstance,
+    stopInstance,
+    toDefaultInstanceSummary,
+    toInstanceSummary
+  } = instanceRuntime
+  const { checkProvider, runDoctor } = diagnosticsRuntime
 
   return {
     getSnapshot,
@@ -1092,33 +112,19 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
 
         return getSnapshot()
       },
-      exportToTemplate: async (accountIds) => {
+      exportToTemplate: async (accountIds, format = 'ilovecodex') => {
         const accountsToExport = await resolveAccountsForExport(accountIds)
         const snapshot = await getSnapshot()
         const exportedAt = new Date().toISOString()
-        const accounts: TemplateAccountRecord[] = []
+        const sources = await Promise.all(
+          accountsToExport.map(async (account) => ({
+            account,
+            auth: await store.getStoredAuthPayload(account.id),
+            rateLimits: snapshot.usageByAccountId[account.id]
+          }))
+        )
 
-        for (const account of accountsToExport) {
-          const auth = await store.getStoredAuthPayload(account.id)
-          accounts.push(
-            buildTemplateAccountExport(
-              account,
-              auth,
-              snapshot.usageByAccountId[account.id],
-              exportedAt
-            )
-          )
-        }
-
-        return `${JSON.stringify(
-          {
-            exported_at: exportedAt,
-            proxies: [],
-            accounts
-          },
-          null,
-          2
-        )}\n`
+        return serializeAccountExport(sources, exportedAt, format)
       },
       activate: async (accountId) => {
         await store.activateAccount(accountId)
@@ -1156,6 +162,19 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       },
       updateTags: async (accountId, tagIds) => {
         await store.updateAccountTags(accountId, tagIds)
+        return getSnapshot()
+      },
+      getWakeSchedule: (accountId) => store.getAccountWakeSchedule(accountId),
+      updateWakeSchedule: async (accountId, input) => {
+        await store.updateAccountWakeSchedule(accountId, input)
+        return getSnapshot()
+      },
+      deleteWakeSchedule: async (accountId) => {
+        await store.deleteAccountWakeSchedule(accountId)
+        return getSnapshot()
+      },
+      updateWakeScheduleRuntime: async (accountId, patch) => {
+        await store.patchAccountWakeSchedule(accountId, patch)
         return getSnapshot()
       },
       get: (accountId) => store.getAccountSummary(accountId)
@@ -1233,8 +252,62 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       read: async (accountId) => {
         const resolvedAccountId = await resolveAccountIdOrThrow(accountId)
         const account = await store.getAccountSummary(resolvedAccountId)
+        if (isLocalMockAccount(account)) {
+          return readStoredMockUsage(resolvedAccountId)
+        }
+
         const auth = await store.getStoredAuthPayload(resolvedAccountId)
         return readUsageForAuth(resolvedAccountId, account, auth)
+      },
+      wake: async (accountId, input) => {
+        const resolvedAccountId = await resolveAccountIdOrThrow(accountId)
+        const account = await store.getAccountSummary(resolvedAccountId)
+        if (isLocalMockAccount(account)) {
+          return wakeMockUsage(resolvedAccountId, input)
+        }
+
+        const auth = await store.getStoredAuthPayload(resolvedAccountId)
+        const currentUsage = await readUsageForAuthResult(resolvedAccountId, account, auth)
+        const currentAccountId = currentUsage.accountId
+        const currentRateLimits = currentUsage.rateLimits
+
+        if (!supportsWakeSessionQuota(currentRateLimits)) {
+          return {
+            rateLimits: currentRateLimits,
+            requestResult: null
+          }
+        }
+
+        const wakeResult = await wakeUsageGuarded(currentAccountId, async () => {
+          const currentAccount = await store.getAccountSummary(currentAccountId)
+          const latestAuth = await store.getStoredAuthPayload(currentAccountId)
+          const wakeUsage = await wakeUsageForAuth(
+            currentAccountId,
+            currentAccount,
+            latestAuth,
+            input
+          )
+          const finalAccount = await store.getAccountSummary(wakeUsage.accountId)
+          const finalAuth = await store.getStoredAuthPayload(wakeUsage.accountId)
+
+          return {
+            rateLimits: await readUsageForAuth(wakeUsage.accountId, finalAccount, finalAuth),
+            requestResult: wakeUsage.requestResult
+          }
+        })
+
+        if (!wakeResult) {
+          return {
+            rateLimits: await readUsageForAuth(
+              currentAccountId,
+              await store.getAccountSummary(currentAccountId),
+              await store.getStoredAuthPayload(currentAccountId)
+            ),
+            requestResult: null
+          }
+        }
+
+        return wakeResult
       }
     },
     login: {

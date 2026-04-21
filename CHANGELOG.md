@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.3 - 2026-04-21
+
+This patch release adds wake-session automation, broadens account transfer compatibility, and smooths macOS delivery for desktop users.
+
+- Added a dedicated Wake center with one-shot session wake requests, per-account scheduled wake times, runtime status, and automatic retry or skip handling in the desktop app.
+- Expanded account import and export compatibility with Cockpit Tools, sub2api, and CLIProxyAPI formats while keeping the native ilovecodex template available for backup and migration.
+- Refactored large main-process and CLI modules into smaller focused helpers and runtimes so desktop and CLI behavior stay aligned while the codebase becomes easier to maintain.
+- Improved Homebrew-oriented release delivery by wiring desktop update actions into the cask workflow and documenting how to open unsigned macOS builds through Gatekeeper safely.
+- Fixed wake-flow edge cases so concurrent wake requests report skipped runs correctly, scheduled wakes wait for known supported quota data, and local `--cli` runs no longer seed mock accounts during development.
+
 ## 0.3.2 - 2026-04-20
 
 This patch release expands day-to-day Codex session management with steadier auth refresh, quicker launch actions, and a cleaner desktop workspace.

@@ -8,16 +8,12 @@ import {
   nativeImage,
   Menu,
   type MenuItemConstructorOptions,
-  type OpenDialogOptions,
-  type SaveDialogOptions
+  type OpenDialogOptions
 } from 'electron'
 import { promises as fs } from 'node:fs'
-import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'path'
-import { pathToFileURL } from 'node:url'
-import { deflateSync } from 'node:zlib'
-import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import { electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { runCli } from '../cli/run-cli'
 import { createAppUpdaterService, type AppUpdaterService } from './app-updater'
@@ -26,20 +22,36 @@ import { isHomebrewCaskInstalled, launchHomebrewCaskUpgrade } from './homebrew-u
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
+import { refreshLocalMockData, seedLocalMockData } from './local-mock-data'
 import { buildTrayUpdateMenuItem, buildTrayUsageMenuItems } from './tray-menu'
 import { createUsagePollingController, type UsagePollingController } from './usage-poller'
+import { createWakeSchedulerController, type WakeSchedulerController } from './wake-scheduler'
 import {
   type AppUpdateState,
-  formatRelativeReset,
-  remainingPercent,
+  type AccountTransferFormat,
   resolveBestAccount,
-  type AppMeta,
-  type AccountSummary,
   type AppSettings,
   type AppSnapshot,
   type LoginEvent,
-  type LoginMethod
+  type LoginMethod,
+  type UpdateAccountWakeScheduleInput,
+  type WakeAccountRateLimitsInput
 } from '../shared/codex'
+import {
+  accountLabel,
+  buildCurrentUsageMenu,
+  buildTrayImage,
+  buildTrayTitle,
+  buildTrayTooltip,
+  exportFilePrefix,
+  extractCliArgs,
+  getAppMeta,
+  loadRendererWindow,
+  localeText,
+  pollingOptions,
+  resolveGithubUrl,
+  saveAccountsExport
+} from './index-helpers'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -47,315 +59,18 @@ let codexServices: CodexServices
 let appUpdaterService: AppUpdaterService | null = null
 let authRefreshController: AuthRefreshController | null = null
 let usagePollingController: UsagePollingController | null = null
+let wakeSchedulerController: WakeSchedulerController | null = null
 let lastSnapshot: AppSnapshot | null = null
 const defaultWorkspacePath = process.cwd()
-const configuredUserDataPath = join(homedir(), '.config', 'ilovecodex')
-const pollingOptions = [5, 15, 30, 60] as const
-const pngSignature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-const crcTable = new Uint32Array(256).map((_, index) => {
-  let crc = index
-
-  for (let bit = 0; bit < 8; bit += 1) {
-    crc = (crc & 1) === 1 ? 0xedb88320 ^ (crc >>> 1) : crc >>> 1
-  }
-
-  return crc >>> 0
-})
-
-function localeText(language: AppSettings['language']): {
-  noAccount: string
-  currentAccount: string
-  sessionQuota: string
-  weeklyQuota: string
-  remaining: string
-  resetAt: string
-  noVisibleAccount: string
-  activePrefix: string
-  bestAccount: string
-  openCodex: string
-  openMainWindow: string
-  checkForUpdates: string
-  checkingForUpdates: string
-  downloadUpdate: (version?: string) => string
-  updatingViaHomebrew: string
-  updateViaHomebrew: (version?: string) => string
-  openReleasePage: (version?: string) => string
-  installUpdate: string
-  downloadingUpdate: (progress?: number) => string
-  updatesUnsupported: string
-  pollingInterval: string
-  minutes: string
-  quit: string
-  autoCheckUpdates: string
-  unknownAccount: string
-} {
-  return {
-    noAccount: language === 'en' ? 'No account available' : '当前没有可用账号',
-    currentAccount: language === 'en' ? 'Active account' : '当前使用账号',
-    sessionQuota: language === 'en' ? 'Session quota' : '小时限额',
-    weeklyQuota: language === 'en' ? 'Weekly quota' : '周限额',
-    remaining: language === 'en' ? 'left' : '剩余',
-    resetAt: language === 'en' ? 'Resets in' : '重置时间',
-    noVisibleAccount: language === 'en' ? 'No account to display' : '还没有可显示的账号',
-    activePrefix: language === 'en' ? 'Active · ' : '当前 · ',
-    bestAccount: language === 'en' ? 'Switch to best account' : '切换到最优账号',
-    openCodex: language === 'en' ? 'Open Codex' : '打开 Codex',
-    openMainWindow: language === 'en' ? 'Open main window' : '打开主界面',
-    checkForUpdates: language === 'en' ? 'Check for updates' : '检查更新',
-    checkingForUpdates: language === 'en' ? 'Checking for updates…' : '检查更新中…',
-    downloadUpdate: (version) =>
-      language === 'en'
-        ? `Download update${version ? ` v${version}` : ''}`
-        : `下载更新${version ? ` v${version}` : ''}`,
-    updateViaHomebrew: (version) =>
-      language === 'en'
-        ? `Update with Homebrew${version ? ` v${version}` : ''}`
-        : `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
-    updatingViaHomebrew:
-      language === 'en' ? 'Updating through Homebrew…' : '正在通过 Homebrew 更新…',
-    openReleasePage: (version) =>
-      language === 'en'
-        ? `Open download page${version ? ` v${version}` : ''}`
-        : `前往下载${version ? ` v${version}` : ''}`,
-    installUpdate: language === 'en' ? 'Restart to install update' : '重启安装更新',
-    downloadingUpdate: (progress) =>
-      language === 'en' ? `Downloading ${progress ?? 0}%` : `下载更新中 ${progress ?? 0}%`,
-    updatesUnsupported:
-      language === 'en' ? 'Automatic updates unavailable for this build' : '当前构建不支持自动更新',
-    pollingInterval: language === 'en' ? 'Polling interval' : '轮询间隔',
-    minutes: language === 'en' ? 'min' : '分钟',
-    quit: language === 'en' ? 'Quit' : '退出',
-    autoCheckUpdates: language === 'en' ? 'Check updates on startup' : '启动时检查更新',
-    unknownAccount: language === 'en' ? 'Unnamed account' : '未命名账号'
-  }
-}
-
-function resolveGithubUrl(): string | null {
-  const envUrl = process.env['ILOVECODEX_GITHUB_URL']
-  if (envUrl) {
-    return envUrl
-  }
-
-  try {
-    const packageJsonPath = join(app.getAppPath(), 'package.json')
-    const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
-      homepage?: string
-      repository?: string | { url?: string }
-    }
-    const repositoryUrl =
-      typeof packageJson.repository === 'string'
-        ? packageJson.repository
-        : packageJson.repository?.url
-    const normalizedRepositoryUrl = repositoryUrl?.replace(/^git\+/, '').replace(/\.git$/, '')
-
-    if (normalizedRepositoryUrl?.includes('github.com')) {
-      return normalizedRepositoryUrl
-    }
-
-    if (packageJson.homepage?.includes('github.com')) {
-      return packageJson.homepage
-    }
-  } catch {
-    return null
-  }
-
-  return null
-}
+const isLocalEnvironment = !app.isPackaged
+const configuredUserDataPath = isLocalEnvironment
+  ? join(homedir(), '.config', 'ilovecodex-local')
+  : join(homedir(), '.config', 'ilovecodex')
+const configuredCodexHomePath = isLocalEnvironment
+  ? join(configuredUserDataPath, '.codex')
+  : join(homedir(), '.codex')
 
 app.setPath('userData', configuredUserDataPath)
-
-function extractCliArgs(argv: string[]): string[] | null {
-  const index = argv.indexOf('--cli')
-  if (index === -1) {
-    return null
-  }
-
-  return argv.slice(index + 1)
-}
-
-function buildRendererUrl(query: Record<string, string> = {}): string {
-  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    const url = new URL(process.env['ELECTRON_RENDERER_URL'])
-    Object.entries(query).forEach(([key, value]) => {
-      url.searchParams.set(key, value)
-    })
-    return url.toString()
-  }
-
-  const url = pathToFileURL(join(__dirname, '../renderer/index.html'))
-  Object.entries(query).forEach(([key, value]) => {
-    url.searchParams.set(key, value)
-  })
-  return url.toString()
-}
-
-function getAppMeta(): AppMeta {
-  return {
-    version: app.getVersion(),
-    githubUrl: resolveGithubUrl(),
-    platform: process.platform,
-    isPackaged: app.isPackaged
-  }
-}
-
-function loadRendererWindow(
-  window: BrowserWindow,
-  query: Record<string, string> = {}
-): Promise<void> {
-  return window.loadURL(buildRendererUrl(query))
-}
-
-async function saveAccountsExport(
-  raw: string,
-  options?: {
-    title?: string
-    defaultFilePrefix?: string
-  }
-): Promise<void> {
-  const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
-  const filePrefix = options?.defaultFilePrefix ?? 'ilovecodex-accounts'
-  const exportPath = join(
-    app.getPath('downloads'),
-    `${filePrefix}-${new Date()
-      .toISOString()
-      .replace(/[-:.TZ]/g, '')
-      .slice(0, 14)}.json`
-  )
-  const saveDialogOptions: SaveDialogOptions = {
-    title: options?.title ?? 'Export accounts',
-    defaultPath: exportPath,
-    filters: [
-      { name: 'JSON', extensions: ['json'] },
-      { name: 'All Files', extensions: ['*'] }
-    ]
-  }
-  const selection = dialogWindow
-    ? await dialog.showSaveDialog(dialogWindow, saveDialogOptions)
-    : await dialog.showSaveDialog(saveDialogOptions)
-
-  if (selection.canceled || !selection.filePath) {
-    return
-  }
-
-  await fs.writeFile(selection.filePath, raw, 'utf8')
-}
-
-function buildTrayTitle(snapshot: AppSnapshot): string {
-  const account = resolveCurrentAccount(snapshot)
-  if (!account) {
-    return 'Ilovecodex'
-  }
-
-  const limits = snapshot.usageByAccountId[account.id]
-  const shortHour = limits?.primary ? `${remainingPercent(limits.primary.usedPercent)}%` : '--'
-  const shortWeek = limits?.secondary ? `${remainingPercent(limits.secondary.usedPercent)}%` : '--'
-
-  return `5h ${shortHour}  w ${shortWeek}`
-}
-
-function buildTrayTooltip(snapshot: AppSnapshot): string {
-  const account = resolveCurrentAccount(snapshot)
-  const text = localeText(snapshot.settings.language)
-  if (!account) {
-    return 'Ilovecodex'
-  }
-
-  const limits = snapshot.usageByAccountId[account.id]
-  const shortHour = limits?.primary ? `${remainingPercent(limits.primary.usedPercent)}%` : '--'
-  const shortWeek = limits?.secondary ? `${remainingPercent(limits.secondary.usedPercent)}%` : '--'
-  const label = account.email ?? account.name ?? account.accountId ?? text.currentAccount
-
-  return `${label}\n5h ${shortHour}\nw ${shortWeek}`
-}
-
-function middleEllipsis(value: string, maxLength = 22): string {
-  if (value.length <= maxLength) {
-    return value
-  }
-
-  const suffixLength = value.includes('@') ? Math.min(10, Math.floor((maxLength - 1) / 2)) : 8
-  const prefixLength = maxLength - suffixLength - 1
-
-  return `${value.slice(0, prefixLength)}…${value.slice(-suffixLength)}`
-}
-
-function accountLabel(
-  account: AccountSummary,
-  language: AppSettings['language'] = 'zh-CN'
-): string {
-  const label =
-    account.email ?? account.name ?? account.accountId ?? localeText(language).unknownAccount
-
-  return middleEllipsis(label)
-}
-
-function resolveCurrentAccount(snapshot: AppSnapshot): AccountSummary | null {
-  if (snapshot.activeAccountId) {
-    const activeAccount = snapshot.accounts.find(
-      (account) => account.id === snapshot.activeAccountId
-    )
-    if (activeAccount) {
-      return activeAccount
-    }
-  }
-
-  return snapshot.accounts[0] ?? null
-}
-
-function buildMenuBar(remaining?: number | null): string {
-  const total = 12
-  const normalized = remaining == null ? 0 : Math.max(0, Math.min(100, remaining))
-  const filled = Math.max(0, Math.min(total, Math.round((normalized / 100) * total)))
-
-  return `${'█'.repeat(filled)}${'░'.repeat(total - filled)}`
-}
-
-function buildCurrentUsageMenu(snapshot: AppSnapshot): MenuItemConstructorOptions[] {
-  const account = resolveCurrentAccount(snapshot)
-  const text = localeText(snapshot.settings.language)
-
-  if (!account) {
-    return [{ label: text.noAccount, enabled: false }]
-  }
-
-  const limits = snapshot.usageByAccountId[account.id]
-  const sessionRemaining = limits?.primary ? remainingPercent(limits.primary.usedPercent) : null
-  const weeklyRemaining = limits?.secondary ? remainingPercent(limits.secondary.usedPercent) : null
-
-  return [
-    {
-      label: `${text.currentAccount} · ${accountLabel(account, snapshot.settings.language)}`,
-      enabled: false
-    },
-    { type: 'separator' },
-    {
-      label: `${text.sessionQuota} · ${text.remaining} ${sessionRemaining == null ? '--' : `${sessionRemaining}%`}`,
-      enabled: false
-    },
-    {
-      label: buildMenuBar(sessionRemaining),
-      enabled: false
-    },
-    {
-      label: `${text.resetAt} · ${formatRelativeReset(limits?.primary?.resetsAt, snapshot.settings.language)}`,
-      enabled: false
-    },
-    { type: 'separator' },
-    {
-      label: `${text.weeklyQuota} · ${text.remaining} ${weeklyRemaining == null ? '--' : `${weeklyRemaining}%`}`,
-      enabled: false
-    },
-    {
-      label: buildMenuBar(weeklyRemaining),
-      enabled: false
-    },
-    {
-      label: `${text.resetAt} · ${formatRelativeReset(limits?.secondary?.resetsAt, snapshot.settings.language)}`,
-      enabled: false
-    }
-  ]
-}
-
 function buildTrayUsageMenu(snapshot: AppSnapshot): MenuItemConstructorOptions[] {
   const text = localeText(snapshot.settings.language)
 
@@ -502,141 +217,6 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
   ])
 }
 
-function crc32(buffer: Buffer): number {
-  let crc = 0xffffffff
-
-  for (const value of buffer) {
-    crc = crcTable[(crc ^ value) & 0xff] ^ (crc >>> 8)
-  }
-
-  return (crc ^ 0xffffffff) >>> 0
-}
-
-function pngChunk(type: string, data: Buffer): Buffer {
-  const typeBuffer = Buffer.from(type, 'ascii')
-  const lengthBuffer = Buffer.alloc(4)
-  lengthBuffer.writeUInt32BE(data.length, 0)
-
-  const crcBuffer = Buffer.alloc(4)
-  crcBuffer.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0)
-
-  return Buffer.concat([lengthBuffer, typeBuffer, data, crcBuffer])
-}
-
-function buildTrayPng(hourPercent: number, weekPercent: number, scaleFactor: number): Buffer {
-  const width = 18 * scaleFactor
-  const height = 18 * scaleFactor
-  const pixels = Buffer.alloc(width * height * 4)
-  const setPixel = (x: number, y: number, alpha: number): void => {
-    if (x < 0 || x >= width || y < 0 || y >= height || alpha <= 0) {
-      return
-    }
-
-    const offset = (y * width + x) * 4
-    pixels[offset] = 0
-    pixels[offset + 1] = 0
-    pixels[offset + 2] = 0
-    pixels[offset + 3] = Math.max(pixels[offset + 3], alpha)
-  }
-  const fillRoundedRect = (
-    startX: number,
-    startY: number,
-    rectWidth: number,
-    rectHeight: number,
-    radius: number,
-    alpha: number
-  ): void => {
-    if (rectWidth <= 0 || rectHeight <= 0) {
-      return
-    }
-
-    const rectRadius = Math.max(0, Math.min(radius, rectWidth / 2, rectHeight / 2))
-    const innerLeft = startX + rectRadius
-    const innerRight = startX + rectWidth - rectRadius
-    const innerTop = startY + rectRadius
-    const innerBottom = startY + rectHeight - rectRadius
-
-    for (let y = startY; y < startY + rectHeight; y += 1) {
-      for (let x = startX; x < startX + rectWidth; x += 1) {
-        const pixelCenterX = x + 0.5
-        const pixelCenterY = y + 0.5
-        const nearestX = Math.max(innerLeft, Math.min(pixelCenterX, innerRight))
-        const nearestY = Math.max(innerTop, Math.min(pixelCenterY, innerBottom))
-        const distance = Math.hypot(pixelCenterX - nearestX, pixelCenterY - nearestY)
-
-        if (distance <= rectRadius - 0.5) {
-          setPixel(x, y, alpha)
-          continue
-        }
-
-        if (distance < rectRadius + 0.5) {
-          const feather = rectRadius + 0.5 - distance
-          setPixel(x, y, Math.round(alpha * feather))
-        }
-      }
-    }
-  }
-
-  const paddingX = Math.max(1, Math.round(1.25 * scaleFactor))
-  const trackWidth = width - paddingX * 2
-  const topY = Math.round(2.75 * scaleFactor)
-  const topHeight = Math.max(4, Math.round(4.75 * scaleFactor))
-  const bottomY = Math.round(10.25 * scaleFactor)
-  const bottomHeight = Math.max(3, Math.round(3.5 * scaleFactor))
-  const topFillWidth =
-    hourPercent > 0 ? Math.max(1, Math.round((trackWidth * hourPercent) / 100)) : 0
-  const bottomFillWidth =
-    weekPercent > 0 ? Math.max(1, Math.round((trackWidth * weekPercent) / 100)) : 0
-
-  fillRoundedRect(paddingX, topY, trackWidth, topHeight, topHeight / 2, 80)
-  fillRoundedRect(paddingX, topY, topFillWidth, topHeight, topHeight / 2, 255)
-  fillRoundedRect(paddingX, bottomY, trackWidth, bottomHeight, bottomHeight / 2, 68)
-  fillRoundedRect(paddingX, bottomY, bottomFillWidth, bottomHeight, bottomHeight / 2, 220)
-
-  const rawData = Buffer.alloc(height * (1 + width * 4))
-  for (let y = 0; y < height; y += 1) {
-    const rowOffset = y * (1 + width * 4)
-    rawData[rowOffset] = 0
-    pixels.copy(rawData, rowOffset + 1, y * width * 4, (y + 1) * width * 4)
-  }
-
-  const ihdr = Buffer.alloc(13)
-  ihdr.writeUInt32BE(width, 0)
-  ihdr.writeUInt32BE(height, 4)
-  ihdr[8] = 8
-  ihdr[9] = 6
-  ihdr[10] = 0
-  ihdr[11] = 0
-  ihdr[12] = 0
-
-  return Buffer.concat([
-    pngSignature,
-    pngChunk('IHDR', ihdr),
-    pngChunk('IDAT', deflateSync(rawData)),
-    pngChunk('IEND', Buffer.alloc(0))
-  ])
-}
-
-function buildTrayImage(snapshot: AppSnapshot): Electron.NativeImage {
-  const account = resolveCurrentAccount(snapshot)
-  const hourPercent = account
-    ? remainingPercent(snapshot.usageByAccountId[account.id]?.primary?.usedPercent)
-    : 0
-  const weekPercent = account
-    ? remainingPercent(snapshot.usageByAccountId[account.id]?.secondary?.usedPercent)
-    : 0
-
-  const image = nativeImage.createEmpty()
-  ;([1, 2, 3] as const).forEach((scaleFactor) => {
-    image.addRepresentation({
-      scaleFactor,
-      dataURL: `data:image/png;base64,${buildTrayPng(hourPercent, weekPercent, scaleFactor).toString('base64')}`
-    })
-  })
-  image.setTemplateImage(true)
-  return image
-}
-
 async function refreshTrayTitle(): Promise<AppSnapshot> {
   const snapshot = await codexServices.getSnapshot()
   lastSnapshot = snapshot
@@ -653,6 +233,7 @@ async function refreshTrayTitle(): Promise<AppSnapshot> {
 
   usagePollingController?.sync(snapshot)
   authRefreshController?.sync(snapshot)
+  wakeSchedulerController?.sync(snapshot)
 
   return snapshot
 }
@@ -765,7 +346,8 @@ function createTray(): void {
             codexDesktopExecutablePath: ''
           },
           usageByAccountId: {},
-          usageErrorByAccountId: {}
+          usageErrorByAccountId: {},
+          wakeSchedulesByAccountId: {}
         })
       : nativeImage.createFromPath(icon).resize({ width: 18, height: 18 })
 
@@ -788,11 +370,13 @@ app.whenReady().then(async () => {
   }
 
   const cliArgs = extractCliArgs(process.argv)
+  const shouldBootstrapLocalMockData = isLocalEnvironment && !cliArgs
   const loginEventListeners = new Set<(event: LoginEvent) => void>()
   const platform = createElectronCodexPlatformAdapter()
   codexServices = createCodexServices({
     userDataPath: app.getPath('userData'),
     defaultWorkspacePath,
+    defaultCodexHome: configuredCodexHomePath,
     platform,
     emitLoginEvent: (event) => {
       if (mainWindow && !mainWindow.isDestroyed()) {
@@ -804,6 +388,20 @@ app.whenReady().then(async () => {
       void refreshTrayTitle()
     }
   })
+
+  if (shouldBootstrapLocalMockData) {
+    const seeded = await seedLocalMockData(codexServices)
+    if (seeded) {
+      console.info('Seeded local mock data.')
+    }
+
+    const refreshed = await refreshLocalMockData(codexServices)
+    if (refreshed.usageRefreshed || refreshed.scheduleErrorsCleared) {
+      console.info(
+        `Refreshed local mock data. usage=${refreshed.usageRefreshed} scheduleErrors=${refreshed.scheduleErrorsCleared}`
+      )
+    }
+  }
 
   if (cliArgs) {
     const code = await runCli(
@@ -862,6 +460,17 @@ app.whenReady().then(async () => {
       console.warn(`Failed to refresh auth for ${account.email ?? account.id}: ${detail}`)
     }
   })
+  wakeSchedulerController = createWakeSchedulerController({
+    getSnapshot: () => codexServices.getSnapshot(),
+    wakeAccount: (accountId, input) => codexServices.usage.wake(accountId, input),
+    updateWakeScheduleRuntime: (accountId, patch) =>
+      codexServices.accounts.updateWakeScheduleRuntime(accountId, patch),
+    onSnapshotChanged: () => refreshTrayTitle(),
+    onWakeError: (account, error) => {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to scheduled-wake ${account.email ?? account.id}: ${detail}`)
+    }
+  })
 
   // Set app user model id for windows
   electronApp.setAppUserModelId('com.electron')
@@ -918,19 +527,29 @@ app.whenReady().then(async () => {
     await codexServices.accounts.importFromTemplate(raw)
     return refreshTrayTitle()
   })
-  ipcMain.handle('codex:export-accounts-to-file', async () => {
-    const raw = await codexServices.accounts.exportToTemplate()
-    await saveAccountsExport(raw)
-    return refreshTrayTitle()
-  })
-  ipcMain.handle('codex:export-selected-accounts-to-file', async (_, accountIds: string[]) => {
-    const raw = await codexServices.accounts.exportToTemplate(accountIds)
-    await saveAccountsExport(raw, {
-      title: 'Export selected accounts',
-      defaultFilePrefix: 'ilovecodex-selected-accounts'
-    })
-    return refreshTrayTitle()
-  })
+  ipcMain.handle(
+    'codex:export-accounts-to-file',
+    async (_, format: AccountTransferFormat = 'ilovecodex') => {
+      const raw = await codexServices.accounts.exportToTemplate(undefined, format)
+      await saveAccountsExport(raw, mainWindow, {
+        defaultFilePrefix: exportFilePrefix(format)
+      })
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle(
+    'codex:export-selected-accounts-to-file',
+    async (_, accountIds: string[], format: AccountTransferFormat = 'ilovecodex') => {
+      const raw = await codexServices.accounts.exportToTemplate(accountIds, format)
+      await saveAccountsExport(raw, mainWindow, {
+        title: 'Export selected accounts',
+        defaultFilePrefix: exportFilePrefix(format, {
+          selected: true
+        })
+      })
+      return refreshTrayTitle()
+    }
+  )
   ipcMain.handle('codex:activate-account', async (_, accountId: string) => {
     await codexServices.accounts.activate(accountId)
     return refreshTrayTitle()
@@ -953,6 +572,20 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('codex:update-account-tags', async (_, accountId: string, tagIds: string[]) => {
     await codexServices.accounts.updateTags(accountId, tagIds)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:get-account-wake-schedule', (_, accountId: string) =>
+    codexServices.accounts.getWakeSchedule(accountId)
+  )
+  ipcMain.handle(
+    'codex:update-account-wake-schedule',
+    async (_, accountId: string, input: UpdateAccountWakeScheduleInput) => {
+      await codexServices.accounts.updateWakeSchedule(accountId, input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle('codex:delete-account-wake-schedule', async (_, accountId: string) => {
+    await codexServices.accounts.deleteWakeSchedule(accountId)
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:create-tag', async (_, name: string) => {
@@ -1075,6 +708,16 @@ app.whenReady().then(async () => {
       await refreshTrayTitle()
     }
   })
+  ipcMain.handle(
+    'codex:wake-account-rate-limits',
+    async (_, accountId: string, input?: WakeAccountRateLimitsInput) => {
+      try {
+        return await codexServices.usage.wake(accountId, input)
+      } finally {
+        await refreshTrayTitle()
+      }
+    }
+  )
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => triggerUpdateDownload())
   ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())
@@ -1090,6 +733,7 @@ app.whenReady().then(async () => {
   appUpdaterService.start()
   authRefreshController.start()
   usagePollingController.start()
+  wakeSchedulerController.start()
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the
@@ -1111,6 +755,7 @@ app.on('before-quit', () => {
   appUpdaterService?.stop()
   authRefreshController?.stop()
   usagePollingController?.stop()
+  wakeSchedulerController?.stop()
   mainWindow = null
   tray = null
 })

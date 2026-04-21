@@ -114,7 +114,9 @@ async function readFileIfExists(path: string): Promise<string | null> {
   }
 }
 
-export async function installCliShim(options: InstallCliShimOptions): Promise<InstallCliShimResult> {
+export async function installCliShim(
+  options: InstallCliShimOptions
+): Promise<InstallCliShimResult> {
   const platform = options.platform ?? process.platform
   const env = options.env ?? process.env
   const homeDir = options.homeDir ?? homedir()

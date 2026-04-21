@@ -91,6 +91,31 @@ brew update
 brew upgrade --cask ilovecodex
 ```
 
+### If macOS blocks the app on first launch
+
+Because the current build is not notarized by Apple, macOS Gatekeeper may show a warning such as “Apple cannot check the app for malicious software.”
+
+Recommended ways to allow the app:
+
+1. Click `Done` in the warning dialog.
+2. Open `System Settings -> Privacy & Security`.
+3. Scroll to the Security section and click `Open Anyway` / `Open`.
+
+If you prefer the terminal and only want to allow this app, you can remove the quarantine attribute:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/Ilovecodex.app"
+open "/Applications/Ilovecodex.app"
+```
+
+You can inspect whether the quarantine attribute is present first:
+
+```bash
+xattr -l "/Applications/Ilovecodex.app"
+```
+
+Avoid disabling Gatekeeper globally for this.
+
 The release workflow can automatically update the cask in your own tap repository after each tag release. Setup details are documented in [docs/homebrew-tap.md](./docs/homebrew-tap.md).
 
 ## API Reference

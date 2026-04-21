@@ -210,7 +210,8 @@
             </button>
             <button
               class={compactGhostButton}
-              onclick={() => void (instance.running ? stopInstance(instance.id) : startInstance(instance.id))}
+              onclick={() =>
+                void (instance.running ? stopInstance(instance.id) : startInstance(instance.id))}
               disabled={busy}
             >
               {instance.running ? copy.stopInstance : copy.startInstance}

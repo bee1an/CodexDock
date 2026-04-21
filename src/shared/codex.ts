@@ -1,6 +1,13 @@
 export type LoginMethod = 'browser' | 'device'
 export type AppLanguage = 'zh-CN' | 'en'
 export type AppTheme = 'light' | 'dark' | 'system'
+export const accountTransferFormats = [
+  'ilovecodex',
+  'cockpit_tools',
+  'sub2api',
+  'cliproxyapi'
+] as const
+export type AccountTransferFormat = (typeof accountTransferFormats)[number]
 
 export interface AppSettings {
   usagePollingMinutes: number
@@ -141,6 +148,44 @@ export interface AccountRateLimits {
   fetchedAt: string
 }
 
+export interface WakeAccountRateLimitsInput {
+  model?: string
+  prompt?: string
+}
+
+export type WakeScheduleRunStatus = 'idle' | 'success' | 'error' | 'skipped'
+
+export interface AccountWakeSchedule {
+  enabled: boolean
+  times: string[]
+  model: string
+  prompt: string
+  lastTriggeredAt?: string
+  lastSucceededAt?: string
+  lastStatus?: WakeScheduleRunStatus
+  lastMessage?: string
+}
+
+export interface UpdateAccountWakeScheduleInput {
+  enabled: boolean
+  times: string[]
+  model?: string
+  prompt?: string
+}
+
+export interface WakeAccountRequestResult {
+  status: number
+  accepted: boolean
+  model: string
+  prompt: string
+  body: string
+}
+
+export interface WakeAccountRateLimitsResult {
+  rateLimits: AccountRateLimits
+  requestResult: WakeAccountRequestResult | null
+}
+
 export interface AccountSummary {
   id: string
   email?: string
@@ -167,6 +212,11 @@ export interface CurrentSessionSummary {
   storedAccountId?: string
 }
 
+interface LocalMockAccountIdentity {
+  email?: string
+  accountId?: string
+}
+
 export interface AppSnapshot {
   accounts: AccountSummary[]
   providers: CustomProviderSummary[]
@@ -179,6 +229,7 @@ export interface AppSnapshot {
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
   usageErrorByAccountId: Record<string, string>
+  wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
 }
 
 export interface LoginAttempt {
@@ -293,6 +344,16 @@ export function shouldAutoPollUsage(
   return usagePollDueInMs(rateLimits, usagePollingMinutes, now) === 0
 }
 
+export function isLocalMockAccount(account?: LocalMockAccountIdentity | null): boolean {
+  const email = account?.email?.trim().toLowerCase()
+  if (email?.endsWith('@mock.local')) {
+    return true
+  }
+
+  const accountId = account?.accountId?.trim().toLowerCase()
+  return Boolean(accountId?.startsWith('acct-local-'))
+}
+
 function normalizeTimestamp(value?: number | null): number | null {
   if (!value) {
     return null
@@ -343,9 +404,25 @@ function accountHasUsage(rateLimits?: AccountRateLimits): boolean {
   return Boolean(rateLimits?.primary || rateLimits?.secondary)
 }
 
+export function hasFullSessionQuota(rateLimits?: AccountRateLimits): boolean {
+  return Boolean(rateLimits?.primary && rateLimits.primary.usedPercent <= 0)
+}
+
+export function supportsWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
+  return Boolean(rateLimits && (rateLimits.planType ?? '').toLowerCase() !== 'free')
+}
+
+export function canWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
+  return supportsWakeSessionQuota(rateLimits) && hasFullSessionQuota(rateLimits)
+}
+
+export function supportsWeeklyQuota(rateLimits?: AccountRateLimits): boolean {
+  return Boolean(rateLimits && (rateLimits.planType ?? '').toLowerCase() !== 'free')
+}
+
 interface AccountQuotaScore {
   hasUsage: boolean
-  hasBothWindows: boolean
+  hasRequiredWindows: boolean
   hasAvailableQuota: boolean
   bottleneckRemaining: number
   combinedRemaining: number
@@ -355,21 +432,30 @@ interface AccountQuotaScore {
 
 function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
   const hasUsage = accountHasUsage(rateLimits)
-  const hasBothWindows = Boolean(rateLimits?.primary && rateLimits?.secondary)
+  const hasPrimaryWindow = Boolean(rateLimits?.primary)
+  const requiresWeeklyQuota = supportsWeeklyQuota(rateLimits)
+  const hasRequiredWindows =
+    hasPrimaryWindow && (!requiresWeeklyQuota || Boolean(rateLimits?.secondary))
   const primaryRemaining = rateLimits?.primary
     ? remainingPercent(rateLimits.primary.usedPercent)
     : -1
-  const secondaryRemaining = rateLimits?.secondary
-    ? remainingPercent(rateLimits.secondary.usedPercent)
-    : -1
-  const hasAvailableQuota = hasBothWindows && primaryRemaining > 0 && secondaryRemaining > 0
+  const secondaryRemaining = requiresWeeklyQuota
+    ? rateLimits?.secondary
+      ? remainingPercent(rateLimits.secondary.usedPercent)
+      : -1
+    : primaryRemaining
+  const hasAvailableQuota = hasRequiredWindows && primaryRemaining > 0 && secondaryRemaining > 0
 
   return {
     hasUsage,
-    hasBothWindows,
+    hasRequiredWindows,
     hasAvailableQuota,
-    bottleneckRemaining: hasBothWindows ? Math.min(primaryRemaining, secondaryRemaining) : -1,
-    combinedRemaining: hasBothWindows ? primaryRemaining + secondaryRemaining : -1,
+    bottleneckRemaining: hasRequiredWindows ? Math.min(primaryRemaining, secondaryRemaining) : -1,
+    combinedRemaining: hasRequiredWindows
+      ? requiresWeeklyQuota
+        ? primaryRemaining + secondaryRemaining
+        : primaryRemaining
+      : -1,
     primaryRemaining,
     secondaryRemaining
   }
@@ -403,8 +489,8 @@ export function resolveBestAccount(
       return leftQuota.hasAvailableQuota ? -1 : 1
     }
 
-    if (leftQuota.hasBothWindows !== rightQuota.hasBothWindows) {
-      return leftQuota.hasBothWindows ? -1 : 1
+    if (leftQuota.hasRequiredWindows !== rightQuota.hasRequiredWindows) {
+      return leftQuota.hasRequiredWindows ? -1 : 1
     }
 
     if (leftQuota.bottleneckRemaining !== rightQuota.bottleneckRemaining) {

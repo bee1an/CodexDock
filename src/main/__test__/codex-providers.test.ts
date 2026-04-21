@@ -30,7 +30,7 @@ describe('CodexProviderStore', () => {
     )
   })
 
-  async function createStore() {
+  async function createStore(): Promise<{ directory: string; store: CodexProviderStore }> {
     const directory = await mkdtemp(join(tmpdir(), 'ilovecodex-provider-store-'))
     createdDirectories.push(directory)
     return {

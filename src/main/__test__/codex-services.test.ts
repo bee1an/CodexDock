@@ -25,6 +25,23 @@ vi.mock('node:child_process', () => ({
 
 import { createCodexServices, resolveWindowsCodexDesktopExecutable } from '../codex-services'
 
+interface TestAuthPayload {
+  auth_mode: 'chatgpt'
+  last_refresh: string
+  tokens: {
+    access_token: string
+    refresh_token: string
+    id_token: string
+    account_id: string
+  }
+}
+
+interface TestRefreshPayload {
+  access_token: string
+  refresh_token: string
+  id_token: string
+}
+
 function createPlatform(): CodexPlatformAdapter {
   return {
     fetch: vi.fn(),
@@ -44,7 +61,7 @@ function createJwt(payload: Record<string, unknown>): string {
   return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.sig`
 }
 
-function createAuthPayload(accountId: string, email: string) {
+function createAuthPayload(accountId: string, email: string): TestAuthPayload {
   return {
     auth_mode: 'chatgpt',
     last_refresh: new Date().toISOString(),
@@ -68,9 +85,15 @@ function createAuthPayload(accountId: string, email: string) {
   }
 }
 
-function createRefreshPayload(accountId: string, email: string, refreshToken: string) {
+function createRefreshPayload(
+  accountId: string,
+  email: string,
+  refreshToken: string,
+  subject?: string
+): TestRefreshPayload {
   return {
     access_token: createJwt({
+      sub: subject,
       exp: Math.floor(Date.now() / 1000) + 3600,
       'https://api.openai.com/auth': {
         chatgpt_account_id: accountId
@@ -78,6 +101,7 @@ function createRefreshPayload(accountId: string, email: string, refreshToken: st
     }),
     refresh_token: refreshToken,
     id_token: createJwt({
+      sub: subject,
       email,
       name: email.split('@')[0],
       'https://api.openai.com/auth': {
@@ -96,30 +120,111 @@ function createJsonResponse(payload: unknown, status = 200): Response {
   })
 }
 
-function createUsageResponse(): Response {
+function createUsageResponse(overrides?: {
+  planType?: string
+  primaryUsedPercent?: number
+  primaryResetAt?: number
+  secondaryUsedPercent?: number
+  secondaryResetAt?: number
+}): Response {
   return createJsonResponse({
     user_id: 'user_123',
     account_id: 'acct-a',
     email: 'a@example.com',
-    plan_type: 'plus',
+    plan_type: overrides?.planType ?? 'plus',
     rate_limit: {
       allowed: true,
       limit_reached: false,
       primary_window: {
-        used_percent: 12,
+        used_percent: overrides?.primaryUsedPercent ?? 12,
         limit_window_seconds: 18_000,
         reset_after_seconds: 60,
-        reset_at: 1_800_000_000
+        reset_at: overrides?.primaryResetAt ?? 1_800_000_000
       },
       secondary_window: {
-        used_percent: 34,
+        used_percent: overrides?.secondaryUsedPercent ?? 34,
         limit_window_seconds: 604_800,
         reset_after_seconds: 600,
-        reset_at: 1_800_500_000
+        reset_at: overrides?.secondaryResetAt ?? 1_800_500_000
       }
     },
     credits: null,
     additional_rate_limits: []
+  })
+}
+
+function createTemplateImport(options: {
+  accountId: string
+  email: string
+  planType?: string
+  primaryUsedPercent?: number
+  primaryResetAt?: string
+  secondaryUsedPercent?: number
+  secondaryResetAt?: string
+}): string {
+  return JSON.stringify({
+    exported_at: '2026-03-24T08:00:00.000Z',
+    proxies: [],
+    accounts: [
+      {
+        name: options.email,
+        notes: '',
+        platform: 'openai',
+        type: 'oauth',
+        credentials: {
+          _token_version: 1,
+          access_token: createJwt({
+            exp: Math.floor(Date.now() / 1000) + 3600,
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: options.accountId
+            }
+          }),
+          refresh_token: `refresh-${options.accountId}`,
+          id_token: createJwt({
+            email: options.email,
+            name: options.email.split('@')[0],
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: options.accountId
+            }
+          }),
+          chatgpt_account_id: options.accountId,
+          client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+          email: options.email,
+          expires_at: '2026-03-24T09:00:00.000Z',
+          expires_in: 3600,
+          plan_type: options.planType ?? 'plus',
+          scope: null,
+          token_type: null
+        },
+        extra: {
+          codex_5h_reset_after_seconds: 7200,
+          codex_5h_reset_at: options.primaryResetAt ?? '2026-03-24T10:00:00.000Z',
+          codex_5h_used_percent: options.primaryUsedPercent ?? 20,
+          codex_5h_window_minutes: 300,
+          codex_7d_reset_after_seconds: 604800,
+          codex_7d_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
+          codex_7d_used_percent: options.secondaryUsedPercent ?? 40,
+          codex_7d_window_minutes: 10080,
+          codex_primary_over_secondary_percent:
+            (options.primaryUsedPercent ?? 20) - (options.secondaryUsedPercent ?? 40),
+          codex_primary_reset_after_seconds: 7200,
+          codex_primary_reset_at: options.primaryResetAt ?? '2026-03-24T10:00:00.000Z',
+          codex_primary_used_percent: options.primaryUsedPercent ?? 20,
+          codex_primary_window_minutes: 300,
+          codex_secondary_reset_after_seconds: 604800,
+          codex_secondary_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
+          codex_secondary_used_percent: options.secondaryUsedPercent ?? 40,
+          codex_secondary_window_minutes: 10080,
+          codex_usage_updated_at: '2026-03-24T08:00:00.000Z',
+          email: options.email,
+          privacy_mode: 'training_off'
+        },
+        concurrency: 10,
+        priority: 1,
+        rate_multiplier: 1,
+        auto_pause_on_expired: false
+      }
+    ]
   })
 }
 
@@ -243,7 +348,11 @@ describe('createCodexServices', () => {
     )
   })
 
-  async function createEnvironment() {
+  async function createEnvironment(): Promise<{
+    userDataPath: string
+    workspacePath: string
+    globalAuthPath: string
+  }> {
     const directory = await mkdtemp(join(tmpdir(), 'ilovecodex-services-'))
     createdDirectories.push(directory)
 
@@ -260,7 +369,7 @@ describe('createCodexServices', () => {
     }
   }
 
-  async function writeGlobalAuth(path: string, payload: Record<string, unknown>): Promise<void> {
+  async function writeGlobalAuth(path: string, payload: unknown): Promise<void> {
     await mkdir(join(process.env.HOME ?? '', '.codex'), { recursive: true })
     await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   }
@@ -678,7 +787,8 @@ describe('createCodexServices', () => {
     })
 
     const baseAuth = createAuthPayload('acct-a', 'a@example.com')
-    const { refresh_token: _refreshToken, ...tokensWithoutRefresh } = baseAuth.tokens
+    const { refresh_token: refreshToken, ...tokensWithoutRefresh } = baseAuth.tokens
+    void refreshToken
     const expiredAuth = {
       ...baseAuth,
       tokens: tokensWithoutRefresh
@@ -842,6 +952,103 @@ describe('createCodexServices', () => {
     expect(exported.accounts[0]?.credentials.chatgpt_account_id).toBe('acct-a')
   })
 
+  it('exports cockpit tools compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const exported = JSON.parse(
+      await services.accounts.exportToTemplate(undefined, 'cockpit_tools')
+    ) as Array<Record<string, unknown>>
+
+    expect(exported).toHaveLength(1)
+    expect(exported[0]).toMatchObject({
+      id: expect.any(String),
+      email: 'a@example.com',
+      account_id: 'acct-a',
+      account_name: 'a@example.com',
+      tokens: {
+        id_token: expect.any(String),
+        access_token: expect.any(String),
+        refresh_token: 'refresh-acct-a'
+      },
+      created_at: expect.any(Number),
+      last_used: expect.any(Number)
+    })
+  })
+
+  it('exports sub2api compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const exported = JSON.parse(await services.accounts.exportToTemplate(undefined, 'sub2api')) as {
+      type: string
+      version: number
+      accounts: Array<{
+        name: string
+        platform: string
+        type: string
+        credentials: Record<string, unknown>
+      }>
+    }
+
+    expect(exported.type).toBe('sub2api-data')
+    expect(exported.version).toBe(1)
+    expect(exported.accounts).toHaveLength(1)
+    expect(exported.accounts[0]).toMatchObject({
+      name: 'a@example.com',
+      platform: 'openai',
+      type: 'oauth'
+    })
+    expect(exported.accounts[0]?.credentials).toMatchObject({
+      access_token: expect.any(String),
+      refresh_token: 'refresh-acct-a',
+      id_token: expect.any(String),
+      email: 'a@example.com',
+      chatgpt_account_id: 'acct-a'
+    })
+  })
+
+  it('exports cliproxyapi compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const exported = JSON.parse(
+      await services.accounts.exportToTemplate(undefined, 'cliproxyapi')
+    ) as Record<string, unknown>
+
+    expect(exported).toMatchObject({
+      id_token: expect.any(String),
+      access_token: expect.any(String),
+      refresh_token: 'refresh-acct-a',
+      account_id: 'acct-a',
+      email: 'a@example.com',
+      type: 'codex',
+      last_refresh: expect.any(String),
+      expired: expect.any(String)
+    })
+  })
+
   it('imports the reference template schema and rejects missing credentials fields', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -939,6 +1146,285 @@ describe('createCodexServices', () => {
         })
       )
     ).rejects.toThrow('missing required field: credentials')
+  })
+
+  it('imports cockpit tools compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      JSON.stringify([
+        {
+          id: 'acct-cockpit',
+          email: 'cockpit@example.com',
+          account_id: 'acct-cockpit',
+          user_id: 'user-cockpit',
+          organization_id: 'org-cockpit',
+          plan_type: 'team',
+          account_name: 'Cockpit Account',
+          tokens: {
+            id_token: createJwt({
+              sub: 'user-cockpit',
+              email: 'cockpit@example.com',
+              name: 'cockpit',
+              'https://api.openai.com/auth': {
+                chatgpt_account_id: 'acct-cockpit',
+                chatgpt_user_id: 'user-cockpit',
+                organization_id: 'org-cockpit',
+                chatgpt_plan_type: 'team'
+              }
+            }),
+            access_token: createJwt({
+              exp: Math.floor(Date.now() / 1000) + 3600,
+              'https://api.openai.com/auth': {
+                chatgpt_account_id: 'acct-cockpit',
+                chatgpt_user_id: 'user-cockpit',
+                organization_id: 'org-cockpit',
+                chatgpt_plan_type: 'team'
+              }
+            }),
+            refresh_token: 'refresh-cockpit'
+          },
+          quota: {
+            hourly_percentage: 11,
+            hourly_reset_time: 1_800_000_100,
+            hourly_window_minutes: 300,
+            hourly_window_present: true,
+            weekly_percentage: 27,
+            weekly_reset_time: 1_800_500_200,
+            weekly_window_minutes: 10080,
+            weekly_window_present: true
+          }
+        }
+      ])
+    )
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.accounts[0]?.email).toBe('cockpit@example.com')
+    expect(snapshot.usageByAccountId[snapshot.accounts[0]!.id]).toMatchObject({
+      planType: 'team',
+      primary: {
+        usedPercent: 11,
+        windowDurationMins: 300,
+        resetsAt: 1_800_000_100
+      },
+      secondary: {
+        usedPercent: 27,
+        windowDurationMins: 10080,
+        resetsAt: 1_800_500_200
+      }
+    })
+  })
+
+  it('imports sub2api compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      JSON.stringify({
+        type: 'sub2api-data',
+        version: 1,
+        exported_at: '2026-03-24T08:00:00Z',
+        proxies: [],
+        accounts: [
+          {
+            name: 'sub2api@example.com',
+            platform: 'openai',
+            type: 'oauth',
+            credentials: {
+              access_token: createJwt({
+                exp: Math.floor(Date.now() / 1000) + 3600,
+                'https://api.openai.com/auth': {
+                  chatgpt_account_id: 'acct-sub2api',
+                  chatgpt_user_id: 'user-sub2api',
+                  organization_id: 'org-sub2api',
+                  chatgpt_plan_type: 'pro'
+                }
+              }),
+              refresh_token: 'refresh-sub2api',
+              id_token: createJwt({
+                sub: 'user-sub2api',
+                email: 'sub2api@example.com',
+                name: 'sub2api',
+                'https://api.openai.com/auth': {
+                  chatgpt_account_id: 'acct-sub2api',
+                  chatgpt_user_id: 'user-sub2api',
+                  organization_id: 'org-sub2api',
+                  chatgpt_plan_type: 'pro'
+                }
+              }),
+              email: 'sub2api@example.com',
+              plan_type: 'pro'
+            },
+            concurrency: 0,
+            priority: 0
+          }
+        ]
+      })
+    )
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.accounts[0]).toMatchObject({
+      email: 'sub2api@example.com',
+      accountId: 'acct-sub2api'
+    })
+  })
+
+  it('imports cliproxyapi compatible payloads', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      JSON.stringify({
+        id_token: createJwt({
+          sub: 'user-cpa',
+          email: 'cliproxy@example.com',
+          name: 'cliproxy',
+          'https://api.openai.com/auth': {
+            chatgpt_account_id: 'acct-cpa',
+            chatgpt_user_id: 'user-cpa',
+            organization_id: 'org-cpa',
+            chatgpt_plan_type: 'plus'
+          }
+        }),
+        access_token: createJwt({
+          exp: Math.floor(Date.now() / 1000) + 3600,
+          'https://api.openai.com/auth': {
+            chatgpt_account_id: 'acct-cpa',
+            chatgpt_user_id: 'user-cpa',
+            organization_id: 'org-cpa',
+            chatgpt_plan_type: 'plus'
+          }
+        }),
+        refresh_token: 'refresh-cpa',
+        account_id: 'acct-cpa',
+        last_refresh: '2026-03-24T08:00:00Z',
+        email: 'cliproxy@example.com',
+        type: 'codex',
+        expired: '2026-03-24T09:00:00Z'
+      })
+    )
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.accounts[0]).toMatchObject({
+      email: 'cliproxy@example.com',
+      accountId: 'acct-cpa'
+    })
+  })
+
+  it('skips remote refresh and wake requests for seeded local mock accounts', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-local-plus-1',
+        email: 'local-plus-1@mock.local',
+        planType: 'plus'
+      })
+    )
+
+    const snapshot = await services.getSnapshot()
+    const account = snapshot.accounts[0]
+    const importedUsage = snapshot.usageByAccountId[account.id]
+
+    await expect(services.accounts.refreshExpiringSession(account.id)).resolves.toBe(false)
+    await expect(services.usage.read(account.id)).resolves.toMatchObject({
+      planType: 'plus',
+      primary: {
+        usedPercent: 20
+      }
+    })
+
+    await expect(
+      services.usage.wake(account.id, {
+        model: 'gpt-5.4-mini',
+        prompt: 'ping'
+      })
+    ).resolves.toMatchObject({
+      rateLimits: {
+        planType: 'plus'
+      },
+      requestResult: {
+        status: 200,
+        accepted: true,
+        model: 'gpt-5.4-mini',
+        prompt: 'ping'
+      }
+    })
+
+    expect(platform.fetch).not.toHaveBeenCalled()
+    expect((await services.usage.read(account.id)).fetchedAt).not.toBe(importedUsage?.fetchedAt)
+  })
+
+  it('blocks opening Codex for local mock accounts', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-local-plus-1',
+        email: 'local-plus-1@mock.local'
+      })
+    )
+
+    const account = (await services.getSnapshot()).accounts[0]
+    await services.accounts.activate(account.id)
+
+    await expect(services.codex.open(account.id, env.workspacePath)).rejects.toThrow(
+      'Local mock accounts do not support opening Codex.'
+    )
+    await expect(services.codex.show(env.workspacePath)).rejects.toThrow(
+      'Local mock accounts do not support opening Codex.'
+    )
+
+    expect(mockedProcessState.spawn).not.toHaveBeenCalled()
+  })
+
+  it('blocks opening isolated Codex for local mock accounts', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-local-plus-1',
+        email: 'local-plus-1@mock.local'
+      })
+    )
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    await expect(services.codex.openIsolated(account.id, env.workspacePath)).rejects.toThrow(
+      'Local mock accounts do not support opening isolated Codex.'
+    )
+
+    expect(mockedProcessState.spawn).not.toHaveBeenCalled()
+    await expect(services.codex.instances.list()).resolves.toHaveLength(1)
   })
 
   it('removes multiple accounts in one call', async () => {
@@ -1095,6 +1581,217 @@ describe('createCodexServices', () => {
     expect(platform.fetch).toHaveBeenCalledTimes(2)
     const storedAuth = await readFile(join(env.userDataPath, 'codex-accounts.json'), 'utf8')
     expect(storedAuth).toContain('refresh-acct-a-2')
+  })
+
+  it('does not trigger wake-up requests when the session quota is not full', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(createUsageResponse({ primaryUsedPercent: 80, primaryResetAt: 0 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'rate_limit_exceeded'
+            }
+          }),
+          {
+            status: 429,
+            headers: {
+              'content-type': 'application/json'
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        createUsageResponse({ primaryUsedPercent: 80, primaryResetAt: 1_900_000_000 })
+      )
+
+    await expect(services.usage.wake(account.id)).resolves.toMatchObject({
+      rateLimits: {
+        primary: {
+          usedPercent: 80,
+          resetsAt: 1_900_000_000
+        }
+      },
+      requestResult: {
+        status: 429,
+        accepted: true
+      }
+    })
+
+    expect(platform.fetch).toHaveBeenCalledTimes(3)
+    expect(platform.fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://chatgpt.com/backend-api/codex/responses',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+  })
+
+  it('does not trigger wake-up requests for free accounts', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      createUsageResponse({ planType: 'free', primaryUsedPercent: 0 })
+    )
+
+    await expect(services.usage.wake(account.id)).resolves.toMatchObject({
+      rateLimits: {
+        planType: 'free',
+        primary: {
+          usedPercent: 0
+        }
+      },
+      requestResult: null
+    })
+
+    expect(platform.fetch).toHaveBeenCalledTimes(1)
+    expect(platform.fetch).toHaveBeenCalledWith(
+      'https://chatgpt.com/backend-api/wham/usage',
+      expect.objectContaining({
+        method: 'GET'
+      })
+    )
+  })
+
+  it('triggers a wake-up request for non-free accounts regardless of session usage', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(createUsageResponse({ primaryUsedPercent: 0, primaryResetAt: 0 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            error: {
+              code: 'rate_limit_exceeded'
+            }
+          }),
+          {
+            status: 429,
+            headers: {
+              'content-type': 'application/json'
+            }
+          }
+        )
+      )
+      .mockResolvedValueOnce(
+        createUsageResponse({ primaryUsedPercent: 0, primaryResetAt: 1_900_000_000 })
+      )
+
+    await expect(services.usage.wake(account.id)).resolves.toMatchObject({
+      rateLimits: {
+        primary: {
+          usedPercent: 0,
+          resetsAt: 1_900_000_000
+        }
+      },
+      requestResult: {
+        status: 429,
+        accepted: true
+      }
+    })
+
+    expect(platform.fetch).toHaveBeenCalledTimes(3)
+    expect(platform.fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://chatgpt.com/backend-api/codex/responses',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
+  })
+
+  it('continues wake-up flow when auth refresh changes the account identity', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    ;(platform.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(createUsageResponse({ primaryUsedPercent: 0, primaryResetAt: 0 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: { message: 'expired' } }), {
+          status: 401,
+          headers: {
+            'content-type': 'application/json'
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse(
+          createRefreshPayload('acct-a', 'a@example.com', 'refresh-acct-a-2', 'user-a')
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response('{}', {
+          status: 200,
+          headers: {
+            'content-type': 'text/event-stream'
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        createUsageResponse({ primaryUsedPercent: 0, primaryResetAt: 1_900_000_000 })
+      )
+
+    await expect(services.usage.wake(account.id)).resolves.toMatchObject({
+      rateLimits: {
+        primary: {
+          usedPercent: 0,
+          resetsAt: 1_900_000_000
+        }
+      },
+      requestResult: {
+        status: 200,
+        accepted: true
+      }
+    })
+
+    expect((await services.getSnapshot()).accounts[0]?.id).toBe('user-a:acct-a')
+    expect(platform.fetch).toHaveBeenCalledTimes(5)
   })
 
   it('refreshes expiring stored sessions and syncs the current auth file', async () => {

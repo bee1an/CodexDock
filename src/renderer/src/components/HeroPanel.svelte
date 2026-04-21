@@ -13,6 +13,7 @@
   export let loginEvent: LoginEvent | null = null
   export let showSettings = false
   export let showProviderComposer = false
+  export let onClose: () => void = () => {}
   export let showCodexDesktopExecutablePath = false
   export let showCallbackLoginDetails = true
   export let showDeviceLoginDetails = true
@@ -117,237 +118,310 @@
   }
 
   $: hasDetailContent =
-    showSettings ||
-    showProviderComposer ||
-    (showCallbackLoginDetails &&
-      loginEvent?.method === 'browser' &&
-      (loginEvent?.authUrl || loginEvent?.localCallbackUrl)) ||
-    (showDeviceLoginDetails &&
-      loginEvent?.method === 'device' &&
-      (loginEvent?.verificationUrl || loginEvent?.userCode)) ||
-    (loginEvent?.phase === 'error' && loginEvent?.rawOutput)
+    showSettings || showProviderComposer || showBrowserLoginDetails || showDeviceLoginDetailsPanel
+
+  $: showBrowserLoginDetails =
+    showCallbackLoginDetails &&
+    loginEvent?.method === 'browser' &&
+    Boolean(loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput)
+
+  $: showDeviceLoginDetailsPanel =
+    showDeviceLoginDetails &&
+    loginEvent?.method === 'device' &&
+    Boolean(loginEvent?.verificationUrl || loginEvent?.userCode || loginEvent?.rawOutput)
+
+  const dialogTitle = (): string => {
+    if (
+      showSettings &&
+      !showProviderComposer &&
+      !showBrowserLoginDetails &&
+      !showDeviceLoginDetailsPanel
+    ) {
+      return copy.settings
+    }
+
+    if (
+      !showSettings &&
+      showProviderComposer &&
+      !showBrowserLoginDetails &&
+      !showDeviceLoginDetailsPanel
+    ) {
+      return copy.createProvider
+    }
+
+    if (
+      !showSettings &&
+      !showProviderComposer &&
+      showBrowserLoginDetails &&
+      !showDeviceLoginDetailsPanel
+    ) {
+      return copy.callbackLogin
+    }
+
+    if (
+      !showSettings &&
+      !showProviderComposer &&
+      !showBrowserLoginDetails &&
+      showDeviceLoginDetailsPanel
+    ) {
+      return copy.deviceLogin
+    }
+
+    return copy.toolbarDialogTitle
+  }
 </script>
 
 {#if hasDetailContent}
-  <section class={heroClass}>
-    {#if showSettings}
-      <div class="grid gap-3">
-        <div class="flex flex-wrap items-center gap-3">
-          <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
-          <select
-            class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            value={settings.usagePollingMinutes}
-            on:change={(event) =>
-              updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
-          >
-            {#each pollingOptions as option (option)}
-              <option value={option}>{option} {copy.minutes}</option>
-            {/each}
-          </select>
-
-          <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
-            <input
-              type="checkbox"
-              class="h-4 w-4 rounded border border-black/14"
-              checked={settings.checkForUpdatesOnStartup}
-              on:change={(event) =>
-                updateCheckForUpdatesOnStartup((event.currentTarget as HTMLInputElement).checked)}
-            />
-            <span>{copy.autoCheckUpdates}</span>
-          </label>
-
-          <button
-            class={compactGhostButton}
-            type="button"
-            on:click={runUpdateAction}
-            disabled={updateActionDisabled()}
-          >
-            {updateActionLabel()}
-          </button>
+  <div
+    class="fixed inset-0 z-[55] flex items-center justify-center bg-black/38 px-4 py-6 backdrop-blur-[2px]"
+    role="presentation"
+    onclick={(event) => {
+      if (event.target === event.currentTarget) {
+        onClose()
+      }
+    }}
+  >
+    <div
+      class={`${heroClass} w-full max-w-4xl max-h-[calc(100vh-3rem)] overflow-y-auto shadow-[0_24px_80px_rgba(15,23,42,0.18)]`}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="hero-panel-dialog-title"
+    >
+      <div class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4">
+        <div class="grid gap-1">
+          <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
+            {copy.toolbarDialogTitle}
+          </p>
+          <h2 id="hero-panel-dialog-title" class="text-[1.15rem] font-semibold text-ink">
+            {dialogTitle()}
+          </h2>
         </div>
 
-        {#if showCodexDesktopExecutablePath}
+        <button class={compactGhostButton} type="button" onclick={onClose}>
+          {copy.closeDialog}
+        </button>
+      </div>
+
+      {#if showSettings}
+        <div class="grid gap-3">
           <div class="flex flex-wrap items-center gap-3">
-            <span class="text-xs text-muted-strong">{copy.codexDesktopExecutablePath}</span>
+            <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
+            <select
+              class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              value={settings.usagePollingMinutes}
+              onchange={(event) =>
+                updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
+            >
+              {#each pollingOptions as option (option)}
+                <option value={option}>{option} {copy.minutes}</option>
+              {/each}
+            </select>
+
+            <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border border-black/14"
+                checked={settings.checkForUpdatesOnStartup}
+                onchange={(event) =>
+                  updateCheckForUpdatesOnStartup((event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>{copy.autoCheckUpdates}</span>
+            </label>
+
             <button
               class={compactGhostButton}
               type="button"
-              on:click={() => {
-                showCodexDesktopExecutableEditor = !showCodexDesktopExecutableEditor
-              }}
+              onclick={runUpdateAction}
+              disabled={updateActionDisabled()}
             >
-              {showCodexDesktopExecutableEditor
-                ? copy.hideCodexDesktopExecutablePath
-                : copy.showCodexDesktopExecutablePath}
+              {updateActionLabel()}
             </button>
           </div>
 
-          {#if showCodexDesktopExecutableEditor}
-            <div
-              class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
-            >
-              <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
-                {copy.codexDesktopExecutablePath}
-              </span>
-              <input
-                class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-                type="text"
-                bind:value={codexDesktopExecutablePathDraft}
-                placeholder={copy.codexDesktopExecutablePlaceholder}
-                on:blur={() =>
-                  void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
-                on:keydown={(event) => {
-                  if (event.key === 'Enter') {
-                    void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
-                  }
-                }}
-              />
-            </div>
-          {/if}
-        {/if}
-      </div>
-    {/if}
-
-    {#if showProviderComposer}
-      <div class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-3' : ''}`}>
-        <p class="text-sm font-medium text-ink">{copy.createProvider}</p>
-
-        <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
-          <input
-            class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            type="text"
-            bind:value={newProviderName}
-            placeholder={copy.providerNamePlaceholder}
-            disabled={loginActionBusy || providerMutationBusy}
-          />
-          <input
-            class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            type="text"
-            bind:value={newProviderBaseUrl}
-            placeholder={copy.providerBaseUrlPlaceholder}
-            disabled={loginActionBusy || providerMutationBusy}
-          />
-          <input
-            class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            type="text"
-            bind:value={newProviderModel}
-            placeholder={copy.providerModelPlaceholder}
-            disabled={loginActionBusy || providerMutationBusy}
-          />
-        </div>
-
-        <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-          <input
-            class="rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-            type="password"
-            bind:value={newProviderApiKey}
-            placeholder={copy.providerApiKeyPlaceholder}
-            disabled={loginActionBusy || providerMutationBusy}
-            on:keydown={(event) => {
-              if (event.key === 'Enter') {
-                void submitProvider()
-              }
-            }}
-          />
-          <label
-            class="inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink"
-          >
-            <input
-              type="checkbox"
-              bind:checked={newProviderFastMode}
-              disabled={loginActionBusy || providerMutationBusy}
-            />
-            <span>{copy.providerFastMode}</span>
-          </label>
-          <button
-            class={compactGhostButton}
-            type="button"
-            on:click={() => void submitProvider()}
-            disabled={loginActionBusy ||
-              providerMutationBusy ||
-              !newProviderBaseUrl.trim() ||
-              !newProviderApiKey.trim()}
-          >
-            <span
-              class={`${providerMutationBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
-            ></span>
-            <span>{copy.createProvider}</span>
-          </button>
-        </div>
-      </div>
-    {/if}
-
-    {#if (showCallbackLoginDetails && loginEvent?.method === 'browser' && (loginEvent?.authUrl || loginEvent?.localCallbackUrl)) || (showDeviceLoginDetails && loginEvent?.method === 'device' && (loginEvent?.verificationUrl || loginEvent?.userCode)) || (loginEvent?.phase === 'error' && loginEvent?.rawOutput)}
-      <div
-        class={`grid gap-2 ${showSettings || showProviderComposer ? 'border-t border-black/6 pt-3' : ''}`}
-      >
-        {#if showCallbackLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
-          <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
-            <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
-            <code
-              class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
-            >
-              {loginEvent.authUrl}
-            </code>
-            <div class="flex flex-wrap items-center gap-2">
-              <button class={compactGhostButton} on:click={copyAuthUrl}>{copy.copyLink}</button>
+          {#if showCodexDesktopExecutablePath}
+            <div class="flex flex-wrap items-center gap-3">
+              <span class="text-xs text-muted-strong">{copy.codexDesktopExecutablePath}</span>
               <button
                 class={compactGhostButton}
-                on:click={() => openExternalLink(loginEvent?.authUrl)}
+                type="button"
+                onclick={() => {
+                  showCodexDesktopExecutableEditor = !showCodexDesktopExecutableEditor
+                }}
               >
-                {copy.openBrowser}
+                {showCodexDesktopExecutableEditor
+                  ? copy.hideCodexDesktopExecutablePath
+                  : copy.showCodexDesktopExecutablePath}
               </button>
             </div>
-          </div>
-        {/if}
 
-        {#if showCallbackLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
-          <p class="text-sm text-muted-strong">{copy.waitingCallback}</p>
-        {/if}
-
-        {#if showDeviceLoginDetails && loginEvent?.method === 'device' && loginEvent.verificationUrl}
-          <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
-            <p class="text-sm text-muted-strong">{copy.deviceLoginLink}</p>
-            <code
-              class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
-            >
-              {loginEvent.verificationUrl}
-            </code>
-            {#if loginEvent.userCode}
-              <div class="grid gap-1">
-                <p class="text-sm text-muted-strong">{copy.deviceCode}</p>
-                <code
-                  class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
-                >
-                  {loginEvent.userCode}
-                </code>
+            {#if showCodexDesktopExecutableEditor}
+              <div
+                class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.6)]"
+              >
+                <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
+                  {copy.codexDesktopExecutablePath}
+                </span>
+                <input
+                  class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  type="text"
+                  bind:value={codexDesktopExecutablePathDraft}
+                  placeholder={copy.codexDesktopExecutablePlaceholder}
+                  onblur={() =>
+                    void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
+                  onkeydown={(event) => {
+                    if (event.key === 'Enter') {
+                      void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
+                    }
+                  }}
+                />
               </div>
             {/if}
-            <div class="flex flex-wrap items-center gap-2">
-              <button class={compactGhostButton} on:click={copyAuthUrl}>{copy.copyLink}</button>
-              {#if loginEvent.userCode}
-                <button class={compactGhostButton} on:click={copyDeviceCode}>{copy.copyCode}</button
-                >
-              {/if}
-              <button
-                class={compactGhostButton}
-                on:click={() => openExternalLink(loginEvent?.verificationUrl)}
-              >
-                {copy.openBrowser}
-              </button>
-            </div>
+          {/if}
+        </div>
+      {/if}
+
+      {#if showProviderComposer}
+        <div class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-4 mt-4' : ''}`}>
+          <p class="text-sm font-medium text-ink">{copy.createProvider}</p>
+
+          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
+            <input
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              type="text"
+              bind:value={newProviderName}
+              placeholder={copy.providerNamePlaceholder}
+              disabled={loginActionBusy || providerMutationBusy}
+            />
+            <input
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              type="text"
+              bind:value={newProviderBaseUrl}
+              placeholder={copy.providerBaseUrlPlaceholder}
+              disabled={loginActionBusy || providerMutationBusy}
+            />
+            <input
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              type="text"
+              bind:value={newProviderModel}
+              placeholder={copy.providerModelPlaceholder}
+              disabled={loginActionBusy || providerMutationBusy}
+            />
           </div>
-        {/if}
 
-        {#if showDeviceLoginDetails && loginEvent?.method === 'device' && loginEvent.userCode}
-          <p class="text-sm text-muted-strong">{copy.waitingDeviceCode}</p>
-        {/if}
+          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+            <input
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              type="password"
+              bind:value={newProviderApiKey}
+              placeholder={copy.providerApiKeyPlaceholder}
+              disabled={loginActionBusy || providerMutationBusy}
+              onkeydown={(event) => {
+                if (event.key === 'Enter') {
+                  void submitProvider()
+                }
+              }}
+            />
+            <label
+              class="theme-provider-toggle inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink"
+            >
+              <input
+                type="checkbox"
+                bind:checked={newProviderFastMode}
+                disabled={loginActionBusy || providerMutationBusy}
+              />
+              <span>{copy.providerFastMode}</span>
+            </label>
+            <button
+              class={compactGhostButton}
+              type="button"
+              onclick={() => void submitProvider()}
+              disabled={loginActionBusy ||
+                providerMutationBusy ||
+                !newProviderBaseUrl.trim() ||
+                !newProviderApiKey.trim()}
+            >
+              <span
+                class={`${providerMutationBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
+              ></span>
+              <span>{copy.createProvider}</span>
+            </button>
+          </div>
+        </div>
+      {/if}
 
-        {#if loginEvent?.phase === 'error' && loginEvent.rawOutput}
-          <pre
-            class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
-        {/if}
-      </div>
-    {/if}
-  </section>
+      {#if showBrowserLoginDetails || showDeviceLoginDetailsPanel}
+        <div
+          class={`grid gap-2 ${showSettings || showProviderComposer ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
+        >
+          {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
+            <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+              <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
+              <code
+                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+              >
+                {loginEvent.authUrl}
+              </code>
+              <div class="flex flex-wrap items-center gap-2">
+                <button class={compactGhostButton} onclick={copyAuthUrl}>{copy.copyLink}</button>
+                <button
+                  class={compactGhostButton}
+                  onclick={() => openExternalLink(loginEvent?.authUrl)}
+                >
+                  {copy.openBrowser}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
+            <p class="text-sm text-muted-strong">{copy.waitingCallback}</p>
+          {/if}
+
+          {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.verificationUrl}
+            <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+              <p class="text-sm text-muted-strong">{copy.deviceLoginLink}</p>
+              <code
+                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+              >
+                {loginEvent.verificationUrl}
+              </code>
+              {#if loginEvent.userCode}
+                <div class="grid gap-1">
+                  <p class="text-sm text-muted-strong">{copy.deviceCode}</p>
+                  <code
+                    class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
+                  >
+                    {loginEvent.userCode}
+                  </code>
+                </div>
+              {/if}
+              <div class="flex flex-wrap items-center gap-2">
+                <button class={compactGhostButton} onclick={copyAuthUrl}>{copy.copyLink}</button>
+                {#if loginEvent.userCode}
+                  <button class={compactGhostButton} onclick={copyDeviceCode}
+                    >{copy.copyCode}</button
+                  >
+                {/if}
+                <button
+                  class={compactGhostButton}
+                  onclick={() => openExternalLink(loginEvent?.verificationUrl)}
+                >
+                  {copy.openBrowser}
+                </button>
+              </div>
+            </div>
+          {/if}
+
+          {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.userCode}
+            <p class="text-sm text-muted-strong">{copy.waitingDeviceCode}</p>
+          {/if}
+
+          {#if loginEvent?.phase === 'error' && loginEvent.rawOutput}
+            <pre
+              class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
+          {/if}
+        </div>
+      {/if}
+    </div>
+  </div>
 {/if}

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   formatRelativeReset,
+  isLocalMockAccount,
   remainingPercent,
   resolveBestAccount,
   shouldAutoPollUsage,
@@ -60,6 +61,12 @@ describe('codex shared helpers', () => {
     expect(remainingPercent(-20)).toBe(100)
     expect(remainingPercent(25)).toBe(75)
     expect(remainingPercent(140)).toBe(0)
+  })
+
+  it('detects seeded local mock accounts', () => {
+    expect(isLocalMockAccount({ email: 'local-plus-1@mock.local' })).toBe(true)
+    expect(isLocalMockAccount({ accountId: 'acct-local-enterprise' })).toBe(true)
+    expect(isLocalMockAccount({ email: 'real@example.com', accountId: 'acct-real' })).toBe(false)
   })
 
   it('computes usage polling windows from fetched timestamps', () => {
@@ -155,6 +162,19 @@ describe('codex shared helpers', () => {
     }
 
     expect(resolveBestAccount(accounts, usageByAccountId)).toBeNull()
+  })
+
+  it('treats free accounts without weekly quota as still selectable', () => {
+    const accounts = [createAccount('free-a', { email: 'free@example.com' })]
+    const usageByAccountId = {
+      'free-a': createUsage({
+        planType: 'free',
+        primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: null },
+        secondary: null
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('free-a')
   })
 
   it('resolves menu bar accounts from configured ids before falling back', () => {

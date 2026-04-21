@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { AccountRateLimits, AccountSummary, AppSnapshot } from '../../../shared/codex'
+  import { isLocalMockAccount, remainingPercent, supportsWeeklyQuota } from '../../../shared/codex'
   import {
     accountEmail,
     planLabel,
@@ -7,7 +8,6 @@
     progressWidth,
     type LocalizedCopy
   } from './app-view'
-  import { remainingPercent } from '../../../shared/codex'
 
   export let brandMark: string
   export let snapshot: AppSnapshot
@@ -39,7 +39,13 @@
       </div>
     </div>
     <div class="flex flex-none items-center gap-2">
-      <button class={compactGhostButton} on:click={openCodex}>{copy.openCodex}</button>
+      <button
+        class={compactGhostButton}
+        on:click={openCodex}
+        disabled={isLocalMockAccount(snapshot.currentSession)}
+      >
+        {copy.openCodex}
+      </button>
       <button class={compactGhostButton} on:click={openMainPanel}>{copy.openMainPanel}</button>
     </div>
   </div>
@@ -90,24 +96,26 @@
               </span>
             </div>
 
-            <div class="flex items-center gap-2">
-              <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
-                {copy.weeklyQuota}
-              </span>
-              <div
-                class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
-              >
+            {#if !usageByAccountId[account.id] || supportsWeeklyQuota(usageByAccountId[account.id])}
+              <div class="flex items-center gap-2">
+                <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
+                  {copy.weeklyQuota}
+                </span>
                 <div
-                  class="theme-progress-fill h-full rounded-full bg-black/70"
-                  style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
-                ></div>
+                  class="theme-progress-track h-1.5 flex-1 overflow-hidden rounded-full bg-black/8"
+                >
+                  <div
+                    class="theme-progress-fill h-full rounded-full bg-black/70"
+                    style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
+                  ></div>
+                </div>
+                <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
+                  {usageByAccountId[account.id]?.secondary
+                    ? `${remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%`
+                    : '--'}
+                </span>
               </div>
-              <span class="w-9 text-right text-[11px] font-medium text-muted-strong">
-                {usageByAccountId[account.id]?.secondary
-                  ? `${remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%`
-                  : '--'}
-              </span>
-            </div>
+            {/if}
           </div>
         </article>
       {/each}

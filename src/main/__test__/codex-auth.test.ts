@@ -19,11 +19,28 @@ function createPlatform(): CodexPlatformAdapter {
   }
 }
 
-function createAuthPayload(accountId: string): CodexAuthPayload {
+function createJwt(payload: Record<string, unknown>): string {
+  const encode = (value: Record<string, unknown>): string =>
+    Buffer.from(JSON.stringify(value)).toString('base64url')
+
+  return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.sig`
+}
+
+function createAuthPayload(
+  accountId: string,
+  identity: { email?: string; sub?: string } = {}
+): CodexAuthPayload {
   return {
     auth_mode: 'chatgpt',
     tokens: {
       account_id: accountId,
+      id_token:
+        identity.email || identity.sub
+          ? createJwt({
+              email: identity.email,
+              sub: identity.sub
+            })
+          : undefined,
       refresh_token: `refresh-${accountId}`
     }
   }
@@ -88,6 +105,29 @@ describe('CodexAccountStore', () => {
     const snapshot = await store.getSnapshot(false)
     expect(snapshot.tags).toEqual([])
     expect(snapshot.accounts[0]?.tagIds).toEqual([])
+  })
+
+  it('migrates wake schedules when refreshed auth changes account identity', async () => {
+    const store = await createStore()
+    const account = await store.importAuthPayload(
+      createAuthPayload('acct-a', { email: 'a@example.com' })
+    )
+
+    await store.updateAccountWakeSchedule(account.id, {
+      enabled: true,
+      times: ['09:00'],
+      model: 'gpt-5.4',
+      prompt: 'ping'
+    })
+
+    const refreshed = await store.importAuthPayload(
+      createAuthPayload('acct-a', { email: 'a@example.com', sub: 'user-a' })
+    )
+    const snapshot = await store.getSnapshot(false)
+
+    expect(refreshed.id).toBe('user-a:acct-a')
+    expect(snapshot.wakeSchedulesByAccountId[refreshed.id]?.times).toEqual(['09:00'])
+    expect(snapshot.wakeSchedulesByAccountId[account.id]).toBeUndefined()
   })
 
   it('rejects legacy safeStorage accounts with a re-import hint', async () => {

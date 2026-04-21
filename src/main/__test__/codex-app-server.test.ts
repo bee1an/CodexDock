@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { readAccountRateLimits } from '../codex-app-server'
+import { readAccountRateLimits, wakeAccountRateLimits } from '../codex-app-server'
 
 describe('readAccountRateLimits', () => {
   const originalBaseUrl = process.env['ILOVECODEX_CHATGPT_BASE_URL']
@@ -185,6 +185,186 @@ describe('readAccountRateLimits', () => {
     ).rejects.toMatchObject({
       name: 'AccountRateLimitLookupError',
       message: 'deactivated_workspace'
+    })
+  })
+})
+
+describe('wakeAccountRateLimits', () => {
+  const originalBaseUrl = process.env['ILOVECODEX_CHATGPT_BASE_URL']
+
+  afterEach(() => {
+    if (originalBaseUrl == null) {
+      delete process.env['ILOVECODEX_CHATGPT_BASE_URL']
+      return
+    }
+
+    process.env['ILOVECODEX_CHATGPT_BASE_URL'] = originalBaseUrl
+  })
+
+  it('posts a minimal codex response request to the normalized responses endpoint', async () => {
+    process.env['ILOVECODEX_CHATGPT_BASE_URL'] = 'https://chatgpt.com'
+
+    let requestedUrl = ''
+    let requestedBody = ''
+    await expect(
+      wakeAccountRateLimits(
+        {
+          tokens: {
+            access_token: 'token',
+            account_id: 'acct_123'
+          }
+        },
+        {
+          fetch: async (input, init) => {
+            requestedUrl = input
+            requestedBody = String(init?.body ?? '')
+            expect(init?.method).toBe('POST')
+            expect(init?.headers).toMatchObject({
+              authorization: 'Bearer token',
+              'chatgpt-account-id': 'acct_123',
+              'user-agent': 'ilovecodex',
+              originator: 'codex_cli_rs',
+              'content-type': 'application/json'
+            })
+
+            return new Response('{}', {
+              status: 200,
+              headers: { 'content-type': 'text/event-stream' }
+            })
+          }
+        }
+      )
+    ).resolves.toMatchObject({
+      status: 200,
+      accepted: true,
+      model: 'gpt-5.4',
+      prompt: 'ping',
+      body: '{}'
+    })
+
+    expect(requestedUrl).toBe('https://chatgpt.com/backend-api/codex/responses')
+    expect(JSON.parse(requestedBody)).toMatchObject({
+      model: 'gpt-5.4',
+      instructions: 'Start or refresh this Codex session timer. Reply briefly.',
+      store: false,
+      stream: true
+    })
+  })
+
+  it('uses the provided wake model and prompt when specified', async () => {
+    let requestedBody = ''
+
+    await expect(
+      wakeAccountRateLimits(
+        {
+          tokens: {
+            access_token: 'token',
+            account_id: 'acct_123'
+          }
+        },
+        {
+          fetch: async (_input, init) => {
+            requestedBody = String(init?.body ?? '')
+
+            return new Response('{}', {
+              status: 200,
+              headers: { 'content-type': 'text/event-stream' }
+            })
+          }
+        },
+        {
+          model: 'gpt-4.1-mini',
+          prompt: 'wake me up'
+        }
+      )
+    ).resolves.toMatchObject({
+      status: 200,
+      accepted: true,
+      model: 'gpt-4.1-mini',
+      prompt: 'wake me up'
+    })
+
+    expect(JSON.parse(requestedBody)).toMatchObject({
+      model: 'gpt-4.1-mini',
+      input: [
+        {
+          role: 'user',
+          content: [{ type: 'input_text', text: 'wake me up' }]
+        }
+      ]
+    })
+  })
+
+  it('accepts 429 wake-up responses without throwing', async () => {
+    await expect(
+      wakeAccountRateLimits(
+        {
+          tokens: {
+            access_token: 'token',
+            account_id: 'acct_123'
+          }
+        },
+        {
+          fetch: async () =>
+            new Response(
+              JSON.stringify({
+                error: {
+                  code: 'rate_limit_exceeded'
+                }
+              }),
+              {
+                status: 429,
+                headers: { 'content-type': 'text/event-stream' }
+              }
+            )
+        }
+      )
+    ).resolves.toMatchObject({
+      status: 429,
+      accepted: true
+    })
+  })
+
+  it('summarizes successful sse wake responses into a short body', async () => {
+    await expect(
+      wakeAccountRateLimits(
+        {
+          tokens: {
+            access_token: 'token',
+            account_id: 'acct_123'
+          }
+        },
+        {
+          fetch: async () =>
+            new Response(
+              [
+                'event: response.created',
+                'data: {"type":"response.created","response":{"status":"in_progress"}}',
+                '',
+                'event: response.output_text.delta',
+                'data: {"type":"response.output_text.delta","delta":"Hello"}',
+                '',
+                'event: response.output_text.delta',
+                'data: {"type":"response.output_text.delta","delta":"!"}',
+                '',
+                'event: response.output_text.done',
+                'data: {"type":"response.output_text.done","text":"Hello!"}',
+                '',
+                'event: response.completed',
+                'data: {"type":"response.completed","response":{"status":"completed","usage":{"total_tokens":21}}}',
+                ''
+              ].join('\n'),
+              {
+                status: 200,
+                headers: { 'content-type': 'text/event-stream' }
+              }
+            )
+        }
+      )
+    ).resolves.toMatchObject({
+      status: 200,
+      accepted: true,
+      body: 'Hello!\nstatus: completed\ntokens: 21'
     })
   })
 })

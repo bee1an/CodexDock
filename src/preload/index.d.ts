@@ -1,6 +1,8 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AccountRateLimits,
+  AccountWakeSchedule,
+  AccountTransferFormat,
   AppMeta,
   AppSettings,
   AppSnapshot,
@@ -11,6 +13,9 @@ import type {
   LoginEvent,
   LoginMethod,
   PortOccupant,
+  UpdateAccountWakeScheduleInput,
+  WakeAccountRateLimitsInput,
+  WakeAccountRateLimitsResult,
   UpdateCustomProviderInput
 } from '../shared/codex'
 
@@ -23,14 +28,23 @@ interface CodexDesktopApi {
   openCodex: () => Promise<AppSnapshot>
   importCurrentAccount: () => Promise<AppSnapshot>
   importAccountsFromFile: () => Promise<AppSnapshot>
-  exportAccountsToFile: () => Promise<AppSnapshot>
-  exportSelectedAccountsToFile: (accountIds: string[]) => Promise<AppSnapshot>
+  exportAccountsToFile: (format?: AccountTransferFormat) => Promise<AppSnapshot>
+  exportSelectedAccountsToFile: (
+    accountIds: string[],
+    format?: AccountTransferFormat
+  ) => Promise<AppSnapshot>
   activateAccount: (accountId: string) => Promise<AppSnapshot>
   activateBestAccount: () => Promise<AppSnapshot>
   reorderAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   removeAccount: (accountId: string) => Promise<AppSnapshot>
   removeAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   updateAccountTags: (accountId: string, tagIds: string[]) => Promise<AppSnapshot>
+  getAccountWakeSchedule: (accountId: string) => Promise<AccountWakeSchedule | null>
+  updateAccountWakeSchedule: (
+    accountId: string,
+    input: UpdateAccountWakeScheduleInput
+  ) => Promise<AppSnapshot>
+  deleteAccountWakeSchedule: (accountId: string) => Promise<AppSnapshot>
   createTag: (name: string) => Promise<AppSnapshot>
   updateTag: (tagId: string, name: string) => Promise<AppSnapshot>
   deleteTag: (tagId: string) => Promise<AppSnapshot>
@@ -44,6 +58,10 @@ interface CodexDesktopApi {
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
   openAccountInIsolatedCodex: (accountId: string) => Promise<AppSnapshot>
   readAccountRateLimits: (accountId: string) => Promise<AccountRateLimits>
+  wakeAccountRateLimits: (
+    accountId: string,
+    input?: WakeAccountRateLimitsInput
+  ) => Promise<WakeAccountRateLimitsResult>
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>
   installUpdate: () => Promise<void>

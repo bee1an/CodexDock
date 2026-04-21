@@ -75,10 +75,10 @@ export class CodexInstanceStore {
   private readonly instanceRootDir: string
   readonly defaultCodexHome: string
 
-  constructor(userDataPath: string) {
+  constructor(userDataPath: string, defaultCodexHome = join(homedir(), '.codex')) {
     this.stateFile = join(userDataPath, 'codex-instances.json')
     this.instanceRootDir = join(userDataPath, 'codex-instance-homes')
-    this.defaultCodexHome = join(homedir(), '.codex')
+    this.defaultCodexHome = defaultCodexHome
   }
 
   getDefaults(): { rootDir: string; defaultCodexHome: string } {
@@ -109,7 +109,8 @@ export class CodexInstanceStore {
     }
 
     const codexHome = resolve(
-      params.codexHome?.trim() || join(this.instanceRootDir, `${slugifyName(name)}-${randomUUID().slice(0, 8)}`)
+      params.codexHome?.trim() ||
+        join(this.instanceRootDir, `${slugifyName(name)}-${randomUUID().slice(0, 8)}`)
     )
 
     this.assertUnique(state.instances, name, codexHome)
@@ -200,10 +201,7 @@ export class CodexInstanceStore {
     return this.setInstancePid(instanceId, null)
   }
 
-  async setInstancePid(
-    instanceId: string,
-    pid: number | null
-  ): Promise<PersistedCodexInstance> {
+  async setInstancePid(instanceId: string, pid: number | null): Promise<PersistedCodexInstance> {
     const state = await this.readState()
     const instance = state.instances.find((item) => item.id === instanceId)
     if (!instance) {
@@ -261,8 +259,9 @@ export class CodexInstanceStore {
     }
 
     return (
-      (await this.readState()).instances.find((item) => item.bindAccountId === normalizedAccountId) ??
-      null
+      (await this.readState()).instances.find(
+        (item) => item.bindAccountId === normalizedAccountId
+      ) ?? null
     )
   }
 
@@ -364,7 +363,9 @@ export class CodexInstanceStore {
         instances: (parsed.instances ?? []).map((instance) => ({
           ...instance,
           name: normalizeName(instance.name ?? ''),
-          codexHome: resolve(instance.codexHome ?? join(this.instanceRootDir, basename(instance.id ?? 'instance')))
+          codexHome: resolve(
+            instance.codexHome ?? join(this.instanceRootDir, basename(instance.id ?? 'instance'))
+          )
         }))
       }
     } catch {

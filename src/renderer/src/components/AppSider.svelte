@@ -13,6 +13,7 @@
     themeTitle,
     type LocalizedCopy
   } from './app-view'
+  import FloatingSelect from './FloatingSelect.svelte'
 
   const compactLanguageOptions: Array<{ value: AppLanguage; label: string }> = [
     { value: 'zh-CN', label: '中' },
@@ -72,7 +73,7 @@
       aria-label={copy.importCurrent}
       title={copy.importCurrent}
     >
-      <span class="i-lucide-plus h-4.5 w-4.5"></span>
+      <span class="i-lucide-monitor-down h-4.5 w-4.5"></span>
     </button>
     <button
       class={`${iconToolbarButton} theme-sider-tool-button`}
@@ -139,23 +140,17 @@
     class="theme-sider-group theme-sider-utility grid gap-1.5 rounded-xl border border-black/6 bg-black/[0.02] p-1"
   >
     <div class="theme-sider-language relative">
-      <span
-        class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-languages"
-      ></span>
-      <select
-        class="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-black/8 bg-transparent py-0 pl-6 pr-5 text-[12px] text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-        aria-label={copy.switchLanguage}
+      <FloatingSelect
+        options={compactLanguageOptions}
         value={language}
-        on:change={(event) =>
-          updateLanguage((event.currentTarget as HTMLSelectElement).value as AppLanguage)}
-      >
-        {#each compactLanguageOptions as option (option.value)}
-          <option value={option.value}>{option.label}</option>
-        {/each}
-      </select>
-      <span
-        class="pointer-events-none absolute right-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-chevron-down"
-      ></span>
+        ariaLabel={copy.switchLanguage}
+        buttonClass="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-black/8 bg-transparent px-0 py-0 text-[11px] font-semibold text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+        menuClass="theme-tag-picker-surface z-[999] rounded-[1rem] p-1.5 backdrop-blur-xl"
+        optionClass="theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+        activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
+        inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+        on:change={(event) => updateLanguage(event.detail as AppLanguage)}
+      />
     </div>
 
     <div class="grid grid-cols-1 gap-1.5">
@@ -195,9 +190,12 @@
 
   .theme-sider-tool-button {
     width: 100%;
-    min-height: 2.35rem;
-    border-radius: 0.65rem;
-    transition: background-color 140ms ease, transform 140ms ease;
+    height: 2.25rem;
+    border-radius: 0.7rem;
+    transition:
+      background-color 140ms ease,
+      transform 140ms ease,
+      scale 140ms ease;
   }
 
   .theme-sider-language-select,
@@ -207,19 +205,29 @@
 
   .theme-sider-language-select {
     min-width: 0;
-    border-radius: 0.65rem;
+    border-radius: 0.75rem;
   }
 
   .theme-sider-utility-button {
     width: 100%;
-    min-height: 2.15rem;
-    border-radius: 0.65rem;
-    transition: background-color 140ms ease, transform 140ms ease;
+    height: 2.25rem;
+    border-radius: 0.7rem;
+    transition:
+      background-color 140ms ease,
+      transform 140ms ease,
+      scale 140ms ease;
   }
 
   .theme-sider-tool-button:hover:not(:disabled),
   .theme-sider-utility-button:hover:not(:disabled) {
     transform: translateY(-1px);
+    scale: 1.02;
+  }
+
+  .theme-sider-tool-button:active:not(:disabled),
+  .theme-sider-utility-button:active:not(:disabled) {
+    transform: translateY(0);
+    scale: 0.96;
   }
 
   .theme-sider-tool-button:hover:not(:disabled),
