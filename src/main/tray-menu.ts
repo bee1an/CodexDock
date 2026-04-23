@@ -5,7 +5,8 @@ import {
   type AccountSummary,
   type AppLanguage,
   type AppSnapshot,
-  type AppUpdateState
+  type AppUpdateState,
+  type TokenCostSummary
 } from '../shared/codex'
 
 function accountUsageLabel(
@@ -68,6 +69,105 @@ export function buildTrayUsageMenuItems(
       }
     }
   })
+}
+
+function formatTokenCount(value: number): string {
+  return new Intl.NumberFormat('en-US', {
+    notation: value >= 1_000_000 ? 'compact' : 'standard',
+    maximumFractionDigits: 1
+  }).format(value)
+}
+
+function formatCostUSD(value: number | null): string {
+  if (value === null) {
+    return '--'
+  }
+
+  if (value > 0 && value < 0.0001) {
+    return `$${value.toExponential(1)}`
+  }
+
+  return `$${value.toFixed(4)}`
+}
+
+function resolveTrayTokenCostSummary(snapshot: AppSnapshot): {
+  summary: TokenCostSummary | null
+  errors: string[]
+  fallbackToDefault: boolean
+} {
+  const summary = snapshot.runningTokenCostSummary ?? null
+  const targetInstanceIds = snapshot.runningTokenCostInstanceIds
+  const errors = targetInstanceIds
+    .map((instanceId) => snapshot.tokenCostErrorByInstanceId[instanceId])
+    .filter((message): message is string => Boolean(message))
+
+  return {
+    summary,
+    errors,
+    fallbackToDefault: false
+  }
+}
+
+export function buildTrayTokenCostMenuItems(
+  snapshot: AppSnapshot,
+  options: {
+    title: string
+    today: string
+    last30Days: string
+    noData: string
+    fallbackToDefault: string
+  }
+): MenuItemConstructorOptions[] {
+  const { summary, errors, fallbackToDefault } = resolveTrayTokenCostSummary(snapshot)
+  const items: MenuItemConstructorOptions[] = [
+    {
+      label: options.title,
+      enabled: false
+    }
+  ]
+
+  if (fallbackToDefault) {
+    items.push({
+      label: options.fallbackToDefault,
+      enabled: false
+    })
+  }
+
+  if (!summary) {
+    items.push({
+      label: errors[0] ?? options.noData,
+      enabled: false
+    })
+    return items
+  }
+
+  if (summary.sessionTokens === 0 && summary.last30DaysTokens === 0 && errors.length === 0) {
+    items.push({
+      label: options.noData,
+      enabled: false
+    })
+    return items
+  }
+
+  items.push(
+    {
+      label: `${options.today} · ${formatTokenCount(summary.sessionTokens)} tokens · ${formatCostUSD(summary.sessionCostUSD)}`,
+      enabled: false
+    },
+    {
+      label: `${options.last30Days} · ${formatTokenCount(summary.last30DaysTokens)} tokens · ${formatCostUSD(summary.last30DaysCostUSD)}`,
+      enabled: false
+    }
+  )
+
+  if (errors[0]) {
+    items.push({
+      label: errors[0],
+      enabled: false
+    })
+  }
+
+  return items
 }
 
 export function buildTrayUpdateMenuItem(

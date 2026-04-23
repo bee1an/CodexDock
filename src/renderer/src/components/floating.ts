@@ -6,6 +6,7 @@ export interface FloatingAnchorOptions {
   minWidth?: number
   matchAnchorWidth?: boolean
   viewportPadding?: number
+  placement?: 'bottom' | 'right'
 }
 
 export function portal(node: HTMLElement): { destroy: () => void } {
@@ -82,6 +83,26 @@ export function floatingAnchor(
     const measuredWidth = Math.max(node.offsetWidth, minWidth)
     const measuredHeight = node.offsetHeight
     const maxLeft = Math.max(viewportPadding, viewportWidth - measuredWidth - viewportPadding)
+    const placement = currentOptions.placement ?? 'bottom'
+
+    if (placement === 'right') {
+      const rightLeft = anchorRect.right + gap
+      const leftLeft = anchorRect.left - measuredWidth - gap
+      const fitsRight = rightLeft + measuredWidth <= viewportWidth - viewportPadding
+      const fitsLeft = leftLeft >= viewportPadding
+      const left = fitsRight
+        ? rightLeft
+        : fitsLeft
+          ? leftLeft
+          : Math.min(Math.max(anchorRect.left, viewportPadding), maxLeft)
+      const maxTop = Math.max(viewportPadding, viewportHeight - measuredHeight - viewportPadding)
+      const top = Math.min(Math.max(anchorRect.top, viewportPadding), maxTop)
+
+      node.style.left = `${Math.round(left)}px`
+      node.style.top = `${Math.round(top)}px`
+      return
+    }
+
     const left = Math.min(Math.max(anchorRect.left, viewportPadding), maxLeft)
 
     const belowTop = anchorRect.bottom + gap

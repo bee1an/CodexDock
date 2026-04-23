@@ -71,7 +71,11 @@ export class CodexAccountStore {
         settings: state.settings,
         usageByAccountId: state.usageByAccountId,
         usageErrorByAccountId: state.usageErrorByAccountId,
-        wakeSchedulesByAccountId: state.wakeSchedulesByAccountId
+        wakeSchedulesByAccountId: state.wakeSchedulesByAccountId,
+        tokenCostByInstanceId: {},
+        tokenCostErrorByInstanceId: {},
+        runningTokenCostSummary: null,
+        runningTokenCostInstanceIds: []
       }
     })
   }
@@ -347,6 +351,67 @@ export class CodexAccountStore {
       const auth = await this.readCodexAuthFile()
       await this.upsertAccount(auth, true)
     })
+  }
+
+  async importAuthFile(authFile: string, makeActive = true): Promise<void> {
+    await this.runStateTask(async () => {
+      const raw = await fs.readFile(authFile, 'utf8')
+      const auth = JSON.parse(raw) as CodexAuthPayload
+      await this.upsertAccount(auth, makeActive)
+    })
+  }
+
+  async importAccountsFromStateFile(stateFile: string): Promise<number> {
+    let importedCount = 0
+    const raw = await fs.readFile(stateFile, 'utf8')
+    const externalState = normalizePersistedState(
+      JSON.parse(raw) as PersistedState | LegacyPersistedState
+    )
+
+    for (const account of externalState.accounts) {
+      let imported: AccountSummary
+
+      try {
+        const auth = JSON.parse(this.unprotect(account.authPayload)) as CodexAuthPayload
+        imported = await this.importAuthPayload(auth)
+      } catch {
+        // Skip accounts that cannot be read from another profile, for example legacy safeStorage rows.
+        continue
+      }
+
+      try {
+        const usage = externalState.usageByAccountId[account.id]
+        if (usage) {
+          await this.saveAccountRateLimits(imported.id, usage)
+        }
+      } catch {
+        // Keep importing account metadata even if the cached usage snapshot is stale or invalid.
+      }
+
+      try {
+        const wakeSchedule = externalState.wakeSchedulesByAccountId[account.id]
+        if (wakeSchedule) {
+          await this.updateAccountWakeSchedule(imported.id, {
+            enabled: wakeSchedule.enabled,
+            times: wakeSchedule.times,
+            model: wakeSchedule.model,
+            prompt: wakeSchedule.prompt
+          })
+          await this.patchAccountWakeSchedule(imported.id, {
+            lastTriggeredAt: wakeSchedule.lastTriggeredAt,
+            lastSucceededAt: wakeSchedule.lastSucceededAt,
+            lastStatus: wakeSchedule.lastStatus,
+            lastMessage: wakeSchedule.lastMessage
+          })
+        }
+      } catch {
+        // Keep importing account metadata even if the wake schedule cannot be copied.
+      }
+
+      importedCount += 1
+    }
+
+    return importedCount
   }
 
   async importAuthPayload(auth: CodexAuthPayload): Promise<AccountSummary> {

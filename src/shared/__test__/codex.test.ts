@@ -1,8 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  filterLocalMockAppSnapshot,
   formatRelativeReset,
   isLocalMockAccount,
+  isLocalMockProvider,
   remainingPercent,
   resolveBestAccount,
   shouldAutoPollUsage,
@@ -10,6 +12,7 @@ import {
   usagePollDueInMs,
   usagePollingIntervalMs,
   type AccountRateLimits,
+  type AppSnapshot,
   type AccountSummary
 } from '../codex'
 
@@ -45,6 +48,39 @@ function createUsage(overrides: Partial<AccountRateLimits> = {}): AccountRateLim
   }
 }
 
+function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
+  return {
+    accounts: [],
+    providers: [],
+    tags: [],
+    codexInstances: [],
+    codexInstanceDefaults: {
+      rootDir: '',
+      defaultCodexHome: ''
+    },
+    activeAccountId: undefined,
+    currentSession: null,
+    loginInProgress: false,
+    settings: {
+      usagePollingMinutes: 15,
+      statusBarAccountIds: [],
+      language: 'zh-CN',
+      theme: 'light',
+      checkForUpdatesOnStartup: true,
+      codexDesktopExecutablePath: '',
+      showLocalMockData: true
+    },
+    usageByAccountId: {},
+    usageErrorByAccountId: {},
+    wakeSchedulesByAccountId: {},
+    tokenCostByInstanceId: {},
+    tokenCostErrorByInstanceId: {},
+    runningTokenCostSummary: null,
+    runningTokenCostInstanceIds: [],
+    ...overrides
+  }
+}
+
 describe('codex shared helpers', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -67,6 +103,160 @@ describe('codex shared helpers', () => {
     expect(isLocalMockAccount({ email: 'local-plus-1@mock.local' })).toBe(true)
     expect(isLocalMockAccount({ accountId: 'acct-local-enterprise' })).toBe(true)
     expect(isLocalMockAccount({ email: 'real@example.com', accountId: 'acct-real' })).toBe(false)
+  })
+
+  it('detects seeded local mock providers', () => {
+    expect(isLocalMockProvider({ baseUrl: 'https://mock-provider.local/v1' })).toBe(true)
+    expect(isLocalMockProvider({ baseUrl: 'https://api.openai.com/v1' })).toBe(false)
+  })
+
+  it('filters local mock content from snapshots when the toggle is disabled', () => {
+    const realAccount = createAccount('real-a', { email: 'real@example.com' })
+    const mockAccount = createAccount('mock-a', {
+      email: 'local-plus-1@mock.local',
+      accountId: 'acct-local-plus-1'
+    })
+
+    const filtered = filterLocalMockAppSnapshot(
+      createSnapshot({
+        accounts: [mockAccount, realAccount],
+        providers: [
+          {
+            id: 'mock-provider',
+            name: 'Local Mock Provider',
+            baseUrl: 'https://mock-provider.local/v1',
+            model: 'gpt-5.4',
+            fastMode: false,
+            createdAt: '2026-03-08T00:00:00.000Z',
+            updatedAt: '2026-03-08T00:00:00.000Z'
+          }
+        ],
+        activeAccountId: mockAccount.id,
+        currentSession: {
+          email: mockAccount.email,
+          accountId: mockAccount.accountId
+        },
+        settings: {
+          usagePollingMinutes: 15,
+          statusBarAccountIds: [mockAccount.id, realAccount.id],
+          language: 'zh-CN',
+          theme: 'light',
+          checkForUpdatesOnStartup: true,
+          codexDesktopExecutablePath: '',
+          showLocalMockData: false
+        },
+        usageByAccountId: {
+          [mockAccount.id]: createUsage(),
+          [realAccount.id]: createUsage()
+        },
+        usageErrorByAccountId: {
+          [mockAccount.id]: 'mock error',
+          [realAccount.id]: 'real error'
+        },
+        wakeSchedulesByAccountId: {
+          [mockAccount.id]: {
+            enabled: true,
+            times: ['09:00'],
+            model: 'gpt-5.4',
+            prompt: 'ping'
+          },
+          [realAccount.id]: {
+            enabled: true,
+            times: ['10:00'],
+            model: 'gpt-5.4',
+            prompt: 'ping'
+          }
+        }
+      })
+    )
+
+    expect(filtered.accounts.map((account) => account.id)).toEqual([realAccount.id])
+    expect(filtered.providers).toHaveLength(0)
+    expect(filtered.activeAccountId).toBeUndefined()
+    expect(filtered.currentSession).toBeNull()
+    expect(filtered.settings.statusBarAccountIds).toEqual([realAccount.id])
+    expect(Object.keys(filtered.usageByAccountId)).toEqual([realAccount.id])
+    expect(Object.keys(filtered.usageErrorByAccountId)).toEqual([realAccount.id])
+    expect(Object.keys(filtered.wakeSchedulesByAccountId)).toEqual([realAccount.id])
+  })
+
+  it('filters real content from snapshots when the toggle is enabled', () => {
+    const realAccount = createAccount('real-a', { email: 'real@example.com' })
+    const mockAccount = createAccount('mock-a', {
+      email: 'local-plus-1@mock.local',
+      accountId: 'acct-local-plus-1'
+    })
+
+    const filtered = filterLocalMockAppSnapshot(
+      createSnapshot({
+        accounts: [mockAccount, realAccount],
+        providers: [
+          {
+            id: 'mock-provider',
+            name: 'Local Mock Provider',
+            baseUrl: 'https://mock-provider.local/v1',
+            model: 'gpt-5.4',
+            fastMode: false,
+            createdAt: '2026-03-08T00:00:00.000Z',
+            updatedAt: '2026-03-08T00:00:00.000Z'
+          },
+          {
+            id: 'real-provider',
+            name: 'Real Provider',
+            baseUrl: 'https://api.openai.com/v1',
+            model: 'gpt-5.4',
+            fastMode: false,
+            createdAt: '2026-03-08T00:00:00.000Z',
+            updatedAt: '2026-03-08T00:00:00.000Z'
+          }
+        ],
+        activeAccountId: realAccount.id,
+        currentSession: {
+          email: realAccount.email,
+          accountId: realAccount.accountId
+        },
+        settings: {
+          usagePollingMinutes: 15,
+          statusBarAccountIds: [mockAccount.id, realAccount.id],
+          language: 'zh-CN',
+          theme: 'light',
+          checkForUpdatesOnStartup: true,
+          codexDesktopExecutablePath: '',
+          showLocalMockData: true
+        },
+        usageByAccountId: {
+          [mockAccount.id]: createUsage(),
+          [realAccount.id]: createUsage()
+        },
+        usageErrorByAccountId: {
+          [mockAccount.id]: 'mock error',
+          [realAccount.id]: 'real error'
+        },
+        wakeSchedulesByAccountId: {
+          [mockAccount.id]: {
+            enabled: true,
+            times: ['09:00'],
+            model: 'gpt-5.4',
+            prompt: 'ping'
+          },
+          [realAccount.id]: {
+            enabled: true,
+            times: ['10:00'],
+            model: 'gpt-5.4',
+            prompt: 'ping'
+          }
+        }
+      })
+    )
+
+    expect(filtered.accounts.map((account) => account.id)).toEqual([mockAccount.id])
+    expect(filtered.providers.map((provider) => provider.id)).toEqual(['mock-provider'])
+    expect(filtered.activeAccountId).toBeUndefined()
+    expect(filtered.currentSession).toBeNull()
+    expect(filtered.settings.statusBarAccountIds).toEqual([mockAccount.id])
+    expect(Object.keys(filtered.usageByAccountId)).toEqual([mockAccount.id])
+    expect(Object.keys(filtered.usageErrorByAccountId)).toEqual([mockAccount.id])
+    expect(Object.keys(filtered.wakeSchedulesByAccountId)).toEqual([mockAccount.id])
   })
 
   it('computes usage polling windows from fetched timestamps', () => {
@@ -164,7 +354,20 @@ describe('codex shared helpers', () => {
     expect(resolveBestAccount(accounts, usageByAccountId)).toBeNull()
   })
 
-  it('treats free accounts without weekly quota as still selectable', () => {
+  it('treats free accounts as weekly-only quota accounts', () => {
+    const accounts = [createAccount('free-a', { email: 'free@example.com' })]
+    const usageByAccountId = {
+      'free-a': createUsage({
+        planType: 'free',
+        primary: null,
+        secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: null }
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('free-a')
+  })
+
+  it('does not select free accounts without weekly quota', () => {
     const accounts = [createAccount('free-a', { email: 'free@example.com' })]
     const usageByAccountId = {
       'free-a': createUsage({
@@ -174,7 +377,7 @@ describe('codex shared helpers', () => {
       })
     }
 
-    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('free-a')
+    expect(resolveBestAccount(accounts, usageByAccountId)).toBeNull()
   })
 
   it('resolves menu bar accounts from configured ids before falling back', () => {

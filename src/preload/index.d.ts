@@ -13,6 +13,8 @@ import type {
   LoginEvent,
   LoginMethod,
   PortOccupant,
+  TokenCostDetail,
+  TokenCostReadOptions,
   UpdateAccountWakeScheduleInput,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
@@ -62,6 +64,7 @@ interface CodexDesktopApi {
     accountId: string,
     input?: WakeAccountRateLimitsInput
   ) => Promise<WakeAccountRateLimitsResult>
+  readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>
   installUpdate: () => Promise<void>

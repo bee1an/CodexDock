@@ -2,6 +2,30 @@ import { isLocalMockAccount, type AccountSummary } from '../shared/codex'
 import type { TemplateAccountRecord, TemplateFileRecord } from './codex-account-template'
 import type { CodexServices } from './codex-services'
 
+const localMockTagNames = ['主力', '观察中', '备用', '团队'] as const
+const localMockProviderInputs = [
+  {
+    name: 'Local Mock Provider',
+    baseUrl: 'https://mock-provider.local/v1',
+    apiKey: 'mock-api-key',
+    model: 'gpt-5.4',
+    fastMode: false
+  },
+  {
+    name: 'Local Fast Provider',
+    baseUrl: 'https://fast-mock-provider.local/v1',
+    apiKey: 'mock-fast-api-key',
+    model: 'gpt-5.4-mini',
+    fastMode: true
+  },
+  {
+    baseUrl: 'https://fallback-provider.local/v1',
+    apiKey: 'mock-fallback-api-key',
+    model: 'gpt-4.1-mini',
+    fastMode: true
+  }
+] as const
+
 function encodeJwtSegment(payload: Record<string, unknown>): string {
   return Buffer.from(JSON.stringify(payload)).toString('base64url')
 }
@@ -27,8 +51,8 @@ function createTemplateAccount(options: {
   email: string
   accountId: string
   planType: string
-  primaryUsedPercent: number
-  primaryResetHours: number
+  primaryUsedPercent?: number
+  primaryResetHours?: number
   secondaryUsedPercent?: number
   secondaryResetHours?: number
 }): TemplateAccountRecord {
@@ -73,17 +97,21 @@ function createTemplateAccount(options: {
       token_type: 'Bearer'
     },
     extra: {
-      codex_5h_reset_after_seconds: secondsFromNow(options.primaryResetHours),
-      codex_5h_reset_at: isoFromNow(options.primaryResetHours),
-      codex_5h_used_percent: options.primaryUsedPercent,
-      codex_5h_window_minutes: 5 * 60,
-      codex_primary_reset_after_seconds: secondsFromNow(options.primaryResetHours),
-      codex_primary_reset_at: isoFromNow(options.primaryResetHours),
-      codex_primary_used_percent: options.primaryUsedPercent,
-      codex_primary_window_minutes: 5 * 60,
       codex_usage_updated_at: new Date().toISOString(),
       email: options.email,
       privacy_mode: 'training_off',
+      ...(options.primaryUsedPercent != null && options.primaryResetHours != null
+        ? {
+            codex_5h_reset_after_seconds: secondsFromNow(options.primaryResetHours),
+            codex_5h_reset_at: isoFromNow(options.primaryResetHours),
+            codex_5h_used_percent: options.primaryUsedPercent,
+            codex_5h_window_minutes: 5 * 60,
+            codex_primary_reset_after_seconds: secondsFromNow(options.primaryResetHours),
+            codex_primary_reset_at: isoFromNow(options.primaryResetHours),
+            codex_primary_used_percent: options.primaryUsedPercent,
+            codex_primary_window_minutes: 5 * 60
+          }
+        : {}),
       ...(options.secondaryUsedPercent != null && options.secondaryResetHours != null
         ? {
             codex_7d_reset_after_seconds: secondsFromNow(options.secondaryResetHours),
@@ -94,8 +122,12 @@ function createTemplateAccount(options: {
             codex_secondary_reset_at: isoFromNow(options.secondaryResetHours),
             codex_secondary_used_percent: options.secondaryUsedPercent,
             codex_secondary_window_minutes: 7 * 24 * 60,
-            codex_primary_over_secondary_percent:
-              options.primaryUsedPercent - options.secondaryUsedPercent
+            ...(options.primaryUsedPercent != null
+              ? {
+                  codex_primary_over_secondary_percent:
+                    options.primaryUsedPercent - options.secondaryUsedPercent
+                }
+              : {})
           }
         : {})
     },
@@ -104,6 +136,29 @@ function createTemplateAccount(options: {
     rate_multiplier: 1,
     auto_pause_on_expired: false
   }
+}
+
+function providerKey(value: string): string {
+  try {
+    const url = new URL(value)
+    url.pathname = url.pathname.replace(/\/+$/, '') || '/'
+    return url
+      .toString()
+      .replace(/\/$/, url.pathname === '/' ? '' : '/')
+      .toLowerCase()
+  } catch {
+    return value.trim().replace(/\/+$/, '').toLowerCase()
+  }
+}
+
+function compactTagIds(tagIds: Array<string | undefined>): string[] {
+  return tagIds.filter((tagId): tagId is string => Boolean(tagId))
+}
+
+function isLegacyBusinessMockAccount(account: AccountSummary): boolean {
+  return (
+    account.accountId === 'acct-local-business' || account.email === 'local-business@mock.local'
+  )
 }
 
 function buildLocalMockTemplate(): TemplateFileRecord {
@@ -152,10 +207,10 @@ function buildLocalMockTemplate(): TemplateFileRecord {
         secondaryResetHours: 3 * 24 + 12
       }),
       createTemplateAccount({
-        name: 'Local Business',
-        email: 'local-business@mock.local',
-        accountId: 'acct-local-business',
-        planType: 'business',
+        name: 'Local Team 2',
+        email: 'local-team-2@mock.local',
+        accountId: 'acct-local-team-2',
+        planType: 'team',
         primaryUsedPercent: 57,
         primaryResetHours: 1.8,
         secondaryUsedPercent: 24,
@@ -176,29 +231,49 @@ function buildLocalMockTemplate(): TemplateFileRecord {
         email: 'local-free@mock.local',
         accountId: 'acct-local-free',
         planType: 'free',
-        primaryUsedPercent: 0,
-        primaryResetHours: 2.8
+        secondaryUsedPercent: 62,
+        secondaryResetHours: 6 * 24 + 4
       })
     ]
   }
 }
 
 export async function seedLocalMockData(services: CodexServices): Promise<boolean> {
-  const snapshot = await services.getSnapshot()
-  if (snapshot.accounts.length || snapshot.tags.length || snapshot.providers.length) {
-    return false
-  }
-
-  await services.accounts.importFromTemplate(
-    `${JSON.stringify(buildLocalMockTemplate(), null, 2)}\n`
+  const initialSnapshot = await services.getSnapshot()
+  const template = buildLocalMockTemplate()
+  let changed = template.accounts.some(
+    (templateAccount) =>
+      !initialSnapshot.accounts.some(
+        (account) =>
+          account.accountId === templateAccount.credentials.chatgpt_account_id ||
+          account.email === templateAccount.credentials.email
+      )
   )
 
-  await services.tags.create('主力')
-  await services.tags.create('观察中')
-  await services.tags.create('备用')
-  await services.tags.create('团队')
+  await services.accounts.importFromTemplate(`${JSON.stringify(template, null, 2)}\n`)
 
   let nextSnapshot = await services.getSnapshot()
+  const legacyBusinessMockAccounts = nextSnapshot.accounts.filter(isLegacyBusinessMockAccount)
+  const removedActiveLegacyBusinessMock = legacyBusinessMockAccounts.some(
+    (account) => account.id === initialSnapshot.activeAccountId
+  )
+  for (const account of legacyBusinessMockAccounts) {
+    await services.accounts.remove(account.id)
+    changed = true
+  }
+
+  if (legacyBusinessMockAccounts.length) {
+    nextSnapshot = await services.getSnapshot()
+  }
+
+  for (const tagName of localMockTagNames) {
+    if (!nextSnapshot.tags.some((tag) => tag.name === tagName)) {
+      await services.tags.create(tagName)
+      changed = true
+    }
+  }
+
+  nextSnapshot = await services.getSnapshot()
   const tagsByName = new Map(nextSnapshot.tags.map((tag) => [tag.name, tag.id]))
   const findAccountByEmail = (email: string): AccountSummary => {
     const account = nextSnapshot.accounts.find((item) => item.email === email)
@@ -208,25 +283,27 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     return account
   }
 
-  await services.accounts.updateTags(findAccountByEmail('local-plus-1@mock.local').id, [
-    tagsByName.get('主力') ?? ''
-  ])
-  await services.accounts.updateTags(findAccountByEmail('local-plus-2@mock.local').id, [
-    tagsByName.get('观察中') ?? ''
-  ])
-  await services.accounts.updateTags(findAccountByEmail('local-pro@mock.local').id, [
-    tagsByName.get('备用') ?? ''
-  ])
-  await services.accounts.updateTags(findAccountByEmail('local-team@mock.local').id, [
-    tagsByName.get('团队') ?? ''
-  ])
-  await services.accounts.updateTags(findAccountByEmail('local-business@mock.local').id, [
-    tagsByName.get('主力') ?? '',
-    tagsByName.get('团队') ?? ''
+  await services.accounts.updateTags(
+    findAccountByEmail('local-plus-1@mock.local').id,
+    compactTagIds([tagsByName.get('主力')])
+  )
+  await services.accounts.updateTags(
+    findAccountByEmail('local-plus-2@mock.local').id,
+    compactTagIds([tagsByName.get('观察中')])
+  )
+  await services.accounts.updateTags(
+    findAccountByEmail('local-pro@mock.local').id,
+    compactTagIds([tagsByName.get('备用')])
+  )
+  await services.accounts.updateTags(
+    findAccountByEmail('local-team@mock.local').id,
+    compactTagIds([tagsByName.get('团队')])
+  )
+  await services.accounts.updateTags(findAccountByEmail('local-team-2@mock.local').id, [
+    ...compactTagIds([tagsByName.get('主力'), tagsByName.get('团队')])
   ])
   await services.accounts.updateTags(findAccountByEmail('local-enterprise@mock.local').id, [
-    tagsByName.get('观察中') ?? '',
-    tagsByName.get('团队') ?? ''
+    ...compactTagIds([tagsByName.get('观察中'), tagsByName.get('团队')])
   ])
 
   const lastTriggeredAt = new Date().toISOString()
@@ -263,14 +340,14 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     prompt: 'team sync',
     model: 'gpt-5.4'
   })
-  await services.accounts.updateWakeSchedule(findAccountByEmail('local-business@mock.local').id, {
+  await services.accounts.updateWakeSchedule(findAccountByEmail('local-team-2@mock.local').id, {
     enabled: true,
     times: ['10:45'],
     prompt: 'quota probe',
     model: 'gpt-5.4'
   })
   await services.accounts.updateWakeScheduleRuntime(
-    findAccountByEmail('local-business@mock.local').id,
+    findAccountByEmail('local-team-2@mock.local').id,
     {
       lastTriggeredAt,
       lastStatus: 'idle',
@@ -284,27 +361,18 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     model: 'gpt-5.4-mini'
   })
 
-  await services.providers.create({
-    name: 'Local Mock Provider',
-    baseUrl: 'https://mock-provider.local/v1',
-    apiKey: 'mock-api-key',
-    model: 'gpt-5.4',
-    fastMode: false
-  })
-
-  await services.providers.create({
-    name: 'Local Fast Provider',
-    baseUrl: 'https://fast-mock-provider.local/v1',
-    apiKey: 'mock-fast-api-key',
-    model: 'gpt-5.4-mini',
-    fastMode: true
-  })
-  await services.providers.create({
-    baseUrl: 'https://fallback-provider.local/v1',
-    apiKey: 'mock-fallback-api-key',
-    model: 'gpt-4.1-mini',
-    fastMode: true
-  })
+  nextSnapshot = await services.getSnapshot()
+  const existingProviderKeys = new Set(
+    nextSnapshot.providers.map((provider) => providerKey(provider.baseUrl))
+  )
+  for (const providerInput of localMockProviderInputs) {
+    const key = providerKey(providerInput.baseUrl)
+    if (!existingProviderKeys.has(key)) {
+      await services.providers.create(providerInput)
+      existingProviderKeys.add(key)
+      changed = true
+    }
+  }
 
   nextSnapshot = await services.getSnapshot()
   const defaultAccountId = findAccountByEmail('local-plus-1@mock.local').id
@@ -313,28 +381,42 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     statusBarAccountIds: [
       defaultAccountId,
       findAccountByEmail('local-pro@mock.local').id,
-      findAccountByEmail('local-business@mock.local').id
+      findAccountByEmail('local-team-2@mock.local').id
     ]
   })
 
-  await services.codex.instances.create({
-    name: 'Mock Bound Workspace',
-    bindAccountId: defaultAccountId,
-    extraArgs: '--sandbox workspace-write'
-  })
-  await services.codex.instances.create({
-    name: 'Mock Research Workspace',
-    extraArgs: '--model gpt-5.4-mini'
-  })
+  const existingInstanceNames = new Set(
+    nextSnapshot.codexInstances.map((instance) => instance.name)
+  )
+  if (!existingInstanceNames.has('Mock Bound Workspace')) {
+    await services.codex.instances.create({
+      name: 'Mock Bound Workspace',
+      bindAccountId: defaultAccountId,
+      extraArgs: '--sandbox workspace-write'
+    })
+    changed = true
+  }
+  if (!existingInstanceNames.has('Mock Research Workspace')) {
+    await services.codex.instances.create({
+      name: 'Mock Research Workspace',
+      extraArgs: '--model gpt-5.4-mini'
+    })
+    changed = true
+  }
 
   const defaultAccount = nextSnapshot.accounts.find(
     (account) => account.email === 'local-plus-1@mock.local'
   )
-  if (defaultAccount) {
+  if (
+    ((!initialSnapshot.activeAccountId && !initialSnapshot.accounts.length) ||
+      removedActiveLegacyBusinessMock) &&
+    defaultAccount
+  ) {
     await services.accounts.activate(defaultAccount.id)
+    changed = true
   }
 
-  return true
+  return changed
 }
 
 export async function refreshLocalMockData(services: CodexServices): Promise<{

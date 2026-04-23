@@ -16,12 +16,17 @@ export interface CliFlags {
   help: boolean
 }
 
+export interface CostReadOptions {
+  refresh: boolean
+}
+
 const SETTING_KEYS: CliSettingsKey[] = [
   'usagePollingMinutes',
   'statusBarAccountIds',
   'language',
   'theme',
   'checkForUpdatesOnStartup',
+  'showLocalMockData',
   'codexDesktopExecutablePath'
 ]
 
@@ -133,6 +138,11 @@ export function parseSettingsValue(
     case 'checkForUpdatesOnStartup':
       if (rawValue !== 'true' && rawValue !== 'false') {
         throw new CliError('checkForUpdatesOnStartup must be true or false', EXIT_USAGE)
+      }
+      return rawValue === 'true'
+    case 'showLocalMockData':
+      if (rawValue !== 'true' && rawValue !== 'false') {
+        throw new CliError('showLocalMockData must be true or false', EXIT_USAGE)
       }
       return rawValue === 'true'
     case 'codexDesktopExecutablePath':
@@ -250,6 +260,29 @@ export function parseFileOption(argv: string[]): {
   }
 
   return { filePath, positionals }
+}
+
+export function parseCostOptions(argv: string[]): CostReadOptions {
+  const options: CostReadOptions = {
+    refresh: false
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+
+    if (arg === '--refresh') {
+      options.refresh = true
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    throw new CliError('Usage: ilc cost read [--refresh] [--json]', EXIT_USAGE)
+  }
+
+  return options
 }
 
 export function parseInstanceOptions(argv: string[]): {

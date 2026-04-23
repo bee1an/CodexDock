@@ -54,6 +54,7 @@ export const messages = {
     settings: '设置',
     pollingInterval: '额度轮询',
     autoCheckUpdates: '启动时检查更新',
+    showLocalMockData: '显示本地 Mock 数据',
     codexDesktopExecutablePath: '多开 Codex EXE',
     showCodexDesktopExecutablePath: '手动指定',
     hideCodexDesktopExecutablePath: '收起',
@@ -76,6 +77,25 @@ export const messages = {
     hidden: '未显示',
     accountList: '账号列表',
     accountCount: (count: number) => `${count} 个账号`,
+    tokenStats: '统计',
+    tokenStatsTitle: 'Token / Cost 统计',
+    tokenStatsDescription:
+      '按实例 / CODEX_HOME 扫描本地 Codex sessions 与 archived_sessions 日志，不做账号归因。',
+    tokenStatsReadFailed: '无法读取 token/cost 统计',
+    tokenStatsSelectedTarget: '当前统计目标',
+    tokenStatsDefaultFallback: '无运行实例，回退 default',
+    tokenStatsNoData: '暂无本地 token/cost 数据',
+    runningTokenCostSummary: '全部实例汇总',
+    runningInstanceCount: (count: number) => `${count} 个运行实例`,
+    today: 'Today',
+    last30Days: 'Last 30 days',
+    tokens: 'tokens',
+    cost: 'cost',
+    updatedAt: '更新时间',
+    dailyTrend: '30 天日级趋势',
+    modelBreakdown: '模型 breakdown',
+    refresh: '刷新',
+    refreshing: '刷新中',
     selectedAccountCount: (count: number) => `已选 ${count} 个账号`,
     selectAccount: '选择账号',
     selectAllVisibleAccounts: '全选当前筛选',
@@ -295,6 +315,7 @@ export const messages = {
     settings: 'Settings',
     pollingInterval: 'Usage polling',
     autoCheckUpdates: 'Check updates on startup',
+    showLocalMockData: 'Show local mock data',
     codexDesktopExecutablePath: 'Multi-open Codex EXE',
     showCodexDesktopExecutablePath: 'Manual path',
     hideCodexDesktopExecutablePath: 'Hide',
@@ -318,6 +339,25 @@ export const messages = {
     hidden: 'Hidden',
     accountList: 'Accounts',
     accountCount: (count: number) => `${count} account${count === 1 ? '' : 's'}`,
+    tokenStats: 'Stats',
+    tokenStatsTitle: 'Token / cost stats',
+    tokenStatsDescription:
+      'Scans local Codex sessions and archived_sessions logs by instance / CODEX_HOME without account attribution.',
+    tokenStatsReadFailed: 'Unable to read token/cost stats',
+    tokenStatsSelectedTarget: 'Selected target',
+    tokenStatsDefaultFallback: 'No running instance, falling back to default',
+    tokenStatsNoData: 'No local token/cost data yet',
+    runningTokenCostSummary: 'All instances summary',
+    runningInstanceCount: (count: number) => `${count} running instance${count === 1 ? '' : 's'}`,
+    today: 'Today',
+    last30Days: 'Last 30 days',
+    tokens: 'tokens',
+    cost: 'cost',
+    updatedAt: 'Updated',
+    dailyTrend: '30-day daily trend',
+    modelBreakdown: 'Model breakdown',
+    refresh: 'Refresh',
+    refreshing: 'Refreshing',
     selectedAccountCount: (count: number) => `${count} selected account${count === 1 ? '' : 's'}`,
     selectAccount: 'Select account',
     selectAllVisibleAccounts: 'Select visible',
@@ -541,8 +581,6 @@ export function planLabel(planType?: string | null): string {
       return 'Pro'
     case 'team':
       return 'Team'
-    case 'business':
-      return 'Business'
     case 'enterprise':
       return 'Enterprise'
     default:
@@ -560,8 +598,6 @@ export function planTagClass(planType?: string | null): string {
       return 'theme-plan-pro bg-sky-500/12 text-sky-700'
     case 'team':
       return 'theme-plan-team bg-amber-500/14 text-amber-700'
-    case 'business':
-      return 'theme-plan-business bg-violet-500/14 text-violet-700'
     case 'enterprise':
       return 'theme-plan-enterprise bg-rose-500/14 text-rose-700'
     default:

@@ -64,9 +64,9 @@ export function reveal(node: HTMLElement, options: RevealOptions = {}): DestroyA
       {
         autoAlpha: options.opacity ?? 0,
         x: options.x ?? 0,
-        y: options.y ?? 10,
-        scale: options.scale ?? 0.992,
-        filter: `blur(${options.blur ?? 6}px)`
+        y: options.y ?? 4,
+        scale: options.scale ?? 0.995,
+        filter: `blur(${options.blur ?? 2}px)`
       },
       {
         autoAlpha: 1,
@@ -74,7 +74,7 @@ export function reveal(node: HTMLElement, options: RevealOptions = {}): DestroyA
         y: 0,
         scale: 1,
         filter: 'blur(0px)',
-        duration: options.duration ?? 0.48,
+        duration: options.duration ?? 0.32,
         delay: options.delay ?? 0,
         ease: options.ease ?? 'power2.out',
         clearProps: 'filter,transform,opacity,visibility'
@@ -110,10 +110,10 @@ export function cascadeIn(node: HTMLElement, options: CascadeOptions = {}): Dest
       targets,
       {
         autoAlpha: options.opacity ?? 0,
-        y: options.y ?? 8,
+        y: options.y ?? 4,
         x: options.x ?? 0,
-        scale: options.scale ?? 0.994,
-        filter: `blur(${options.blur ?? 4}px)`
+        scale: options.scale ?? 0.998,
+        filter: `blur(${options.blur ?? 2}px)`
       },
       {
         autoAlpha: 1,
@@ -122,8 +122,8 @@ export function cascadeIn(node: HTMLElement, options: CascadeOptions = {}): Dest
         scale: 1,
         filter: 'blur(0px)',
         delay: options.delay ?? 0,
-        duration: options.duration ?? 0.36,
-        stagger: options.stagger ?? 0.03,
+        duration: options.duration ?? 0.28,
+        stagger: options.stagger ?? 0.02,
         ease: options.ease ?? 'power2.out',
         clearProps: 'filter,transform,opacity,visibility'
       }

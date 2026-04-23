@@ -10,6 +10,7 @@ import type {
 import { CliError, EXIT_FAILURE, EXIT_OK, EXIT_USAGE } from './cli-errors'
 import {
   ensureSettingsKey,
+  parseCostOptions,
   parseFlags,
   parseFileOption,
   parseInstanceOptions,
@@ -28,6 +29,7 @@ import {
   printProviders,
   printSettings,
   printTags,
+  printTokenCost,
   printUsage,
   providerLabel,
   sessionLabel,
@@ -490,6 +492,18 @@ async function execute(
       const rateLimits = await runtime.services.usage.read(rest[0])
       printUsage(rateLimits, silent)
       return { code: EXIT_OK, payload: toCliResult(rateLimits) }
+    }
+    case 'cost': {
+      if (subcommand !== 'read') {
+        throw new CliError('Unknown cost command', EXIT_USAGE)
+      }
+
+      const options = parseCostOptions(rest)
+      const detail = await runtime.services.cost.read({
+        refresh: options.refresh
+      })
+      printTokenCost(detail, silent)
+      return { code: EXIT_OK, payload: toCliResult(detail) }
     }
     case 'login': {
       if (subcommand === 'port') {

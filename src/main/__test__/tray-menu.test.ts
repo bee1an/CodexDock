@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest'
 
-import { buildTrayUpdateMenuItem, buildTrayUsageMenuItems, resolveTrayAccounts } from '../tray-menu'
+import {
+  buildTrayTokenCostMenuItems,
+  buildTrayUpdateMenuItem,
+  buildTrayUsageMenuItems,
+  resolveTrayAccounts
+} from '../tray-menu'
 import type {
   AccountRateLimits,
   AccountSummary,
@@ -71,7 +76,11 @@ function createSnapshot(): AppSnapshot {
       c: createUsage({ primary: { usedPercent: 80, windowDurationMins: 300, resetsAt: null } })
     },
     usageErrorByAccountId: {},
-    wakeSchedulesByAccountId: {}
+    wakeSchedulesByAccountId: {},
+    tokenCostByInstanceId: {},
+    tokenCostErrorByInstanceId: {},
+    runningTokenCostSummary: null,
+    runningTokenCostInstanceIds: []
   }
 }
 
@@ -245,5 +254,29 @@ describe('tray menu helpers', () => {
       throw new Error('homebrew item should render a Homebrew update action')
     }
     expect(homebrewItem.label).toBe('通过 Homebrew 更新 v0.2.5')
+  })
+
+  it('空 token/cost 统计只展示占位文案', () => {
+    const items = buildTrayTokenCostMenuItems(
+      {
+        ...createSnapshot(),
+        runningTokenCostSummary: {
+          sessionTokens: 0,
+          sessionCostUSD: null,
+          last30DaysTokens: 0,
+          last30DaysCostUSD: null,
+          updatedAt: '2026-04-22T00:00:00.000Z'
+        }
+      },
+      {
+        title: '全部实例 token/cost',
+        today: '今日',
+        last30Days: '最近 30 天',
+        noData: '暂无 token/cost 数据',
+        fallbackToDefault: '按全部实例聚合'
+      }
+    )
+
+    expect(items.map((item) => item.label)).toEqual(['全部实例 token/cost', '暂无 token/cost 数据'])
   })
 })

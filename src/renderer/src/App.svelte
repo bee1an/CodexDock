@@ -39,6 +39,7 @@
     UpdateCustomProviderInput
   } from '../../shared/codex'
   import {
+    filterLocalMockAppSnapshot,
     accountTransferFormats,
     formatRelativeReset,
     resolveBestAccount,
@@ -66,11 +67,16 @@
       language: 'zh-CN',
       theme: 'light',
       checkForUpdatesOnStartup: true,
-      codexDesktopExecutablePath: ''
+      codexDesktopExecutablePath: '',
+      showLocalMockData: true
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
-    wakeSchedulesByAccountId: {}
+    wakeSchedulesByAccountId: {},
+    tokenCostByInstanceId: {},
+    tokenCostErrorByInstanceId: {},
+    runningTokenCostSummary: null,
+    runningTokenCostInstanceIds: []
   }
   let appMeta: AppMeta = {
     version: '--',
@@ -277,15 +283,16 @@
   }
 
   const applySnapshot = (nextSnapshot: AppSnapshot): void => {
-    snapshot = nextSnapshot
-    applyTheme(nextSnapshot.settings.theme)
+    const visibleSnapshot = filterLocalMockAppSnapshot(nextSnapshot)
+    snapshot = visibleSnapshot
+    applyTheme(visibleSnapshot.settings.theme)
     usageByAccountId = {
-      ...nextSnapshot.usageByAccountId
+      ...visibleSnapshot.usageByAccountId
     }
     usageErrorByAccountId = {
-      ...nextSnapshot.usageErrorByAccountId
+      ...visibleSnapshot.usageErrorByAccountId
     }
-    syncUsageState(nextSnapshot.accounts)
+    syncUsageState(visibleSnapshot.accounts)
   }
 
   const clearUsageError = (accountId: string): void => {
@@ -968,6 +975,16 @@
     )
   }
 
+  const updateShowLocalMockData = async (enabled: boolean): Promise<void> => {
+    if ((snapshot.settings.showLocalMockData ?? true) === enabled) {
+      return
+    }
+
+    await runAction('settings:show-local-mock-data', () =>
+      window.codexApp.updateSettings({ showLocalMockData: enabled })
+    )
+  }
+
   const updateCodexDesktopExecutablePath = async (value: string): Promise<void> => {
     const normalized = value.trim()
     if (snapshot.settings.codexDesktopExecutablePath === normalized) {
@@ -1012,10 +1029,6 @@
 
   const installUpdate = async (): Promise<void> => {
     await window.codexApp.installUpdate()
-  }
-
-  const activateBestAccount = async (): Promise<void> => {
-    await runAction('activate:best', () => window.codexApp.activateBestAccount())
   }
 
   const refreshAllRateLimits = async (): Promise<void> => {
@@ -1135,39 +1148,9 @@
     {:else}
       <div class="grid h-full min-h-0 flex-1 items-stretch gap-4 grid-cols-[minmax(0,1fr)_44px]">
         <div class="flex h-full min-h-0 flex-col gap-4 overflow-hidden">
-          <div use:reveal={{ y: 8, blur: 6, duration: 0.42, delay: 0.02 }}>
-            <HeroPanel
-              {heroClass}
-              {compactGhostButton}
-              copy={copyForLanguage()}
-              {loginEvent}
-              onClose={() => closeExpandablePanels()}
-              {showSettings}
-              {showProviderComposer}
-              {showCallbackLoginDetails}
-              {showDeviceLoginDetails}
-              loginActionBusy={loginActionBusy() ||
-                (!snapshot.accounts.length && refreshingAllUsage)}
-              {pollingOptions}
-              settings={snapshot.settings}
-              {updateState}
-              {createProvider}
-              {updatePollingInterval}
-              {updateCheckForUpdatesOnStartup}
-              {updateCodexDesktopExecutablePath}
-              showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
-              {checkForUpdates}
-              {downloadUpdate}
-              {installUpdate}
-              {copyAuthUrl}
-              {copyDeviceCode}
-              {openExternalLink}
-            />
-          </div>
-
           {#if pageError}
             <section
-              use:reveal={{ y: 6, blur: 4, duration: 0.3 }}
+              use:reveal={{ delay: 0 }}
               class="theme-surface theme-error-panel rounded-[1rem] border border-danger/18 bg-white px-4 py-4 text-base text-danger"
             >
               <div class="grid gap-2">
@@ -1195,7 +1178,7 @@
 
           <div
             class="flex h-0 min-h-0 flex-1 flex-col overflow-hidden"
-            use:reveal={{ y: 10, blur: 7, duration: 0.46, delay: 0.05 }}
+            use:reveal={{ delay: 0.05 }}
           >
             <AccountsPanel
               {panelClass}
@@ -1211,7 +1194,9 @@
               updateSummary={inlineUpdateSummary()}
               updateActionLabel={inlineUpdateActionLabel()}
               runUpdateAction={runInlineUpdateAction}
+              showLocalMockToggle={appMeta.isPackaged === false}
               language={snapshot.settings.language}
+              showLocalMockData={snapshot.settings.showLocalMockData !== false}
               accounts={snapshot.accounts}
               providers={snapshot.providers}
               tags={snapshot.tags}
@@ -1219,6 +1204,10 @@
               {usageByAccountId}
               {usageLoadingByAccountId}
               {usageErrorByAccountId}
+              tokenCostByInstanceId={snapshot.tokenCostByInstanceId}
+              tokenCostErrorByInstanceId={snapshot.tokenCostErrorByInstanceId}
+              runningTokenCostSummary={snapshot.runningTokenCostSummary}
+              runningTokenCostInstanceIds={snapshot.runningTokenCostInstanceIds}
               wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
               loginActionBusy={loginActionBusy()}
               {loginStarting}
@@ -1251,10 +1240,12 @@
               {deleteTag}
               {updateAccountTags}
               refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
+              {updateShowLocalMockData}
               {openWakeDialog}
               {removeAccount}
               {removeAccounts}
               {exportSelectedAccounts}
+              readTokenCost={(input) => window.codexApp.readTokenCost(input)}
               {startLogin}
               importCurrent={() =>
                 runAction('import', () => window.codexApp.importCurrentAccount())}
@@ -1262,10 +1253,7 @@
           </div>
         </div>
 
-        <div
-          class="sticky top-0 self-start"
-          use:reveal={{ x: 10, y: 4, blur: 6, duration: 0.42, delay: 0.08 }}
-        >
+        <div class="sticky top-0 self-start" use:reveal={{ delay: 0.08 }}>
           <AppSider
             copy={copyForLanguage()}
             {appMeta}
@@ -1294,7 +1282,13 @@
             {refreshAllRateLimits}
             activateBestAccount={() => {
               closeExpandablePanels()
-              return activateBestAccount()
+              const target = bestAccount()
+              if (!target || target.id === snapshot.activeAccountId) {
+                return Promise.resolve()
+              }
+              return runAccountAction(`activate:${target.id}`, () =>
+                window.codexApp.activateAccount(target.id)
+              )
             }}
             toggleSettings={() => {
               const nextOpen = !showSettings
@@ -1334,13 +1328,9 @@
   >
     <div
       class="theme-surface w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 shadow-[0_24px_80px_rgba(15,23,42,0.18)] sm:p-6"
-      use:reveal={{ y: 10, scale: 0.992, blur: 6, duration: 0.34 }}
+      use:reveal={{ delay: 0.05 }}
       use:cascadeIn={{
-        selector: '[data-motion-item]',
-        y: 6,
-        blur: 4,
-        duration: 0.26,
-        stagger: 0.024
+        selector: '[data-motion-item]'
       }}
       role="dialog"
       aria-modal="true"
@@ -1440,6 +1430,37 @@
   />
 {/if}
 
+<div use:reveal={{ delay: 0.02 }}>
+  <HeroPanel
+    {heroClass}
+    {compactGhostButton}
+    copy={copyForLanguage()}
+    {loginEvent}
+    onClose={() => closeExpandablePanels()}
+    {showSettings}
+    {showProviderComposer}
+    {showCallbackLoginDetails}
+    {showDeviceLoginDetails}
+    loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
+    {pollingOptions}
+    settings={snapshot.settings}
+    {updateState}
+    {createProvider}
+    {updatePollingInterval}
+    {updateCheckForUpdatesOnStartup}
+    {updateShowLocalMockData}
+    {updateCodexDesktopExecutablePath}
+    showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
+    showLocalMockToggle={appMeta.isPackaged === false}
+    {checkForUpdates}
+    {downloadUpdate}
+    {installUpdate}
+    {copyAuthUrl}
+    {copyDeviceCode}
+    {openExternalLink}
+  />
+</div>
+
 <style>
   :global(.text-muted) {
     color: var(--ink-soft);
@@ -1505,11 +1526,6 @@
   :global(html[data-theme='dark'] .theme-plan-team) {
     background: rgb(245 158 11 / 0.18) !important;
     color: rgb(253 224 71) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-business) {
-    background: rgb(139 92 246 / 0.2) !important;
-    color: rgb(196 181 253) !important;
   }
 
   :global(html[data-theme='dark'] .theme-plan-enterprise) {

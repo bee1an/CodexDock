@@ -13,6 +13,8 @@ import type {
   LoginEvent,
   LoginMethod,
   PortOccupant,
+  TokenCostDetail,
+  TokenCostReadOptions,
   UpdateAccountWakeScheduleInput,
   WakeAccountRateLimitsInput
 } from '../shared/codex'
@@ -69,6 +71,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:read-account-rate-limits', accountId),
   wakeAccountRateLimits: (accountId: string, input?: WakeAccountRateLimitsInput) =>
     ipcRenderer.invoke('codex:wake-account-rate-limits', accountId, input),
+  readTokenCost: (input?: TokenCostReadOptions): Promise<TokenCostDetail> =>
+    ipcRenderer.invoke('codex:read-token-cost', input),
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
   downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),

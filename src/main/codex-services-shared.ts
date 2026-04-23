@@ -28,6 +28,8 @@ import {
   type LoginEvent,
   type ProviderCheckReport,
   type CustomProviderSummary,
+  type TokenCostDetail,
+  type TokenCostReadOptions,
   type WakeAccountRateLimitsResult,
   type WakeAccountRateLimitsInput,
   type UpdateAccountWakeScheduleInput,
@@ -45,6 +47,28 @@ const LOCAL_MOCK_OPEN_ISOLATED_ERROR = 'Local mock accounts do not support openi
 const LOCAL_MOCK_MISSING_USAGE_ERROR = 'Local mock account is missing seeded rate limits.'
 const LOCAL_MOCK_WAKE_RESPONSE_BODY =
   'Local mock wake skipped the real request and returned seeded quota data.'
+const LOCAL_MOCK_USAGE_ERRORS_BY_ACCOUNT_ID: Record<string, string> = {
+  'acct-local-plus-2': [
+    'OpenAI token refresh failed (401): invalid_grant',
+    'refresh_token_expired: The refresh token expired after the local mock retention window.',
+    '请重新登录该账号后再刷新额度。'
+  ].join('\n'),
+  'acct-local-team': [
+    'deactivated_workspace: The selected ChatGPT workspace is deactivated.',
+    'workspace_id: ws_mock_deactivated',
+    '请切换到仍可用的 workspace 后重试。'
+  ].join('\n'),
+  'acct-local-enterprise': [
+    'Rate-limit lookup failed: 429 Too Many Requests',
+    'retry_after: 120s',
+    'request_id: req_mock_quota_throttled'
+  ].join('\n'),
+  'acct-local-free': [
+    'Missing access token required for rate-limit lookup.',
+    'auth_mode: oauth',
+    '本地 mock：用于验证过期账号错误折叠显示。'
+  ].join('\n')
+}
 
 function accessTokenExpiresSoon(token?: string, skewMs = 60_000): boolean {
   if (!token) {
@@ -236,11 +260,27 @@ function extractProviderErrorDetail(raw: string): string | undefined {
   }
 }
 
+function localMockUsageError(accountId: string): string | null {
+  const normalizedAccountId = accountId.trim().toLowerCase()
+  for (const [mockAccountId, message] of Object.entries(LOCAL_MOCK_USAGE_ERRORS_BY_ACCOUNT_ID)) {
+    if (
+      normalizedAccountId === mockAccountId ||
+      normalizedAccountId.endsWith(`:${mockAccountId}`)
+    ) {
+      return message
+    }
+  }
+
+  return null
+}
+
 export interface CodexServices {
   getSnapshot(): Promise<AppSnapshot>
   accounts: {
     list(): Promise<AppSnapshot>
     importCurrent(): Promise<AppSnapshot>
+    importFromAuthFile(authFile: string): Promise<AppSnapshot>
+    importFromStateFile(stateFile: string): Promise<AppSnapshot>
     importFromTemplate(raw: string): Promise<AppSnapshot>
     exportToTemplate(accountIds?: string[], format?: AccountTransferFormat): Promise<string>
     activate(accountId: string): Promise<AppSnapshot>
@@ -294,6 +334,9 @@ export interface CodexServices {
       accountId?: string,
       input?: WakeAccountRateLimitsInput
     ): Promise<WakeAccountRateLimitsResult>
+  }
+  cost: {
+    read(input?: TokenCostReadOptions): Promise<TokenCostDetail>
   }
   login: {
     start(
@@ -365,6 +408,7 @@ export {
   LOCAL_MOCK_OPEN_ISOLATED_ERROR,
   LOCAL_MOCK_MISSING_USAGE_ERROR,
   LOCAL_MOCK_WAKE_RESPONSE_BODY,
+  LOCAL_MOCK_USAGE_ERRORS_BY_ACCOUNT_ID,
   accessTokenExpiresSoon,
   authRefreshReason,
   authPayloadsEqualForRefresh,
@@ -374,6 +418,7 @@ export {
   resolveOptionalAccountId,
   shouldRefreshStoredAuth,
   shouldClearStoredUsage,
+  localMockUsageError,
   makeHealthCheck,
   reportIsOk,
   appendPathSegment,

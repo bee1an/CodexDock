@@ -1,6 +1,6 @@
 {
   "name": "ilovecodex",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Ilovecodex desktop account manager for Codex sessions",
   "main": "./out/main/index.js",
   "author": "bee1an",
@@ -33,6 +33,7 @@
     "@electron-toolkit/preload": "^3.0.2",
     "@electron-toolkit/utils": "^4.0.0",
     "@iarna/toml": "^2.2.5",
+    "chart.js": "^4.5.1",
     "electron-updater": "^6.3.9",
     "gsap": "^3.15.0",
     "ms": "^2.1.3"

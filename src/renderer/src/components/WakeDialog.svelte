@@ -127,13 +127,9 @@
 >
   <div
     class="theme-surface wake-dialog-panel flex w-full max-w-4xl flex-col overflow-hidden rounded-[1.25rem] border border-black/8 bg-white p-6 shadow-[0_32px_120px_rgba(0,0,0,0.12)] md:p-8"
-    use:reveal={{ y: 12, scale: 0.992, blur: 6, duration: 0.34 }}
+    use:reveal={{ delay: 0.05 }}
     use:cascadeIn={{
-      selector: '[data-wake-motion]',
-      y: 8,
-      blur: 4,
-      duration: 0.28,
-      stagger: 0.024
+      selector: '[data-wake-motion]'
     }}
     role="dialog"
     aria-modal="true"
@@ -193,7 +189,7 @@
       </div>
 
       {#if activeTab === 'session'}
-        <div class="grid gap-4" data-wake-motion use:reveal={{ y: 6, blur: 3, duration: 0.22 }}>
+        <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
           <div class="flex items-center justify-between gap-3">
             <div class="grid gap-1">
               <p class="text-sm font-medium text-ink">{copy.wakeQuotaDialogTitle}</p>
@@ -304,7 +300,7 @@
           </div>
         </div>
       {:else}
-        <div class="grid gap-4" data-wake-motion use:reveal={{ y: 6, blur: 3, duration: 0.22 }}>
+        <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
           <div class="flex flex-wrap items-start justify-between gap-3">
             <div class="grid gap-1">
               <p class="text-sm font-medium text-ink">{copy.wakeScheduleDialogTitle}</p>

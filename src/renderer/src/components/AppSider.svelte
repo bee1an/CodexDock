@@ -45,19 +45,15 @@
   export let openExternalLink: (url?: string) => void
 </script>
 
-<div
-  class="theme-app-sider-rail flex h-fit w-full flex-col gap-2.5"
-  use:reveal={{ x: 10, blur: 6, duration: 0.4 }}
->
+<div class="theme-app-sider-rail flex h-fit w-full flex-col gap-2.5" use:reveal={{ delay: 0.05 }}>
   <div
     class="theme-sider-group theme-toolbar theme-sider-dock grid gap-0.75 rounded-xl border border-black/6 bg-black/[0.02] p-1"
     use:cascadeIn={{
       selector: '[data-sider-item]',
-      x: 6,
+      x: 4,
       y: 0,
-      blur: 4,
-      duration: 0.28,
-      stagger: 0.02
+      scale: 1,
+      blur: 1
     }}
   >
     <button
@@ -161,12 +157,11 @@
     class="theme-sider-group theme-sider-utility grid gap-1.5 rounded-xl border border-black/6 bg-black/[0.02] p-1"
     use:cascadeIn={{
       selector: '[data-sider-item]',
-      x: 5,
+      x: 4,
       y: 0,
-      blur: 4,
-      duration: 0.26,
-      stagger: 0.028,
-      delay: 0.04
+      scale: 1,
+      blur: 1,
+      delay: 0.05
     }}
   >
     <div class="theme-sider-language relative" data-sider-item>

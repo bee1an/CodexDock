@@ -10,7 +10,8 @@ import type {
   CustomProviderSummary,
   DoctorReport,
   HealthCheckResult,
-  ProviderCheckReport
+  ProviderCheckReport,
+  TokenCostDetail
 } from '../shared/codex'
 
 export function printHelp(): void {
@@ -44,6 +45,7 @@ Usage:
   ilc tag unassign <account-id> <tag-id> [--json]
   ilc session current [--json]
   ilc usage read [account-id] [--json]
+  ilc cost read [--refresh] [--json]
   ilc login browser [--json] [--no-open] [--timeout <sec>]
   ilc login device [--json] [--timeout <sec>]
   ilc login port status [--json]
@@ -161,6 +163,54 @@ export function printUsage(rateLimits: AccountRateLimits, quiet: boolean): void 
     console.log(
       `Credits: ${rateLimits.credits.unlimited ? 'unlimited' : (rateLimits.credits.balance ?? '--')}`
     )
+  }
+}
+
+function formatTokenCount(value: number): string {
+  return new Intl.NumberFormat('en-US').format(value)
+}
+
+function formatCostUSD(value: number | null): string {
+  if (value === null) {
+    return '--'
+  }
+
+  if (value > 0 && value < 0.0001) {
+    return `$${value.toExponential(2)}`
+  }
+
+  return `$${value.toFixed(4)}`
+}
+
+export function printTokenCost(detail: TokenCostDetail, quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  const label =
+    detail.instanceId === '__all__'
+      ? 'all instances'
+      : detail.instanceId === '__default__'
+        ? 'default'
+        : detail.instanceId
+
+  console.log('Token/cost usage: local Codex logs')
+  console.log(`Scope: ${label}`)
+  if (detail.codexHome) {
+    console.log(`CODEX_HOME: ${detail.codexHome}`)
+  }
+  console.log(
+    `Today: ${formatTokenCount(detail.summary.sessionTokens)} tokens · ${formatCostUSD(detail.summary.sessionCostUSD)}`
+  )
+  console.log(
+    `Last 30 days: ${formatTokenCount(detail.summary.last30DaysTokens)} tokens · ${formatCostUSD(detail.summary.last30DaysCostUSD)}`
+  )
+  console.log(`Updated: ${detail.summary.updatedAt}`)
+  if (detail.warnings?.length) {
+    console.log('Warnings:')
+    for (const warning of detail.warnings) {
+      console.log(`- ${warning}`)
+    }
   }
 }
 

@@ -5,7 +5,9 @@ import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+import type { LoginEvent } from '../../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../../shared/codex-platform'
+import { CodexInstanceStore } from '../codex-instances'
 
 const mockedProcessState = vi.hoisted(() => {
   return {
@@ -382,6 +384,48 @@ describe('createCodexServices', () => {
     await writeFile(path, `${JSON.stringify(payload, null, 2)}\n`, 'utf8')
   }
 
+  async function writeTokenCostSessionLog(codexHome: string): Promise<void> {
+    const now = new Date()
+    const year = String(now.getFullYear())
+    const month = String(now.getMonth() + 1).padStart(2, '0')
+    const day = String(now.getDate()).padStart(2, '0')
+    const sessionDir = join(codexHome, 'sessions', year, month, day)
+    await mkdir(sessionDir, { recursive: true })
+    await writeFile(
+      join(sessionDir, 'session.jsonl'),
+      [
+        JSON.stringify({
+          timestamp: now.toISOString(),
+          type: 'session_meta',
+          payload: {
+            session_id: 'session-login'
+          }
+        }),
+        JSON.stringify({
+          timestamp: now.toISOString(),
+          type: 'turn_context',
+          payload: {
+            model: 'gpt-5'
+          }
+        }),
+        JSON.stringify({
+          timestamp: now.toISOString(),
+          type: 'event_msg',
+          payload: {
+            type: 'token_count',
+            info: {
+              last_token_usage: {
+                input_tokens: 9,
+                output_tokens: 3
+              }
+            }
+          }
+        })
+      ].join('\n') + '\n',
+      'utf8'
+    )
+  }
+
   it('opens an isolated account instance without changing the global auth file', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -422,6 +466,173 @@ describe('createCodexServices', () => {
     expect(mockedProcessState.spawnedCommands.at(-1)).toBe(
       '/Applications/Codex.app/Contents/MacOS/Codex'
     )
+  })
+
+  it('登录成功会先发送快速快照，再异步补齐 token/cost 快照', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    await writeTokenCostSessionLog(join(process.env.HOME ?? '', '.codex'))
+
+    const successEvents: LoginEvent[] = []
+    let resolveFirstSuccessEvent: ((event: LoginEvent) => void) | undefined
+    let resolveHydratedSuccessEvent: ((event: LoginEvent) => void) | undefined
+    const firstSuccessEventPromise = new Promise<LoginEvent>((resolve) => {
+      resolveFirstSuccessEvent = resolve
+    })
+    const hydratedSuccessEventPromise = new Promise<LoginEvent>((resolve) => {
+      resolveHydratedSuccessEvent = resolve
+    })
+
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform,
+      emitLoginEvent: (event) => {
+        if (event.phase !== 'success') {
+          return
+        }
+
+        successEvents.push(event)
+        if (successEvents.length === 1) {
+          resolveFirstSuccessEvent?.(event)
+        }
+        if (event.snapshot?.runningTokenCostSummary) {
+          resolveHydratedSuccessEvent?.(event)
+        }
+      }
+    })
+
+    vi.mocked(platform.fetch)
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          device_auth_id: 'device-auth-1',
+          user_code: 'CODE-1234',
+          interval: 1
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          authorization_code: 'authorization-code',
+          code_verifier: 'verifier-code'
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse(
+          createRefreshPayload('acct-device', 'device@example.com', 'refresh-device', 'user-device')
+        )
+      )
+
+    await services.login.start('device')
+
+    const firstSuccessEvent = await firstSuccessEventPromise
+    expect(firstSuccessEvent.snapshot?.runningTokenCostSummary).toBeNull()
+    expect(firstSuccessEvent.snapshot?.tokenCostByInstanceId).toEqual({})
+
+    const hydratedSuccessEvent = await hydratedSuccessEventPromise
+
+    expect(hydratedSuccessEvent.snapshot?.tokenCostByInstanceId.__default__).toMatchObject({
+      sessionTokens: 12,
+      last30DaysTokens: 12
+    })
+    expect(hydratedSuccessEvent.snapshot?.runningTokenCostSummary).toMatchObject({
+      sessionTokens: 12,
+      last30DaysTokens: 12
+    })
+    expect(hydratedSuccessEvent.snapshot?.runningTokenCostInstanceIds).toContain('__default__')
+  })
+
+  it('hydrated 快照失败时仍异步发送带 fallback snapshot 的登录成功事件', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const brokenCodexHome = join(env.userDataPath, 'broken-home')
+    const instanceStore = new CodexInstanceStore(env.userDataPath)
+    await mkdir(env.userDataPath, { recursive: true })
+    await writeFile(brokenCodexHome, 'not-a-directory', 'utf8')
+    const brokenInstance = await instanceStore.create({
+      name: 'Broken',
+      codexHome: brokenCodexHome
+    })
+    await instanceStore.setInstancePid(brokenInstance.id, 43210)
+
+    const successEvents: LoginEvent[] = []
+    let resolveFirstSuccessEvent: ((event: LoginEvent) => void) | undefined
+    let resolveFallbackSuccessEvent: ((event: LoginEvent) => void) | undefined
+    const firstSuccessEventPromise = new Promise<LoginEvent>((resolve) => {
+      resolveFirstSuccessEvent = resolve
+    })
+    const fallbackSuccessEventPromise = new Promise<LoginEvent>((resolve) => {
+      resolveFallbackSuccessEvent = resolve
+    })
+
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform,
+      emitLoginEvent: (event) => {
+        if (event.phase !== 'success') {
+          return
+        }
+
+        successEvents.push(event)
+        if (successEvents.length === 1) {
+          resolveFirstSuccessEvent?.(event)
+        }
+        if (event.snapshot?.tokenCostErrorByInstanceId[brokenInstance.id]) {
+          resolveFallbackSuccessEvent?.(event)
+        }
+      }
+    })
+
+    vi.mocked(platform.fetch)
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          device_auth_id: 'device-auth-2',
+          user_code: 'CODE-5678',
+          interval: 1
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          authorization_code: 'authorization-code-2',
+          code_verifier: 'verifier-code-2'
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse(
+          createRefreshPayload(
+            'acct-device-fallback',
+            'fallback@example.com',
+            'refresh-device-fallback',
+            'user-device-fallback'
+          )
+        )
+      )
+
+    await services.login.start('device')
+
+    const firstSuccessEvent = await firstSuccessEventPromise
+    expect(firstSuccessEvent.snapshot?.tokenCostErrorByInstanceId).toEqual({})
+
+    const successEvent = await fallbackSuccessEventPromise
+
+    expect(successEvent.message).toContain('Saved the new device code login')
+    expect(successEvent.snapshot?.accounts[0]).toMatchObject({
+      email: 'fallback@example.com',
+      accountId: 'acct-device-fallback'
+    })
+    expect(successEvent.snapshot?.codexInstances.map((instance) => instance.id)).toEqual([
+      '__default__',
+      brokenInstance.id
+    ])
+    expect(
+      successEvent.snapshot?.codexInstances.find((instance) => instance.id === brokenInstance.id)
+    ).toMatchObject({
+      running: false,
+      lastPid: undefined
+    })
+    expect(successEvent.snapshot?.tokenCostErrorByInstanceId).toMatchObject({
+      [brokenInstance.id]: expect.any(String)
+    })
   })
 
   it('shows a running Codex process without launching a duplicate default instance', async () => {
@@ -1381,6 +1592,33 @@ describe('createCodexServices', () => {
 
     expect(platform.fetch).not.toHaveBeenCalled()
     expect((await services.usage.read(account.id)).fetchedAt).not.toBe(importedUsage?.fetchedAt)
+  })
+
+  it('returns seeded usage errors for local mock error accounts', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-local-team',
+        email: 'local-team@mock.local',
+        planType: 'team'
+      })
+    )
+
+    const account = (await services.getSnapshot()).accounts[0]
+
+    await expect(services.usage.read(account.id)).rejects.toThrow('deactivated_workspace')
+    expect(platform.fetch).not.toHaveBeenCalled()
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.usageErrorByAccountId[account.id]).toContain('deactivated_workspace')
+    expect(snapshot.usageErrorByAccountId[account.id]).toContain('\n')
   })
 
   it('blocks opening Codex for local mock accounts', async () => {

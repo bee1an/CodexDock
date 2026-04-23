@@ -15,6 +15,7 @@
     formatRelativeReset,
     isLocalMockAccount,
     remainingPercent,
+    supportsWeeklyQuota,
     supportsWakeSessionQuota
   } from '../../../shared/codex'
   import {
@@ -84,6 +85,8 @@
   let accountActionMenuAnchorRect: DOMRect | null = null
   let accountTagMenuAccountId = ''
   let accountTagMenuAnchorRect: DOMRect | null = null
+  let usageErrorPopoverAccountId: string | null = null
+  let usageErrorPopoverAnchorRect: DOMRect | null = null
   let sortableAccounts: AccountSummary[] = []
   let sortInteractionActive = false
 
@@ -113,6 +116,58 @@
     visibleAccounts.length > 0 && selectedVisibleCount === visibleAccounts.length
   $: showAccountFilterTools = accounts.length > 0 || tags.length > 0
   $: showAccountSelectionTools = visibleAccounts.length > 0 || selectedVisibleCount > 0
+  $: if (
+    usageErrorPopoverAccountId &&
+    !accounts.some((account) => account.id === usageErrorPopoverAccountId)
+  ) {
+    closeUsageErrorPopover()
+  }
+
+  function usageErrorLines(detail: string): string[] {
+    const lines = detail
+      .split(/\r?\n+/)
+      .map((line) => line.trim())
+      .filter(Boolean)
+
+    return lines.length ? lines : [detail.trim()].filter(Boolean)
+  }
+
+  function usageErrorToneClass(kind: 'expired' | 'workspace' | 'error'): string {
+    switch (kind) {
+      case 'expired':
+        return 'border-red-700/18 bg-red-700/8 text-red-700'
+      case 'workspace':
+        return 'border-orange-500/20 bg-orange-500/10 text-orange-700'
+      case 'error':
+      default:
+        return 'border-amber-500/18 bg-amber-500/10 text-amber-700'
+    }
+  }
+
+  function stopUsageErrorEvent(event: Event): void {
+    event.stopPropagation()
+  }
+
+  function toggleUsageErrorPopover(event: MouseEvent, accountId: string): void {
+    event.preventDefault()
+    event.stopPropagation()
+
+    if (usageErrorPopoverAccountId === accountId) {
+      closeUsageErrorPopover()
+      return
+    }
+
+    closeAccountActionMenu()
+    closeAccountTagMenu()
+    usageErrorPopoverAccountId = accountId
+    usageErrorPopoverAnchorRect =
+      (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() ?? null
+  }
+
+  function closeUsageErrorPopover(): void {
+    usageErrorPopoverAccountId = null
+    usageErrorPopoverAnchorRect = null
+  }
 
   function showWakeAccount(accountId: string): boolean {
     const rateLimits = usageByAccountId[accountId]
@@ -249,6 +304,7 @@
       return
     }
 
+    closeUsageErrorPopover()
     closeAccountTagMenu()
     accountActionMenuAnchorRect = trigger.getBoundingClientRect()
     accountActionMenuAccountId = accountId
@@ -309,11 +365,13 @@
       if (!eventTargetsFloatingRoot(event)) {
         closeAccountActionMenu()
         closeAccountTagMenu()
+        closeUsageErrorPopover()
       }
     }
     const handleScroll = (): void => {
       closeAccountActionMenu()
       closeAccountTagMenu()
+      closeUsageErrorPopover()
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)
@@ -330,6 +388,7 @@
   onresize={() => {
     closeAccountActionMenu()
     closeAccountTagMenu()
+    closeUsageErrorPopover()
   }}
 />
 
@@ -552,7 +611,7 @@
         {@const usageBadge = accountUsageBadge(usageErrorByAccountId[account.id], account, copy)}
         {@const assignableTags = availableTagsForAccount(tags, account)}
         <article
-          class={`theme-account-row group grid items-center gap-3 px-3 py-3 transition-[box-shadow,transform,background-color] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto] ${accountRowTone(
+          class={`theme-account-row group grid items-center gap-3 px-3 py-3 transition-[box-shadow,transform,background-color] duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] ${accountRowTone(
             account
           )}`}
           animate:flip={{ duration: flipDurationMs }}
@@ -592,144 +651,13 @@
           </div>
 
           <div class="grid min-w-0 gap-2.5 overflow-visible">
-            <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
-              <div class="flex min-w-0 items-center gap-2">
-                <span
-                  class={`h-2 w-2 flex-none rounded-full ${activeAccountId === account.id ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
-                ></span>
-                <p class="min-w-0 truncate text-sm font-medium leading-5 text-ink">
-                  {accountEmail(account, copy)}
-                </p>
-                {#if usageBadge}
-                  <span
-                    class={`inline-flex min-w-0 max-w-full items-center rounded-full border px-2 py-0.75 text-[11px] ${
-                      usageBadge.kind === 'expired'
-                        ? 'border-red-700/18 bg-red-700/8 text-red-700'
-                        : usageBadge.kind === 'workspace'
-                          ? 'border-orange-500/20 bg-orange-500/10 text-orange-700'
-                          : 'border-amber-500/18 bg-amber-500/10 text-amber-700'
-                    }`}
-                    title={usageBadge.title}
-                  >
-                    <span class="min-w-0 truncate">{usageBadge.detail}</span>
-                  </span>
-                {/if}
-              </div>
-
-              <div
-                class="scroll-row flex min-w-0 flex-wrap items-center justify-end gap-1.5 overflow-x-auto"
-              >
-                <div
-                  class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
-                  title={`${copy.sessionQuota} · ${
-                    usageByAccountId[account.id]?.primary
-                      ? `${remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%`
-                      : '--'
-                  }`}
-                >
-                  <span class="font-medium">{copy.sessionReset}</span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.primary}
-                    <span class="theme-reset-time-neutral"
-                      >{formatRelativeReset(
-                        usageByAccountId[account.id]?.primary?.resetsAt,
-                        language
-                      )}</span
-                    >
-                  {:else}
-                    <span>--</span>
-                  {/if}
-                  <span
-                    class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
-                  >
-                    <span
-                      class="theme-progress-fill block h-full rounded-full bg-black/70"
-                      style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
-                      use:animateProgress={{
-                        delay: Math.min(accountIndex * 0.028, 0.14),
-                        duration: 0.46
-                      }}
-                    ></span>
-                  </span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.primary}
-                    <span
-                      >{remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%</span
-                    >
-                  {:else}
-                    <span>-</span>
-                  {/if}
-                </div>
-
-                <div
-                  class="theme-soft-panel inline-flex items-center gap-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
-                  title={`${copy.weeklyQuota} · ${
-                    usageByAccountId[account.id]?.secondary
-                      ? `${remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%`
-                      : '--'
-                  }`}
-                >
-                  <span class="font-medium">{copy.weeklyReset}</span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.secondary}
-                    <span
-                      class={weeklyResetTimeToneClass(
-                        usageByAccountId[account.id]?.secondary?.resetsAt
-                      )}
-                      >{formatRelativeReset(
-                        usageByAccountId[account.id]?.secondary?.resetsAt,
-                        language
-                      )}</span
-                    >
-                  {:else}
-                    <span>--</span>
-                  {/if}
-                  <span
-                    class="theme-progress-track h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
-                  >
-                    <span
-                      class="theme-progress-fill block h-full rounded-full bg-black/70"
-                      style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
-                      use:animateProgress={{
-                        delay: Math.min(accountIndex * 0.028 + 0.03, 0.18),
-                        duration: 0.5
-                      }}
-                    ></span>
-                  </span>
-                  {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
-                    <span>…</span>
-                  {:else if usageByAccountId[account.id]?.secondary}
-                    <span
-                      >{remainingPercent(
-                        usageByAccountId[account.id].secondary?.usedPercent
-                      )}%</span
-                    >
-                  {:else}
-                    <span>-</span>
-                  {/if}
-                </div>
-
-                {#if extraLimits(usageByAccountId, account.id).length}
-                  {#each extraLimits(usageByAccountId, account.id) as limit (`${account.id}:${limit.limitId ?? 'extra'}`)}
-                    <div
-                      class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px]"
-                    >
-                      <span class="font-medium uppercase tracking-[0.08em]"
-                        >{limitLabel(limit)}</span
-                      >
-                      {#if limit.primary}
-                        <span>h {remainingPercent(limit.primary.usedPercent)}%</span>
-                      {/if}
-                      {#if limit.secondary}
-                        <span>w {remainingPercent(limit.secondary.usedPercent)}%</span>
-                      {/if}
-                    </div>
-                  {/each}
-                {/if}
-              </div>
+            <div class="flex min-w-0 items-center gap-2">
+              <span
+                class={`h-2 w-2 flex-none rounded-full ${activeAccountId === account.id ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
+              ></span>
+              <p class="min-w-0 truncate text-sm font-medium leading-5 text-ink">
+                {accountEmail(account, copy)}
+              </p>
             </div>
 
             <div class="mt-[-2px] flex min-w-0 flex-wrap items-center gap-1.5">
@@ -770,9 +698,198 @@
                 </span>
               {/each}
             </div>
+
+            {#if usageBadge}
+              {@const errorLines = usageErrorLines(usageBadge.detail)}
+              <div class="min-w-0">
+                <button
+                  class={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-left text-[11px] leading-4 transition-colors duration-140 hover:bg-black/[0.04] ${usageErrorToneClass(
+                    usageBadge.kind
+                  )}`}
+                  type="button"
+                  data-no-dnd="true"
+                  onpointerdown={stopUsageErrorEvent}
+                  onmousedown={stopUsageErrorEvent}
+                  onclick={(event) => toggleUsageErrorPopover(event, account.id)}
+                  aria-expanded={usageErrorPopoverAccountId === account.id}
+                  title={usageBadge.title}
+                >
+                  <span class="min-w-0 truncate whitespace-nowrap">{errorLines[0]}</span>
+                  <span class="i-lucide-info h-3.5 w-3.5 flex-none opacity-70"></span>
+                </button>
+
+                {#if usageErrorPopoverAccountId === account.id}
+                  <div
+                    use:portal
+                    use:floatingAnchor={{
+                      anchorRect: usageErrorPopoverAnchorRect,
+                      minWidth: 360,
+                      gap: 8,
+                      placement: 'right'
+                    }}
+                    use:stopFloatingPointerPropagation
+                    data-floating-root=""
+                    class="theme-tag-picker-surface z-[999] w-[380px] max-w-[min(380px,calc(100vw-24px))] rounded-[1.1rem] p-2 backdrop-blur-xl"
+                    style="background-color: var(--panel-strong); background-image: linear-gradient(180deg, rgba(255,255,255,0.06) 0%, rgba(255,255,255,0) 100%); box-shadow: 0 24px 54px -12px var(--paper-shadow), 0 8px 24px -12px var(--paper-shadow), 0 0 0 1px var(--line-strong), inset 0 1px 0 0 rgba(255,255,255,0.12);"
+                  >
+                    <div class="flex items-center justify-between gap-2 px-2 pb-1.5 pt-1">
+                      <span
+                        class="min-w-0 truncate text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]"
+                      >
+                        {copy.accountUsageRefreshFailed}
+                      </span>
+                      <button
+                        class="inline-flex h-6 w-6 flex-none appearance-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-[var(--ink-faint)] shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] hover:text-ink"
+                        type="button"
+                        onclick={closeUsageErrorPopover}
+                        aria-label="关闭"
+                        title="关闭"
+                      >
+                        <span class="i-lucide-x h-3.5 w-3.5"></span>
+                      </button>
+                    </div>
+                    <div
+                      class="max-h-52 overflow-auto rounded-[0.85rem] bg-black/[0.035] p-2.5 text-[12px] leading-5 text-ink"
+                    >
+                      <pre
+                        class="m-0 whitespace-pre-wrap break-words font-sans">{usageBadge.detail}</pre>
+                    </div>
+                  </div>
+                {/if}
+              </div>
+            {/if}
           </div>
 
-          <div class="flex items-start justify-end gap-1">
+          <div
+            class="scroll-row flex min-w-0 flex-wrap items-center justify-start gap-1.5 overflow-x-auto self-center md:justify-end"
+          >
+            {#if !usageByAccountId[account.id] || supportsWakeSessionQuota(usageByAccountId[account.id])}
+              <div
+                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
+                title={`${copy.sessionQuota} · ${
+                  usageByAccountId[account.id]?.primary
+                    ? `${remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%`
+                    : '--'
+                }`}
+              >
+                <span class="font-medium">{copy.sessionReset}</span>
+                {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                  <span class="inline-flex h-4 items-center leading-none">…</span>
+                {:else if usageByAccountId[account.id]?.primary}
+                  <span class="theme-reset-time-neutral inline-flex h-4 items-center leading-none"
+                    >{formatRelativeReset(
+                      usageByAccountId[account.id]?.primary?.resetsAt,
+                      language
+                    )}</span
+                  >
+                {:else}
+                  <span class="inline-flex h-4 items-center leading-none">--</span>
+                {/if}
+                <span
+                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                >
+                  <span
+                    class="theme-progress-fill block h-full rounded-full bg-black/70"
+                    style={`width: ${progressWidth(usageByAccountId[account.id]?.primary?.usedPercent)}`}
+                    use:animateProgress={{
+                      delay: Math.min(accountIndex * 0.028, 0.14),
+                      duration: 0.46
+                    }}
+                  ></span>
+                </span>
+                {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >…</span
+                  >
+                {:else if usageByAccountId[account.id]?.primary}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >{remainingPercent(usageByAccountId[account.id].primary?.usedPercent)}%</span
+                  >
+                {:else}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >-</span
+                  >
+                {/if}
+              </div>
+            {/if}
+
+            {#if !usageByAccountId[account.id] || supportsWeeklyQuota(usageByAccountId[account.id])}
+              <div
+                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
+                title={`${copy.weeklyQuota} · ${
+                  usageByAccountId[account.id]?.secondary
+                    ? `${remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%`
+                    : '--'
+                }`}
+              >
+                <span class="font-medium">{copy.weeklyReset}</span>
+                {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                  <span class="inline-flex h-4 items-center leading-none">…</span>
+                {:else if usageByAccountId[account.id]?.secondary}
+                  <span
+                    class={`${weeklyResetTimeToneClass(
+                      usageByAccountId[account.id]?.secondary?.resetsAt
+                    )} inline-flex h-4 items-center leading-none`}
+                    >{formatRelativeReset(
+                      usageByAccountId[account.id]?.secondary?.resetsAt,
+                      language
+                    )}</span
+                  >
+                {:else}
+                  <span class="inline-flex h-4 items-center leading-none">--</span>
+                {/if}
+                <span
+                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                >
+                  <span
+                    class="theme-progress-fill block h-full rounded-full bg-black/70"
+                    style={`width: ${progressWidth(usageByAccountId[account.id]?.secondary?.usedPercent)}`}
+                    use:animateProgress={{
+                      delay: Math.min(accountIndex * 0.028 + 0.03, 0.18),
+                      duration: 0.5
+                    }}
+                  ></span>
+                </span>
+                {#if usageLoadingByAccountId[account.id] && !usageByAccountId[account.id]}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >…</span
+                  >
+                {:else if usageByAccountId[account.id]?.secondary}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >{remainingPercent(usageByAccountId[account.id].secondary?.usedPercent)}%</span
+                  >
+                {:else}
+                  <span
+                    class="inline-flex h-5 min-w-[2.75rem] items-center justify-end leading-none tabular-nums"
+                    >-</span
+                  >
+                {/if}
+              </div>
+            {/if}
+
+            {#if extraLimits(usageByAccountId, account.id).length}
+              {#each extraLimits(usageByAccountId, account.id) as limit (`${account.id}:${limit.limitId ?? 'extra'}`)}
+                <div
+                  class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px]"
+                >
+                  <span class="font-medium uppercase tracking-[0.08em]">{limitLabel(limit)}</span>
+                  {#if limit.primary}
+                    <span>h {remainingPercent(limit.primary.usedPercent)}%</span>
+                  {/if}
+                  {#if limit.secondary}
+                    <span>w {remainingPercent(limit.secondary.usedPercent)}%</span>
+                  {/if}
+                </div>
+              {/each}
+            {/if}
+          </div>
+
+          <div class="flex items-center self-center justify-end gap-1">
             <button
               class={iconRowButton}
               onclick={() => openAccountInCodex(account.id)}

@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.4 - 2026-04-23
+
+This patch release improves local account diagnostics, mock-data controls, and usage visibility across the desktop app and CLI.
+
+- Added token cost stats in the desktop account panel and `ilc cost read`, with refresh and JSON output support for CLI workflows.
+- Improved local development data handling with a mock-data toggle that cleanly separates mock accounts from imported real local accounts.
+- Expanded local mock accounts with richer quota, provider, tag, and refresh-error scenarios while removing the unsupported business-plan mock profile.
+- Refined account-list quota layout, free-plan weekly-only display, wake-time presentation, and one-line refresh errors with a fixed-height detail popover.
+- Fixed local real-account loading so disabling mock data uses actual Codex state without mock seeding overwriting status-bar account selections.
+
 ## 0.3.3 - 2026-04-21
 
 This patch release adds wake-session automation, broadens account transfer compatibility, and smooths macOS delivery for desktop users.

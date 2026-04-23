@@ -7,7 +7,8 @@ import type {
   AppSnapshot,
   CurrentSessionSummary,
   LoginEvent,
-  PortOccupant
+  PortOccupant,
+  TokenCostDetail
 } from '../../shared/codex'
 
 function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
@@ -34,6 +35,10 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     usageByAccountId: {},
     usageErrorByAccountId: {},
     wakeSchedulesByAccountId: {},
+    tokenCostByInstanceId: {},
+    tokenCostErrorByInstanceId: {},
+    runningTokenCostSummary: null,
+    runningTokenCostInstanceIds: [],
     ...overrides
   }
 }
@@ -86,6 +91,9 @@ interface CliTestRuntime {
     usage: {
       read: ReturnType<typeof vi.fn>
     }
+    cost: {
+      read: ReturnType<typeof vi.fn>
+    }
     login: {
       start: ReturnType<typeof vi.fn>
       isRunning: ReturnType<typeof vi.fn>
@@ -116,6 +124,7 @@ function createRuntime(): {
   rateLimits: AccountRateLimits
   settings: AppSettings
   currentSession: CurrentSessionSummary
+  tokenCostDetail: TokenCostDetail
   portOccupant: PortOccupant
 } {
   const listeners = new Set<(event: LoginEvent) => void>()
@@ -215,6 +224,35 @@ function createRuntime(): {
     email: 'one@example.com',
     storedAccountId: 'acct_1'
   }
+  const tokenCostDetail: TokenCostDetail = {
+    instanceId: '__all__',
+    codexHome: '/Users/test/.codex',
+    source: 'local',
+    summary: {
+      sessionTokens: 120,
+      sessionCostUSD: 0.0012,
+      last30DaysTokens: 3400,
+      last30DaysCostUSD: 0.034,
+      updatedAt: '2026-03-08T00:00:00.000Z'
+    },
+    daily: [
+      {
+        date: '2026-03-08',
+        inputTokens: 100,
+        outputTokens: 20,
+        totalTokens: 120,
+        costUSD: 0.0012,
+        modelsUsed: ['gpt-5'],
+        modelBreakdowns: [
+          {
+            modelName: 'gpt-5',
+            totalTokens: 120,
+            costUSD: 0.0012
+          }
+        ]
+      }
+    ]
+  }
   const portOccupant: PortOccupant = { pid: 123, command: 'node' }
 
   const runtime = {
@@ -312,6 +350,9 @@ function createRuntime(): {
       usage: {
         read: vi.fn(async () => rateLimits)
       },
+      cost: {
+        read: vi.fn(async () => tokenCostDetail)
+      },
       login: {
         start: vi.fn(async (method: 'browser' | 'device') => {
           const attemptId = `${method}-attempt`
@@ -369,7 +410,7 @@ function createRuntime(): {
     }
   }
 
-  return { runtime, snapshot, rateLimits, settings, currentSession, portOccupant }
+  return { runtime, snapshot, rateLimits, settings, currentSession, tokenCostDetail, portOccupant }
 }
 
 function parseJsonLog(logSpy: ReturnType<typeof vi.spyOn>, callIndex = 0): unknown {
@@ -590,8 +631,8 @@ describe('runCli', () => {
     expect(runtime.services.codex.instances.remove).toHaveBeenCalledWith('inst_1')
   })
 
-  it('covers session current and usage read', async () => {
-    const { runtime, currentSession, rateLimits } = createRuntime()
+  it('covers session current, usage read and cost read', async () => {
+    const { runtime, currentSession, rateLimits, tokenCostDetail } = createRuntime()
 
     await expect(runCli(runtime as never, ['session', 'current', '--json'])).resolves.toBe(0)
     expect(runtime.services.session.current).toHaveBeenCalledOnce()
@@ -609,6 +650,40 @@ describe('runCli', () => {
       data: rateLimits,
       error: null
     })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['cost', 'read', '--json'])).resolves.toBe(0)
+    expect(runtime.services.cost.read).toHaveBeenCalledWith({
+      refresh: false
+    })
+    expect(parseJsonLog(logSpy)).toEqual({
+      ok: true,
+      data: tokenCostDetail,
+      error: null
+    })
+
+    logSpy.mockClear()
+    expect(runtime.services.cost.read).toHaveBeenLastCalledWith({
+      refresh: false
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['cost', 'read', '--refresh', '--json'])).resolves.toBe(0)
+    expect(runtime.services.cost.read).toHaveBeenLastCalledWith({
+      refresh: true
+    })
+
+    logSpy.mockClear()
+    runtime.services.cost.read.mockResolvedValueOnce({
+      ...tokenCostDetail,
+      warnings: ['Failed to read broken (/tmp/broken): boom']
+    })
+    await expect(runCli(runtime as never, ['cost', 'read'])).resolves.toBe(0)
+    const plainOutput = String(logSpy.mock.calls.map((call) => call[0]).join('\n'))
+    expect(plainOutput).toContain('Today:')
+    expect(plainOutput).toContain('Last 30 days:')
+    expect(plainOutput).toContain('Warnings:')
+    expect(plainOutput).toContain('Failed to read broken (/tmp/broken): boom')
   })
 
   it('covers tag commands', async () => {
@@ -907,6 +982,19 @@ describe('runCli', () => {
       error: {
         code: 2,
         message: 'checkForUpdatesOnStartup must be true or false'
+      }
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['cost', 'read', '--instance', 'default', '--json'])
+    ).resolves.toBe(2)
+    expect(parseJsonLog(logSpy)).toEqual({
+      ok: false,
+      data: null,
+      error: {
+        code: 2,
+        message: 'Unknown option: --instance'
       }
     })
 

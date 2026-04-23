@@ -16,6 +16,7 @@ export interface AppSettings {
   theme: AppTheme
   checkForUpdatesOnStartup: boolean
   codexDesktopExecutablePath: string
+  showLocalMockData?: boolean
 }
 
 export interface CustomProviderSummary {
@@ -212,9 +213,52 @@ export interface CurrentSessionSummary {
   storedAccountId?: string
 }
 
+export interface TokenCostSummary {
+  sessionTokens: number
+  sessionCostUSD: number | null
+  last30DaysTokens: number
+  last30DaysCostUSD: number | null
+  updatedAt: string
+}
+
+export interface TokenCostModelBreakdown {
+  modelName: string
+  totalTokens: number
+  costUSD: number | null
+}
+
+export interface TokenCostDailyEntry {
+  date: string
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costUSD: number | null
+  modelsUsed: string[]
+  modelBreakdowns: TokenCostModelBreakdown[]
+}
+
+export interface TokenCostDetail {
+  instanceId: string
+  codexHome: string
+  source: 'local'
+  summary: TokenCostSummary
+  daily: TokenCostDailyEntry[]
+  warnings?: string[]
+}
+
+export interface TokenCostReadOptions {
+  instanceId?: string
+  running?: boolean
+  refresh?: boolean
+}
+
 interface LocalMockAccountIdentity {
   email?: string
   accountId?: string
+}
+
+interface LocalMockProviderIdentity {
+  baseUrl: string
 }
 
 export interface AppSnapshot {
@@ -230,6 +274,10 @@ export interface AppSnapshot {
   usageByAccountId: Record<string, AccountRateLimits>
   usageErrorByAccountId: Record<string, string>
   wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
+  tokenCostByInstanceId: Record<string, TokenCostSummary>
+  tokenCostErrorByInstanceId: Record<string, string>
+  runningTokenCostSummary: TokenCostSummary | null
+  runningTokenCostInstanceIds: string[]
 }
 
 export interface LoginAttempt {
@@ -354,6 +402,75 @@ export function isLocalMockAccount(account?: LocalMockAccountIdentity | null): b
   return Boolean(accountId?.startsWith('acct-local-'))
 }
 
+const localMockProviderHosts = new Set([
+  'mock-provider.local',
+  'fast-mock-provider.local',
+  'fallback-provider.local'
+])
+
+export function isLocalMockProvider(provider?: LocalMockProviderIdentity | null): boolean {
+  const baseUrl = provider?.baseUrl?.trim()
+  if (!baseUrl) {
+    return false
+  }
+
+  try {
+    return localMockProviderHosts.has(new URL(baseUrl).hostname.toLowerCase())
+  } catch {
+    return false
+  }
+}
+
+export function shouldShowLocalMockData(
+  settings?: Pick<AppSettings, 'showLocalMockData'> | null
+): boolean {
+  return settings?.showLocalMockData !== false
+}
+
+function filterSnapshotRecord<T>(
+  record: Record<string, T>,
+  allowedIds: Set<string>
+): Record<string, T> {
+  return Object.fromEntries(Object.entries(record).filter(([key]) => allowedIds.has(key)))
+}
+
+export function filterLocalMockAppSnapshot(snapshot: AppSnapshot): AppSnapshot {
+  const showMock = shouldShowLocalMockData(snapshot.settings)
+  const visibleAccounts = snapshot.accounts.filter(
+    (account) => isLocalMockAccount(account) === showMock
+  )
+  const visibleAccountIds = new Set(visibleAccounts.map((account) => account.id))
+  const currentSessionVisible =
+    snapshot.currentSession && isLocalMockAccount(snapshot.currentSession) === showMock
+
+  const visibleProviders = snapshot.providers.filter(
+    (provider) => isLocalMockProvider(provider) === showMock
+  )
+
+  return {
+    ...snapshot,
+    accounts: visibleAccounts,
+    providers: visibleProviders,
+    activeAccountId:
+      snapshot.activeAccountId && visibleAccountIds.has(snapshot.activeAccountId)
+        ? snapshot.activeAccountId
+        : undefined,
+    currentSession: currentSessionVisible ? snapshot.currentSession : null,
+    settings: {
+      ...snapshot.settings,
+      statusBarAccountIds: snapshot.settings.statusBarAccountIds.filter((accountId) =>
+        visibleAccountIds.has(accountId)
+      )
+    },
+    usageByAccountId: filterSnapshotRecord(snapshot.usageByAccountId, visibleAccountIds),
+    usageErrorByAccountId: filterSnapshotRecord(snapshot.usageErrorByAccountId, visibleAccountIds),
+    wakeSchedulesByAccountId: filterSnapshotRecord(
+      snapshot.wakeSchedulesByAccountId,
+      visibleAccountIds
+    )
+  }
+}
+
 function normalizeTimestamp(value?: number | null): number | null {
   if (!value) {
     return null
@@ -404,12 +521,16 @@ function accountHasUsage(rateLimits?: AccountRateLimits): boolean {
   return Boolean(rateLimits?.primary || rateLimits?.secondary)
 }
 
+function isFreePlan(rateLimits?: AccountRateLimits): boolean {
+  return (rateLimits?.planType ?? '').toLowerCase() === 'free'
+}
+
 export function hasFullSessionQuota(rateLimits?: AccountRateLimits): boolean {
   return Boolean(rateLimits?.primary && rateLimits.primary.usedPercent <= 0)
 }
 
 export function supportsWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
-  return Boolean(rateLimits && (rateLimits.planType ?? '').toLowerCase() !== 'free')
+  return Boolean(rateLimits && !isFreePlan(rateLimits))
 }
 
 export function canWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
@@ -417,7 +538,7 @@ export function canWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
 }
 
 export function supportsWeeklyQuota(rateLimits?: AccountRateLimits): boolean {
-  return Boolean(rateLimits && (rateLimits.planType ?? '').toLowerCase() !== 'free')
+  return Boolean(rateLimits?.secondary)
 }
 
 interface AccountQuotaScore {
@@ -432,29 +553,40 @@ interface AccountQuotaScore {
 
 function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
   const hasUsage = accountHasUsage(rateLimits)
+  const freePlan = isFreePlan(rateLimits)
   const hasPrimaryWindow = Boolean(rateLimits?.primary)
+  const hasSecondaryWindow = Boolean(rateLimits?.secondary)
   const requiresWeeklyQuota = supportsWeeklyQuota(rateLimits)
-  const hasRequiredWindows =
-    hasPrimaryWindow && (!requiresWeeklyQuota || Boolean(rateLimits?.secondary))
+  const hasRequiredWindows = freePlan
+    ? hasSecondaryWindow
+    : hasPrimaryWindow && (!requiresWeeklyQuota || hasSecondaryWindow)
   const primaryRemaining = rateLimits?.primary
     ? remainingPercent(rateLimits.primary.usedPercent)
     : -1
-  const secondaryRemaining = requiresWeeklyQuota
-    ? rateLimits?.secondary
-      ? remainingPercent(rateLimits.secondary.usedPercent)
-      : -1
-    : primaryRemaining
-  const hasAvailableQuota = hasRequiredWindows && primaryRemaining > 0 && secondaryRemaining > 0
+  const secondaryRemaining = rateLimits?.secondary
+    ? remainingPercent(rateLimits.secondary.usedPercent)
+    : freePlan
+      ? -1
+      : primaryRemaining
+  const hasAvailableQuota = freePlan
+    ? hasRequiredWindows && secondaryRemaining > 0
+    : hasRequiredWindows && primaryRemaining > 0 && secondaryRemaining > 0
 
   return {
     hasUsage,
     hasRequiredWindows,
     hasAvailableQuota,
-    bottleneckRemaining: hasRequiredWindows ? Math.min(primaryRemaining, secondaryRemaining) : -1,
+    bottleneckRemaining: hasRequiredWindows
+      ? freePlan
+        ? secondaryRemaining
+        : Math.min(primaryRemaining, secondaryRemaining)
+      : -1,
     combinedRemaining: hasRequiredWindows
-      ? requiresWeeklyQuota
-        ? primaryRemaining + secondaryRemaining
-        : primaryRemaining
+      ? freePlan
+        ? secondaryRemaining
+        : requiresWeeklyQuota
+          ? primaryRemaining + secondaryRemaining
+          : primaryRemaining
       : -1,
     primaryRemaining,
     secondaryRemaining

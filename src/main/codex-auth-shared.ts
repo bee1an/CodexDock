@@ -60,7 +60,8 @@ function defaultSettings(): AppSettings {
     language: 'zh-CN',
     theme: 'light',
     checkForUpdatesOnStartup: true,
-    codexDesktopExecutablePath: ''
+    codexDesktopExecutablePath: '',
+    showLocalMockData: true
   }
 }
 

@@ -1,7 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto'
 import { createServer, type Server } from 'node:http'
 
-import type { LoginAttempt, LoginEvent, LoginMethod } from '../shared/codex'
+import type { AppSnapshot, LoginAttempt, LoginEvent, LoginMethod } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { CodexAccountStore } from './codex-account-store'
 import {
@@ -31,7 +31,9 @@ export class CodexLoginCoordinator {
   constructor(
     private readonly store: CodexAccountStore,
     private readonly emit: (event: LoginEvent) => void,
-    private readonly platform: CodexPlatformAdapter
+    private readonly platform: CodexPlatformAdapter,
+    private readonly loadImmediateSnapshot?: () => Promise<AppSnapshot | undefined>,
+    private readonly loadHydratedSnapshot?: () => Promise<AppSnapshot | undefined>
   ) {}
 
   isRunning(): boolean {
@@ -93,6 +95,54 @@ export class CodexLoginCoordinator {
       verificationUrl: session.verificationUrl,
       userCode: session.userCode,
       rawOutput: session.rawOutput
+    })
+  }
+
+  private async resolveImmediateSnapshot(): Promise<AppSnapshot | undefined> {
+    if (!this.loadImmediateSnapshot) {
+      try {
+        return await this.store.getSnapshot(false)
+      } catch {
+        return undefined
+      }
+    }
+
+    try {
+      return await this.loadImmediateSnapshot()
+    } catch {
+      return undefined
+    }
+  }
+
+  private async resolveSnapshot(): Promise<AppSnapshot | undefined> {
+    if (!this.loadHydratedSnapshot) {
+      return this.resolveImmediateSnapshot()
+    }
+
+    try {
+      return await this.loadHydratedSnapshot()
+    } catch {
+      return undefined
+    }
+  }
+
+  private emitHydratedSuccess(
+    event: Omit<LoginEvent, 'snapshot'>,
+    immediateSnapshot: AppSnapshot | undefined
+  ): void {
+    if (!this.loadHydratedSnapshot) {
+      return
+    }
+
+    void this.resolveSnapshot().then((snapshot) => {
+      if (!snapshot || snapshot === immediateSnapshot) {
+        return
+      }
+
+      this.emit({
+        ...event,
+        snapshot
+      })
     })
   }
 
@@ -235,7 +285,7 @@ export class CodexLoginCoordinator {
             ? error.message
             : 'Callback login failed.',
         rawOutput: session.rawOutput,
-        snapshot: await this.store.getSnapshot(false)
+        snapshot: await this.resolveImmediateSnapshot()
       })
     })
 
@@ -300,7 +350,7 @@ export class CodexLoginCoordinator {
             verificationUrl: session.verificationUrl,
             userCode: session.userCode,
             rawOutput: session.rawOutput,
-            snapshot: await this.store.getSnapshot(false)
+            snapshot: await this.resolveImmediateSnapshot()
           })
         }
       )
@@ -351,14 +401,19 @@ export class CodexLoginCoordinator {
 
     this.currentSession = undefined
     await this.closeServer(server)
-    this.emit({
+    const successEvent: Omit<LoginEvent, 'snapshot'> = {
       attemptId,
       method: 'browser',
       phase: 'success',
       message: 'Saved the new callback login to the local account vault.',
-      rawOutput: session.rawOutput,
-      snapshot: await this.store.getSnapshot(false)
+      rawOutput: session.rawOutput
+    }
+    const immediateSnapshot = await this.resolveImmediateSnapshot()
+    this.emit({
+      ...successEvent,
+      snapshot: immediateSnapshot
     })
+    this.emitHydratedSuccess(successEvent, immediateSnapshot)
   }
 
   private async exchangeBrowserCode(
@@ -461,16 +516,21 @@ export class CodexLoginCoordinator {
     await this.store.importAuthPayload(auth)
 
     this.currentSession = undefined
-    this.emit({
+    const successEvent: Omit<LoginEvent, 'snapshot'> = {
       attemptId,
       method: 'device',
       phase: 'success',
       message: 'Saved the new device code login to the local account vault.',
       verificationUrl: session.verificationUrl,
       userCode: session.userCode,
-      rawOutput: session.rawOutput,
-      snapshot: await this.store.getSnapshot(false)
+      rawOutput: session.rawOutput
+    }
+    const immediateSnapshot = await this.resolveImmediateSnapshot()
+    this.emit({
+      ...successEvent,
+      snapshot: immediateSnapshot
     })
+    this.emitHydratedSuccess(successEvent, immediateSnapshot)
   }
 
   private async pollDeviceAuthorization(

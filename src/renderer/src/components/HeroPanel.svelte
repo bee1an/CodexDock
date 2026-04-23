@@ -25,7 +25,9 @@
   export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
   export let updatePollingInterval: (minutes: number) => void
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void
+  export let updateShowLocalMockData: (enabled: boolean) => void
   export let updateCodexDesktopExecutablePath: (value: string) => Promise<void>
+  export let showLocalMockToggle = false
   export let checkForUpdates: () => void
   export let downloadUpdate: () => Promise<void>
   export let installUpdate: () => Promise<void>
@@ -175,7 +177,7 @@
 {#if hasDetailContent}
   <div
     class="fixed inset-0 z-[55] flex items-center justify-center bg-black/38 px-4 py-6 backdrop-blur-[2px]"
-    use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
+    use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.15 }}
     role="presentation"
     tabindex="-1"
     onclick={(event) => {
@@ -191,13 +193,9 @@
   >
     <div
       class={`${heroClass} w-full max-w-4xl max-h-[calc(100vh-3rem)] overflow-y-auto shadow-[0_24px_80px_rgba(15,23,42,0.18)]`}
-      use:reveal={{ y: 10, scale: 0.992, blur: 6, duration: 0.34 }}
+      use:reveal={{ delay: 0.05 }}
       use:cascadeIn={{
-        selector: '[data-hero-motion]',
-        y: 8,
-        blur: 4,
-        duration: 0.26,
-        stagger: 0.024
+        selector: '[data-hero-motion]'
       }}
       role="dialog"
       aria-modal="true"
@@ -256,6 +254,19 @@
               {updateActionLabel()}
             </button>
           </div>
+
+          {#if showLocalMockToggle}
+            <label class="inline-flex items-center gap-2 text-xs text-muted-strong">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border border-black/14"
+                checked={settings.showLocalMockData !== false}
+                onchange={(event) =>
+                  updateShowLocalMockData((event.currentTarget as HTMLInputElement).checked)}
+              />
+              <span>{copy.showLocalMockData}</span>
+            </label>
+          {/if}
 
           {#if showCodexDesktopExecutablePath}
             <div class="flex flex-wrap items-center gap-3">

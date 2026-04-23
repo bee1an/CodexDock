@@ -2,6 +2,7 @@
 
 import { fireEvent, render, screen } from '@testing-library/svelte'
 import { describe, expect, it, vi } from 'vitest'
+import type { AccountRateLimits } from '../../../../shared/codex'
 
 type MockAction = {
   update: () => void
@@ -63,6 +64,28 @@ const tags = [
   }
 ]
 
+function createUsage(overrides: Partial<AccountRateLimits> = {}): AccountRateLimits {
+  return {
+    limitId: 'codex',
+    limitName: null,
+    planType: 'plus',
+    primary: {
+      usedPercent: 40,
+      windowDurationMins: 300,
+      resetsAt: null
+    },
+    secondary: {
+      usedPercent: 50,
+      windowDurationMins: 10080,
+      resetsAt: null
+    },
+    credits: null,
+    limits: [],
+    fetchedAt: '2026-04-21T00:00:00.000Z',
+    ...overrides
+  }
+}
+
 function renderAccountsListView(
   overrideProps: Record<string, unknown> = {}
 ): ReturnType<typeof render> {
@@ -121,5 +144,55 @@ describe('AccountsListView', () => {
     await fireEvent.click(screen.getByRole('button', { name: copy.exportSelectedAccounts }))
 
     expect(exportSelectedAccounts).toHaveBeenCalledWith(['acct-1'])
+  })
+
+  it('shows full usage errors in a popover', async () => {
+    renderAccountsListView({
+      usageErrorByAccountId: {
+        'acct-1': [
+          'Rate-limit lookup failed: 429 Too Many Requests',
+          'retry_after: 120s',
+          'request_id: req_mock_quota_throttled'
+        ].join('\n')
+      }
+    })
+
+    expect(screen.queryByText('retry_after: 120s')).toBeNull()
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: /Rate-limit lookup failed: 429 Too Many Requests/ })
+    )
+
+    expect(screen.getByText(/retry_after: 120s/)).toBeTruthy()
+    expect(screen.getByText(/request_id: req_mock_quota_throttled/)).toBeTruthy()
+  })
+
+  it('hides 5h quota for free accounts and keeps weekly quota visible', () => {
+    renderAccountsListView({
+      accounts: [
+        {
+          id: 'free-1',
+          email: 'free@example.com',
+          tagIds: [],
+          createdAt: '2026-04-21T00:00:00.000Z',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      ],
+      activeAccountId: 'free-1',
+      usageByAccountId: {
+        'free-1': createUsage({
+          planType: 'free',
+          primary: null,
+          secondary: {
+            usedPercent: 30,
+            windowDurationMins: 10080,
+            resetsAt: null
+          }
+        })
+      }
+    })
+
+    expect(screen.queryByText(copy.sessionReset)).toBeNull()
+    expect(screen.getByText(copy.weeklyReset)).toBeTruthy()
   })
 })

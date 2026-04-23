@@ -6,7 +6,11 @@ import {
   getOpenAiCallbackPortOccupant,
   killOpenAiCallbackPortOccupant
 } from './codex-auth'
-import { CodexInstanceStore } from './codex-instances'
+import {
+  CodexInstanceStore,
+  type PersistedCodexInstance,
+  type PersistedDefaultCodexInstance
+} from './codex-instances'
 import {
   buildAuthPayloadFromTemplate,
   buildTemplateRateLimits,
@@ -16,6 +20,8 @@ import {
 } from './codex-account-template'
 import { CodexProviderStore } from './codex-providers'
 import {
+  type AppSnapshot,
+  type CodexInstanceSummary,
   isLocalMockAccount,
   resolveBestAccount,
   supportsWakeSessionQuota,
@@ -28,6 +34,7 @@ import type {
 } from './codex-services-shared'
 import { DEFAULT_CODEX_INSTANCE_ID } from './codex-services-shared'
 import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
+import { createCodexCostUsageService } from './codex-cost-usage'
 import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
 import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
 
@@ -42,10 +49,26 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   )
   const instanceStore = new CodexInstanceStore(options.userDataPath, options.defaultCodexHome)
   const providerStore = new CodexProviderStore(options.userDataPath, options.platform)
+  const loadImmediateSnapshotForLoginEvent = async (): Promise<AppSnapshot | undefined> => {
+    try {
+      return await getBaseSnapshot()
+    } catch {
+      return getFallbackSnapshotForLoginEvent(false)
+    }
+  }
+  const loadHydratedSnapshotForLoginEvent = async (): Promise<AppSnapshot | undefined> => {
+    try {
+      return await getSnapshot()
+    } catch {
+      return getFallbackSnapshotForLoginEvent(true)
+    }
+  }
   const loginCoordinator = new CodexLoginCoordinator(
     store,
     options.emitLoginEvent ?? (() => undefined),
-    options.platform
+    options.platform,
+    loadImmediateSnapshotForLoginEvent,
+    loadHydratedSnapshotForLoginEvent
   )
   const authRefreshTasksByAccountId = new Map<string, Promise<StoredAuthRefreshResult>>()
   const wakeTasksByAccountId = new Map<string, Promise<WakeAccountRateLimitsResult>>()
@@ -61,6 +84,10 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
 
   const authRuntime = createCodexServicesAuthRuntime(context)
   const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime)
+  const costUsageService = createCodexCostUsageService({
+    userDataPath: options.userDataPath,
+    listInstances: () => instanceRuntime.listCodexInstances()
+  })
   const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
 
   const {
@@ -72,7 +99,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     wakeUsageGuarded
   } = authRuntime
   const {
-    getSnapshot,
+    getSnapshot: getBaseSnapshot,
     listCodexInstances,
     refreshExpiringAccountSession,
     resolveAccountIdOrThrow,
@@ -88,12 +115,117 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   } = instanceRuntime
   const { checkProvider, runDoctor } = diagnosticsRuntime
 
+  const getSnapshot = async (): Promise<AppSnapshot> => {
+    const snapshot = await getBaseSnapshot()
+    const costSnapshot = await costUsageService.readSnapshotSummaries(snapshot.codexInstances)
+    return {
+      ...snapshot,
+      ...costSnapshot
+    }
+  }
+
+  async function fallbackNamedInstanceSummary(
+    instance: PersistedCodexInstance
+  ): Promise<CodexInstanceSummary> {
+    try {
+      return await toInstanceSummary(instance)
+    } catch {
+      const persistedInstance =
+        (await instanceStore
+          .list()
+          .then((instances) => instances.find((item) => item.id === instance.id))
+          .catch(() => undefined)) ?? instance
+      return {
+        id: persistedInstance.id,
+        name: persistedInstance.name,
+        codexHome: persistedInstance.codexHome,
+        bindAccountId: persistedInstance.bindAccountId,
+        extraArgs: persistedInstance.extraArgs,
+        isDefault: false,
+        createdAt: persistedInstance.createdAt,
+        updatedAt: persistedInstance.updatedAt,
+        lastLaunchedAt: persistedInstance.lastLaunchedAt,
+        lastPid: persistedInstance.lastPid,
+        running: Boolean(persistedInstance.lastPid),
+        initialized: false
+      }
+    }
+  }
+
+  async function fallbackDefaultInstanceSummary(
+    instance: PersistedDefaultCodexInstance
+  ): Promise<CodexInstanceSummary> {
+    try {
+      return await toDefaultInstanceSummary(instance)
+    } catch {
+      const persistedInstance = await instanceStore.getDefaultInstance().catch(() => instance)
+      const { defaultCodexHome } = instanceStore.getDefaults()
+      return {
+        id: DEFAULT_CODEX_INSTANCE_ID,
+        name: '',
+        codexHome: defaultCodexHome,
+        bindAccountId: persistedInstance.bindAccountId,
+        extraArgs: persistedInstance.extraArgs,
+        isDefault: true,
+        createdAt: persistedInstance.updatedAt,
+        updatedAt: persistedInstance.updatedAt,
+        lastLaunchedAt: persistedInstance.lastLaunchedAt,
+        lastPid: persistedInstance.lastPid,
+        running: Boolean(persistedInstance.lastPid),
+        initialized: false
+      }
+    }
+  }
+
+  async function getFallbackSnapshotForLoginEvent(
+    includeTokenCost: boolean
+  ): Promise<AppSnapshot | undefined> {
+    try {
+      const [snapshot, providers, defaultInstance, namedInstances] = await Promise.all([
+        store.getSnapshot(false),
+        providerStore.list(),
+        instanceStore.getDefaultInstance(),
+        instanceStore.list()
+      ])
+      const codexInstances = await Promise.all([
+        fallbackDefaultInstanceSummary(defaultInstance),
+        ...namedInstances.map((instance) => fallbackNamedInstanceSummary(instance))
+      ])
+      const costSnapshot = includeTokenCost
+        ? await costUsageService.readSnapshotSummaries(codexInstances)
+        : {
+            tokenCostByInstanceId: {},
+            tokenCostErrorByInstanceId: {},
+            runningTokenCostSummary: null,
+            runningTokenCostInstanceIds: []
+          }
+
+      return {
+        ...snapshot,
+        providers,
+        codexInstances,
+        codexInstanceDefaults: instanceStore.getDefaults(),
+        ...costSnapshot
+      }
+    } catch {
+      return undefined
+    }
+  }
+
   return {
     getSnapshot,
     accounts: {
       list: getSnapshot,
       importCurrent: async () => {
         await store.importCurrentAuth()
+        return getSnapshot()
+      },
+      importFromAuthFile: async (authFile) => {
+        await store.importAuthFile(authFile)
+        return getSnapshot()
+      },
+      importFromStateFile: async (stateFile) => {
+        await store.importAccountsFromStateFile(stateFile)
         return getSnapshot()
       },
       importFromTemplate: async (raw) => {
@@ -309,6 +441,9 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
 
         return wakeResult
       }
+    },
+    cost: {
+      read: (input) => costUsageService.read(input)
     },
     login: {
       start: (method) => loginCoordinator.start(method),

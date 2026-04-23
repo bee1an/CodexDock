@@ -14,6 +14,7 @@ import {
   accountErrorLabel,
   authPayloadsEqualForRefresh,
   authRefreshReason,
+  localMockUsageError,
   shouldClearStoredUsage,
   shouldRefreshStoredAuth,
   type CodexServicesRuntimeContext,
@@ -285,6 +286,12 @@ export function createCodexServicesAuthRuntime(
   }
 
   async function readStoredMockUsage(accountId: string): Promise<AccountRateLimits> {
+    const demoError = localMockUsageError(accountId)
+    if (demoError) {
+      await store.saveAccountUsageError(accountId, demoError)
+      throw new Error(demoError)
+    }
+
     const snapshot = await store.getSnapshot(loginCoordinator.isRunning())
     const storedRateLimits = snapshot.usageByAccountId[accountId]
     if (!storedRateLimits) {

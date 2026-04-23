@@ -57,6 +57,11 @@ function localeText(language: AppSettings['language']): {
   updatesUnsupported: string
   pollingInterval: string
   minutes: string
+  runningTokenCost: string
+  tokenCostToday: string
+  tokenCostLast30Days: string
+  tokenCostNoData: string
+  tokenCostDefaultFallback: string
   quit: string
   autoCheckUpdates: string
   unknownAccount: string
@@ -96,6 +101,12 @@ function localeText(language: AppSettings['language']): {
       language === 'en' ? 'Automatic updates unavailable for this build' : '当前构建不支持自动更新',
     pollingInterval: language === 'en' ? 'Polling interval' : '轮询间隔',
     minutes: language === 'en' ? 'min' : '分钟',
+    runningTokenCost: language === 'en' ? 'All instances token/cost' : '全部实例 token/cost',
+    tokenCostToday: language === 'en' ? 'Today' : '今日',
+    tokenCostLast30Days: language === 'en' ? 'Last 30 days' : '最近 30 天',
+    tokenCostNoData: language === 'en' ? 'No token/cost data' : '暂无 token/cost 数据',
+    tokenCostDefaultFallback:
+      language === 'en' ? 'Aggregated across all instances' : '按全部实例聚合',
     quit: language === 'en' ? 'Quit' : '退出',
     autoCheckUpdates: language === 'en' ? 'Check updates on startup' : '启动时检查更新',
     unknownAccount: language === 'en' ? 'Unnamed account' : '未命名账号'

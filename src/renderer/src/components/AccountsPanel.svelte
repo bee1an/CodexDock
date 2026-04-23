@@ -9,12 +9,16 @@
     AppLanguage,
     CustomProviderDetail,
     CustomProviderSummary,
+    TokenCostDetail,
+    TokenCostReadOptions,
+    TokenCostSummary,
     UpdateCustomProviderInput
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AccountsListView from './AccountsListView.svelte'
   import AccountsProvidersView from './AccountsProvidersView.svelte'
   import AccountsTagsView from './AccountsTagsView.svelte'
+  import CostStatsView from './CostStatsView.svelte'
   import { taggedAccountCount as taggedAccountCountForAccounts } from './accounts-panel-account'
   import {
     buildProviderUpdateInput,
@@ -37,7 +41,9 @@
   export let updateSummary = ''
   export let updateActionLabel: string | null = null
   export let runUpdateAction: () => void = () => {}
+  export let showLocalMockToggle = false
   export let language: AppLanguage
+  export let showLocalMockData = true
   export let accounts: AccountSummary[] = []
   export let providers: CustomProviderSummary[] = []
   export let tags: AccountTag[] = []
@@ -45,6 +51,10 @@
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
   export let usageErrorByAccountId: Record<string, string>
+  export let tokenCostByInstanceId: Record<string, TokenCostSummary>
+  export let tokenCostErrorByInstanceId: Record<string, string>
+  export let runningTokenCostSummary: TokenCostSummary | null
+  export let runningTokenCostInstanceIds: string[]
   export let wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   export let loginActionBusy: boolean
   export let loginStarting = false
@@ -66,13 +76,15 @@
   export let deleteTag: (tag: AccountTag) => Promise<void>
   export let updateAccountTags: (account: AccountSummary, tagIds: string[]) => Promise<void>
   export let refreshAccountUsage: (account: AccountSummary) => void
+  export let updateShowLocalMockData: (enabled: boolean) => void
   export let removeAccount: (account: AccountSummary) => void
   export let removeAccounts: (accountIds: string[]) => Promise<void>
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
+  export let readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
   export let startLogin: (method: 'browser' | 'device') => void
   export let importCurrent: () => void
 
-  let currentView: 'accounts' | 'providers' | 'tags' = 'accounts'
+  let currentView: 'accounts' | 'providers' | 'tags' | 'stats' = 'accounts'
   let activeTagFilter = 'all'
   let newTagName = ''
   let editingTagId: string | null = null
@@ -249,8 +261,8 @@
 
 <section
   class={`${panelClass} flex h-full min-h-0 flex-1 w-full flex-col gap-4 overflow-hidden`}
-  use:reveal={{ y: 12, blur: 8, duration: 0.46 }}
-  use:cascadeIn={{ selector: '[data-panel-motion]', y: 8, blur: 4, duration: 0.28, stagger: 0.028 }}
+  use:reveal={{ delay: 0.05 }}
+  use:cascadeIn={{ selector: '[data-panel-motion]' }}
 >
   <div class="flex flex-wrap items-center justify-between gap-3" data-panel-motion>
     <div class="min-w-0 flex flex-1 items-center gap-3">
@@ -277,6 +289,21 @@
     <div class="flex flex-wrap items-center justify-end gap-2">
       {#if updateSummary}
         <span class="text-xs text-muted-strong" aria-live="polite">{updateSummary}</span>
+      {/if}
+
+      {#if showLocalMockToggle}
+        <label
+          class="inline-flex items-center gap-2 rounded-[0.8rem] border border-black/8 bg-black/[0.03] px-3 py-2 text-xs text-muted-strong"
+        >
+          <input
+            type="checkbox"
+            class="h-4 w-4 rounded border border-black/14"
+            checked={showLocalMockData}
+            onchange={(event) =>
+              updateShowLocalMockData((event.currentTarget as HTMLInputElement).checked)}
+          />
+          <span>{copy.showLocalMockData}</span>
+        </label>
       {/if}
 
       {#if updateActionLabel}
@@ -330,11 +357,36 @@
           <span class="i-lucide-tags h-4 w-4"></span>
           <span>{copy.tagManager}</span>
         </button>
+        <button
+          class={`theme-view-toggle inline-flex items-center gap-2 rounded-[0.7rem] px-3 py-2 text-sm font-medium transition-colors duration-140 ${
+            currentView === 'stats'
+              ? 'theme-view-toggle-active bg-white text-ink'
+              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
+          }`}
+          type="button"
+          onclick={() => {
+            currentView = 'stats'
+          }}
+        >
+          <span class="i-lucide-chart-no-axes-combined h-4 w-4"></span>
+          <span>{copy.tokenStats}</span>
+        </button>
       </div>
     </div>
   </div>
 
-  {#if currentView === 'tags'}
+  {#if currentView === 'stats'}
+    <CostStatsView
+      {copy}
+      {language}
+      {tokenCostByInstanceId}
+      {tokenCostErrorByInstanceId}
+      {runningTokenCostSummary}
+      {runningTokenCostInstanceIds}
+      {compactGhostButton}
+      {readTokenCost}
+    />
+  {:else if currentView === 'tags'}
     <AccountsTagsView
       {compactGhostButton}
       {iconRowButton}

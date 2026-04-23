@@ -11,6 +11,7 @@ import {
   type OpenDialogOptions
 } from 'electron'
 import { promises as fs } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
@@ -23,7 +24,11 @@ import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
 import { refreshLocalMockData, seedLocalMockData } from './local-mock-data'
-import { buildTrayUpdateMenuItem, buildTrayUsageMenuItems } from './tray-menu'
+import {
+  buildTrayTokenCostMenuItems,
+  buildTrayUpdateMenuItem,
+  buildTrayUsageMenuItems
+} from './tray-menu'
 import { createUsagePollingController, type UsagePollingController } from './usage-poller'
 import { createWakeSchedulerController, type WakeSchedulerController } from './wake-scheduler'
 import {
@@ -34,6 +39,7 @@ import {
   type AppSnapshot,
   type LoginEvent,
   type LoginMethod,
+  type TokenCostReadOptions,
   type UpdateAccountWakeScheduleInput,
   type WakeAccountRateLimitsInput
 } from '../shared/codex'
@@ -66,11 +72,39 @@ const isLocalEnvironment = !app.isPackaged
 const configuredUserDataPath = isLocalEnvironment
   ? join(homedir(), '.config', 'ilovecodex-local')
   : join(homedir(), '.config', 'ilovecodex')
+function shouldUseLocalMockCodexHome(): boolean {
+  if (!isLocalEnvironment) {
+    return false
+  }
+
+  try {
+    const raw = readFileSync(join(configuredUserDataPath, 'codex-accounts.json'), 'utf8')
+    const parsed = JSON.parse(raw) as { settings?: { showLocalMockData?: unknown } }
+    return parsed.settings?.showLocalMockData !== false
+  } catch {
+    return true
+  }
+}
+
 const configuredCodexHomePath = isLocalEnvironment
-  ? join(configuredUserDataPath, '.codex')
+  ? shouldUseLocalMockCodexHome()
+    ? join(configuredUserDataPath, '.codex')
+    : join(homedir(), '.codex')
   : join(homedir(), '.codex')
 
 app.setPath('userData', configuredUserDataPath)
+
+async function importRealLocalAccounts(services: CodexServices): Promise<void> {
+  const realAccountsStateFile = join(homedir(), '.config', 'ilovecodex', 'codex-accounts.json')
+  const realCodexAuthFile = join(homedir(), '.codex', 'auth.json')
+
+  try {
+    await services.accounts.importFromStateFile(realAccountsStateFile)
+  } catch {
+    await services.accounts.importFromAuthFile(realCodexAuthFile)
+  }
+}
+
 function buildTrayUsageMenu(snapshot: AppSnapshot): MenuItemConstructorOptions[] {
   const text = localeText(snapshot.settings.language)
 
@@ -203,6 +237,14 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     },
     { type: 'separator' },
     ...buildTrayUsageMenu(snapshot),
+    { type: 'separator' },
+    ...buildTrayTokenCostMenuItems(snapshot, {
+      title: text.runningTokenCost,
+      today: text.tokenCostToday,
+      last30Days: text.tokenCostLast30Days,
+      noData: text.tokenCostNoData,
+      fallbackToDefault: text.tokenCostDefaultFallback
+    }),
     { type: 'separator' },
     {
       label: text.pollingInterval,
@@ -347,7 +389,11 @@ function createTray(): void {
           },
           usageByAccountId: {},
           usageErrorByAccountId: {},
-          wakeSchedulesByAccountId: {}
+          wakeSchedulesByAccountId: {},
+          tokenCostByInstanceId: {},
+          tokenCostErrorByInstanceId: {},
+          runningTokenCostSummary: null,
+          runningTokenCostInstanceIds: []
         })
       : nativeImage.createFromPath(icon).resize({ width: 18, height: 18 })
 
@@ -370,7 +416,8 @@ app.whenReady().then(async () => {
   }
 
   const cliArgs = extractCliArgs(process.argv)
-  const shouldBootstrapLocalMockData = isLocalEnvironment && !cliArgs
+  const shouldBootstrapLocalMockData =
+    isLocalEnvironment && !cliArgs && shouldUseLocalMockCodexHome()
   const loginEventListeners = new Set<(event: LoginEvent) => void>()
   const platform = createElectronCodexPlatformAdapter()
   codexServices = createCodexServices({
@@ -388,6 +435,10 @@ app.whenReady().then(async () => {
       void refreshTrayTitle()
     }
   })
+
+  if (isLocalEnvironment && !shouldUseLocalMockCodexHome()) {
+    await importRealLocalAccounts(codexServices)
+  }
 
   if (shouldBootstrapLocalMockData) {
     const seeded = await seedLocalMockData(codexServices)
@@ -488,6 +539,10 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:get-app-meta', () => getAppMeta())
   ipcMain.handle('codex:get-update-state', () => resolveUpdateState())
   ipcMain.handle('codex:update-settings', async (_, nextSettings: Partial<AppSettings>) => {
+    if (isLocalEnvironment && nextSettings.showLocalMockData === false) {
+      await importRealLocalAccounts(codexServices)
+    }
+
     const snapshot = await codexServices.settings.update(nextSettings)
     appUpdaterService?.syncSettings(snapshot.settings)
     await refreshTrayTitle()
@@ -718,6 +773,15 @@ app.whenReady().then(async () => {
       }
     }
   )
+  ipcMain.handle('codex:read-token-cost', async (_, input?: TokenCostReadOptions) => {
+    try {
+      return await codexServices.cost.read(input)
+    } finally {
+      setTimeout(() => {
+        void refreshTrayTitle().catch(() => undefined)
+      }, 0)
+    }
+  })
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => triggerUpdateDownload())
   ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())
