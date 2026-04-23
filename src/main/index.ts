@@ -67,6 +67,8 @@ let authRefreshController: AuthRefreshController | null = null
 let usagePollingController: UsagePollingController | null = null
 let wakeSchedulerController: WakeSchedulerController | null = null
 let lastSnapshot: AppSnapshot | null = null
+let homebrewUpdateQuitTimer: ReturnType<typeof setTimeout> | null = null
+let homebrewUpdateQuitCountdownStarted = false
 const defaultWorkspacePath = process.cwd()
 const isLocalEnvironment = !app.isPackaged
 const configuredUserDataPath = isLocalEnvironment
@@ -182,6 +184,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
     checkingForUpdates: text.checkingForUpdates,
     downloadUpdate: text.downloadUpdate,
     updatingViaHomebrew: text.updatingViaHomebrew,
+    homebrewUpdateStatus: text.homebrewUpdateStatus,
     updateViaHomebrew: text.updateViaHomebrew,
     openReleasePage: text.openReleasePage,
     installUpdate: text.installUpdate,
@@ -285,6 +288,32 @@ function emitUpdateState(updateState: AppUpdateState): void {
     tray.setContextMenu(buildTrayMenu(lastSnapshot))
   }
 
+  if (
+    homebrewUpdateQuitTimer &&
+    updateState.externalAction === 'homebrew' &&
+    updateState.status === 'error'
+  ) {
+    clearTimeout(homebrewUpdateQuitTimer)
+    homebrewUpdateQuitTimer = null
+    homebrewUpdateQuitCountdownStarted = false
+  }
+
+  if (
+    updateState.delivery === 'external' &&
+    updateState.externalAction === 'homebrew' &&
+    updateState.status === 'downloading' &&
+    updateState.externalCommandStatus === 'waiting-for-app-quit' &&
+    !homebrewUpdateQuitCountdownStarted
+  ) {
+    homebrewUpdateQuitCountdownStarted = true
+    if (homebrewUpdateQuitTimer) {
+      clearTimeout(homebrewUpdateQuitTimer)
+    }
+    homebrewUpdateQuitTimer = setTimeout(() => {
+      app.quit()
+    }, 400)
+  }
+
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('codex:update-state', updateState)
   }
@@ -295,11 +324,12 @@ async function triggerUpdateDownload(): Promise<AppUpdateState> {
   if (
     updateState.delivery === 'external' &&
     updateState.externalAction === 'homebrew' &&
-    updateState.status === 'downloading'
+    updateState.status === 'downloading' &&
+    !homebrewUpdateQuitTimer
   ) {
-    setTimeout(() => {
+    homebrewUpdateQuitTimer = setTimeout(() => {
       app.quit()
-    }, 120)
+    }, 60_000)
   }
 
   return updateState
@@ -486,7 +516,8 @@ app.whenReady().then(async () => {
       launchHomebrewCaskUpgrade({
         appName: app.getName(),
         caskToken: 'ilovecodex',
-        executablePath: app.getPath('exe')
+        executablePath: app.getPath('exe'),
+        appPid: process.pid
       })
   })
   appUpdaterService.subscribe((updateState) => {

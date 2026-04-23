@@ -50,6 +50,7 @@ function localeText(language: AppSettings['language']): {
   checkingForUpdates: string
   downloadUpdate: (version?: string) => string
   updatingViaHomebrew: string
+  homebrewUpdateStatus: (status?: string, command?: string) => string
   updateViaHomebrew: (version?: string) => string
   openReleasePage: (version?: string) => string
   installUpdate: string
@@ -90,6 +91,25 @@ function localeText(language: AppSettings['language']): {
         : `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
     updatingViaHomebrew:
       language === 'en' ? 'Updating through Homebrew…' : '正在通过 Homebrew 更新…',
+    homebrewUpdateStatus: (status, command) => {
+      if (language === 'en') {
+        if (status === 'waiting-for-app-quit') {
+          return 'Homebrew is ready to install, closing the app…'
+        }
+        if (status === 'reopening') {
+          return 'Reopening the app…'
+        }
+        return command ? `Running: ${command}` : 'Updating through Homebrew…'
+      }
+
+      if (status === 'waiting-for-app-quit') {
+        return 'Homebrew 已准备安装，正在关闭应用…'
+      }
+      if (status === 'reopening') {
+        return '正在重新打开应用…'
+      }
+      return command ? `正在执行：${command}` : '正在通过 Homebrew 更新…'
+    },
     openReleasePage: (version) =>
       language === 'en'
         ? `Open download page${version ? ` v${version}` : ''}`

@@ -177,6 +177,7 @@ export function buildTrayUpdateMenuItem(
     checkingForUpdates: string
     downloadUpdate: (version?: string) => string
     updatingViaHomebrew: string
+    homebrewUpdateStatus: (status?: string, command?: string) => string
     updateViaHomebrew: (version?: string) => string
     openReleasePage: (version?: string) => string
     installUpdate: string
@@ -214,7 +215,10 @@ export function buildTrayUpdateMenuItem(
       return {
         label:
           updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
-            ? options.updatingViaHomebrew
+            ? options.homebrewUpdateStatus(
+                updateState.externalCommandStatus,
+                updateState.externalCommand
+              )
             : options.downloadingUpdate(updateState.downloadProgress),
         enabled: false
       }

@@ -142,6 +142,12 @@ describe('tray menu helpers', () => {
       checkingForUpdates: '检查更新中…',
       downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
       updatingViaHomebrew: '正在通过 Homebrew 更新…',
+      homebrewUpdateStatus: (status?: string, command?: string) =>
+        status === 'waiting-for-app-quit'
+          ? 'Homebrew 已准备安装，正在关闭应用…'
+          : command
+            ? `正在执行：${command}`
+            : '正在通过 Homebrew 更新…',
       updateViaHomebrew: (version?: string) => `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
       openReleasePage: (version?: string) => `前往下载${version ? ` v${version}` : ''}`,
       installUpdate: '重启安装更新',
@@ -254,6 +260,25 @@ describe('tray menu helpers', () => {
       throw new Error('homebrew item should render a Homebrew update action')
     }
     expect(homebrewItem.label).toBe('通过 Homebrew 更新 v0.2.5')
+
+    const homebrewDownloadingItem = buildTrayUpdateMenuItem(
+      {
+        status: 'downloading',
+        delivery: 'external',
+        currentVersion: '0.2.4',
+        availableVersion: '0.2.5',
+        supported: true,
+        externalAction: 'homebrew',
+        externalCommandStatus: 'brew-update',
+        externalCommand: '/opt/homebrew/bin/brew update'
+      } satisfies AppUpdateState,
+      labels
+    )
+    expect(homebrewDownloadingItem).not.toBeNull()
+    if (!homebrewDownloadingItem) {
+      throw new Error('homebrew downloading item should render current command')
+    }
+    expect(homebrewDownloadingItem.label).toBe('正在执行：/opt/homebrew/bin/brew update')
   })
 
   it('空 token/cost 统计只展示占位文案', () => {

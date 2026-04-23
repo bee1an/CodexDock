@@ -249,6 +249,20 @@ export const messages = {
     checkingUpdates: '检查更新中',
     downloadUpdate: (version?: string) => `下载更新${version ? ` v${version}` : ''}`,
     updatingViaHomebrew: '正在通过 Homebrew 更新…',
+    homebrewUpdateStatus: (status?: string, command?: string) => {
+      switch (status) {
+        case 'brew-update':
+          return `正在执行：${command ?? 'brew update'}`
+        case 'waiting-for-app-quit':
+          return 'Homebrew 已准备安装，正在关闭应用…'
+        case 'brew-upgrade':
+          return `正在执行：${command ?? 'brew upgrade --cask ilovecodex'}`
+        case 'reopening':
+          return '正在重新打开应用…'
+        default:
+          return command ? `正在执行：${command}` : '正在通过 Homebrew 更新…'
+      }
+    },
     updateViaHomebrew: (version?: string) => `通过 Homebrew 更新${version ? ` v${version}` : ''}`,
     openReleasePage: (version?: string) => `前往下载${version ? ` v${version}` : ''}`,
     restartToInstallUpdate: '重启安装更新',
@@ -517,6 +531,20 @@ export const messages = {
     checkingUpdates: 'Checking for updates',
     downloadUpdate: (version?: string) => `Download update${version ? ` v${version}` : ''}`,
     updatingViaHomebrew: 'Updating through Homebrew…',
+    homebrewUpdateStatus: (status?: string, command?: string) => {
+      switch (status) {
+        case 'brew-update':
+          return `Running: ${command ?? 'brew update'}`
+        case 'waiting-for-app-quit':
+          return 'Homebrew is ready to install, closing the app…'
+        case 'brew-upgrade':
+          return `Running: ${command ?? 'brew upgrade --cask ilovecodex'}`
+        case 'reopening':
+          return 'Reopening the app…'
+        default:
+          return command ? `Running: ${command}` : 'Updating through Homebrew…'
+      }
+    },
     updateViaHomebrew: (version?: string) => `Update with Homebrew${version ? ` v${version}` : ''}`,
     openReleasePage: (version?: string) => `Open download page${version ? ` v${version}` : ''}`,
     restartToInstallUpdate: 'Restart to install update',

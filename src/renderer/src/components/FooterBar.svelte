@@ -55,7 +55,10 @@
         return copy.updateAvailableVersion(updateState.availableVersion)
       case 'downloading':
         return updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
-          ? copy.updatingViaHomebrew
+          ? copy.homebrewUpdateStatus(
+              updateState.externalCommandStatus,
+              updateState.externalCommand
+            )
           : copy.updateDownloadProgress(updateState.downloadProgress)
       case 'downloaded':
         return copy.updateReady

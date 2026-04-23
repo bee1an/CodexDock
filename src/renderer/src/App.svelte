@@ -349,7 +349,10 @@
         return copyForLanguage().updateAvailableVersion(updateState.availableVersion)
       case 'downloading':
         return updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
-          ? copyForLanguage().updatingViaHomebrew
+          ? copyForLanguage().homebrewUpdateStatus(
+              updateState.externalCommandStatus,
+              updateState.externalCommand
+            )
           : copyForLanguage().updateDownloadProgress(updateState.downloadProgress)
       case 'downloaded':
         return copyForLanguage().updateReady

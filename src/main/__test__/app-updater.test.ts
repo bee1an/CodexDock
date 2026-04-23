@@ -1,4 +1,7 @@
 import { EventEmitter } from 'node:events'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -28,12 +31,16 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
 }
 
 describe('app updater service', () => {
+  let tempDirs: string[] = []
+
   beforeEach(() => {
     vi.useFakeTimers()
+    tempDirs = []
   })
 
-  afterEach(() => {
+  afterEach(async () => {
     vi.useRealTimers()
+    await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
   it('falls back to unsupported for unpackaged builds', async () => {
@@ -246,6 +253,60 @@ describe('app updater service', () => {
     expect(service.getState()).toMatchObject({
       status: 'downloading',
       externalAction: 'homebrew'
+    })
+  })
+
+  it('exposes Homebrew command status while updating', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'ilc-updater-test-'))
+    tempDirs.push(dir)
+    const statusFilePath = join(dir, 'homebrew.status')
+    const logFilePath = join(dir, 'homebrew.log')
+    const fetchImpl = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            tag_name: 'v0.2.5',
+            html_url: 'https://github.com/bee1an/ILoveCodex/releases/tag/v0.2.5'
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } }
+        )
+    ) as typeof fetch
+    const launchHomebrewUpdate = vi.fn(async () => {
+      await writeFile(
+        statusFilePath,
+        [
+          'brew-update',
+          '/opt/homebrew/bin/brew update',
+          'Running brew update',
+          '',
+          '2026-04-23T00:00:00Z'
+        ].join('\t'),
+        'utf8'
+      )
+      return {
+        statusFilePath,
+        logFilePath
+      }
+    })
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/ILoveCodex',
+      fetchImpl,
+      isHomebrewCaskInstalled: async () => true,
+      launchHomebrewUpdate
+    })
+
+    await service.checkForUpdates()
+    await service.downloadUpdate()
+    expect(service.getState()).toMatchObject({
+      status: 'downloading',
+      externalCommandStatus: 'brew-update',
+      externalCommand: '/opt/homebrew/bin/brew update',
+      message: 'Running brew update',
+      externalLogFilePath: logFilePath
     })
   })
 

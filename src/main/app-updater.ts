@@ -1,5 +1,6 @@
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 import { autoUpdater } from 'electron-updater'
+import { readFile } from 'node:fs/promises'
 
 import type {
   AppSettings,
@@ -52,6 +53,19 @@ interface GithubReleaseSummary {
   url: string
 }
 
+interface HomebrewCaskUpgradeLaunch {
+  logFilePath: string
+  statusFilePath: string
+}
+
+interface HomebrewCommandStatus {
+  phase: string
+  command?: string
+  message?: string
+  exitCode?: number
+  updatedAt?: string
+}
+
 interface UpdateStrategy {
   mode: UpdateStrategyMode
   delivery: AppUpdateDelivery
@@ -94,7 +108,7 @@ export interface CreateAppUpdaterServiceOptions {
   initialCheckDelayMs?: number
   checkIntervalMs?: number
   isHomebrewCaskInstalled?: () => Promise<boolean>
-  launchHomebrewUpdate?: () => Promise<void>
+  launchHomebrewUpdate?: () => Promise<HomebrewCaskUpgradeLaunch | void>
 }
 
 function createBaseState(
@@ -291,6 +305,23 @@ async function fetchLatestGithubRelease(
   return { version, url }
 }
 
+function parseHomebrewStatus(raw: string): HomebrewCommandStatus | null {
+  const [phase, command, message, exitCode, updatedAt] = raw.trim().split('\t')
+  if (!phase) {
+    return null
+  }
+
+  const parsedExitCode = exitCode ? Number(exitCode) : undefined
+
+  return {
+    phase,
+    command: command || undefined,
+    message: message || undefined,
+    exitCode: Number.isFinite(parsedExitCode) ? parsedExitCode : undefined,
+    updatedAt: updatedAt || undefined
+  }
+}
+
 export function createAppUpdaterService(
   options: CreateAppUpdaterServiceOptions
 ): AppUpdaterService {
@@ -314,6 +345,7 @@ export function createAppUpdaterService(
   let initialTimer: ReturnType<typeof setTimeout> | null = null
   let intervalTimer: ReturnType<typeof setInterval> | null = null
   let resetTimer: ReturnType<typeof setTimeout> | null = null
+  let homebrewStatusTimer: ReturnType<typeof setInterval> | null = null
   const listeners = new Set<(nextState: AppUpdateState) => void>()
 
   function notify(): void {
@@ -369,6 +401,68 @@ export function createAppUpdaterService(
       clearInterval(intervalTimer)
       intervalTimer = null
     }
+  }
+
+  function clearHomebrewStatusTimer(): void {
+    if (!homebrewStatusTimer) {
+      return
+    }
+
+    clearInterval(homebrewStatusTimer)
+    homebrewStatusTimer = null
+  }
+
+  async function readHomebrewStatus(statusFilePath: string): Promise<HomebrewCommandStatus | null> {
+    try {
+      return parseHomebrewStatus(await readFile(statusFilePath, 'utf8'))
+    } catch {
+      return null
+    }
+  }
+
+  function applyHomebrewStatus(status: HomebrewCommandStatus, logFilePath?: string): void {
+    if (status.phase === 'success') {
+      clearHomebrewStatusTimer()
+    }
+
+    if (status.phase === 'error') {
+      clearHomebrewStatusTimer()
+      mergeState({
+        status: 'error',
+        checkedAt: new Date().toISOString(),
+        message: status.message ?? 'Homebrew update failed.',
+        downloadProgress: undefined,
+        externalCommand: status.command,
+        externalCommandStatus: status.phase,
+        externalLogFilePath: logFilePath
+      })
+      return
+    }
+
+    mergeState({
+      status: 'downloading',
+      message: status.message,
+      downloadProgress: undefined,
+      externalCommand: status.command,
+      externalCommandStatus: status.phase,
+      externalLogFilePath: logFilePath
+    })
+  }
+
+  async function startHomebrewStatusPolling(launch: HomebrewCaskUpgradeLaunch): Promise<void> {
+    clearHomebrewStatusTimer()
+
+    const applyLatest = async (): Promise<void> => {
+      const latest = await readHomebrewStatus(launch.statusFilePath)
+      if (latest) {
+        applyHomebrewStatus(latest, launch.logFilePath)
+      }
+    }
+
+    await applyLatest()
+    homebrewStatusTimer = setInterval(() => {
+      void applyLatest()
+    }, 300)
   }
 
   async function resolveExternalAction(): Promise<AppUpdateExternalAction> {
@@ -643,6 +737,7 @@ export function createAppUpdaterService(
       started = false
       clearTimers()
       clearResetTimer()
+      clearHomebrewStatusTimer()
     },
     syncSettings(nextSettings): void {
       settings = nextSettings
@@ -673,12 +768,19 @@ export function createAppUpdaterService(
         }
 
         try {
-          await options.launchHomebrewUpdate()
-          return mergeState({
+          const launch = await options.launchHomebrewUpdate()
+          mergeState({
             status: 'downloading',
-            message: 'Closing the app and updating through Homebrew…',
-            downloadProgress: undefined
+            message: 'Starting Homebrew update…',
+            downloadProgress: undefined,
+            externalCommand: undefined,
+            externalCommandStatus: 'starting',
+            externalLogFilePath: launch?.logFilePath
           })
+          if (launch) {
+            await startHomebrewStatusPolling(launch)
+          }
+          return state
         } catch (error) {
           return mergeState({
             status: 'error',

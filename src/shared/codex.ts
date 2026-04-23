@@ -113,6 +113,9 @@ export interface AppUpdateState {
   message?: string
   externalDownloadUrl?: string
   externalAction?: AppUpdateExternalAction
+  externalCommand?: string
+  externalCommandStatus?: string
+  externalLogFilePath?: string
   supported: boolean
 }
 
