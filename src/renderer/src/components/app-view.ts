@@ -80,7 +80,7 @@ export const messages = {
     tokenStats: '用量',
     tokenStatsTitle: '用量 / 消耗统计',
     tokenStatsDescription:
-      '本页以 token 作为主展示维度；cost 只作为副文案与 tooltip。实例数据来自本地 Codex 日志，账号数据仅展示真实额度与 credits。',
+      '本页以 token 作为主展示维度；cost 只作为副文案与 tooltip。实例数据来自本地 Codex 日志。',
     tokenStatsReadFailed: '无法读取用量统计',
     tokenStatsSelectedTarget: '当前统计目标',
     tokenStatsDefaultFallback: '无运行实例，回退 default',
@@ -97,12 +97,8 @@ export const messages = {
     modelBreakdown: '模型分布',
     instanceUsage: '实例用量/消耗',
     instanceUsageDescription: '按实例汇总近 30 天 token；cost 仅作辅助信息。',
-    accountUsage: '账号用量',
-    accountUsageDescription:
-      '基于已读取的 rate limits / credits 展示账号额度，不做 token 或 cost 归因。',
     displayConfig: '显示配置',
     displayConfigDescription: '勾选后会在统计页显示，对应设置会持久化到本地。',
-    noAccountUsageData: '暂无账号额度数据，先在账号列表刷新额度。',
     noChartsVisible: '已隐藏全部图表，可在上方显示配置中重新开启。',
     sessionUsed: '5小时已用',
     weeklyUsed: '周限额已用',
@@ -370,7 +366,7 @@ export const messages = {
     tokenStats: 'Usage',
     tokenStatsTitle: 'Usage / consumption stats',
     tokenStatsDescription:
-      'Tokens are the primary metric here; cost is only supplementary copy and tooltip detail. Instance data comes from local Codex logs, while account data only reflects real rate limits and credits.',
+      'Tokens are the primary metric here; cost is only supplementary copy and tooltip detail. Instance data comes from local Codex logs.',
     tokenStatsReadFailed: 'Unable to read usage stats',
     tokenStatsSelectedTarget: 'Selected target',
     tokenStatsDefaultFallback: 'No running instance, falling back to default',
@@ -386,13 +382,10 @@ export const messages = {
     dailyTrend: '30-day daily trend',
     modelBreakdown: 'Model breakdown',
     instanceUsage: 'Instance usage / consumption',
-    instanceUsageDescription: 'Aggregates 30-day tokens by instance, with cost kept as context only.',
-    accountUsage: 'Account usage',
-    accountUsageDescription:
-      'Shows real account rate limits and credits only, without inventing token or cost attribution.',
+    instanceUsageDescription:
+      'Aggregates 30-day tokens by instance, with cost kept as context only.',
     displayConfig: 'Display config',
     displayConfigDescription: 'Checked charts stay visible on the stats page and persist locally.',
-    noAccountUsageData: 'No account usage data yet. Refresh usage from the accounts list first.',
     noChartsVisible: 'All charts are hidden. Re-enable them from the display config above.',
     sessionUsed: 'Session used',
     weeklyUsed: 'Weekly used',

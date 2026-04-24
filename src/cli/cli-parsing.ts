@@ -41,7 +41,9 @@ function parseStatsDisplay(rawValue: string): StatsDisplaySettings {
 
   if (normalizedValue === 'none') {
     return normalizeStatsDisplaySettings(
-      Object.fromEntries(statsDisplayKeys.map((key) => [key, false])) as Partial<StatsDisplaySettings>
+      Object.fromEntries(
+        statsDisplayKeys.map((key) => [key, false])
+      ) as Partial<StatsDisplaySettings>
     )
   }
 
@@ -57,12 +59,11 @@ function parseStatsDisplay(rawValue: string): StatsDisplaySettings {
     )
   }
 
-  const invalidKey = keys.find((key) => !statsDisplayKeys.includes(key as (typeof statsDisplayKeys)[number]))
+  const invalidKey = keys.find(
+    (key) => !statsDisplayKeys.includes(key as (typeof statsDisplayKeys)[number])
+  )
   if (invalidKey) {
-    throw new CliError(
-      `statsDisplay contains unknown chart key: ${invalidKey}`,
-      EXIT_USAGE
-    )
+    throw new CliError(`statsDisplay contains unknown chart key: ${invalidKey}`, EXIT_USAGE)
   }
 
   return normalizeStatsDisplaySettings(

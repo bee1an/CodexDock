@@ -71,9 +71,13 @@ vi.mock('chart.js', () => {
       chartConfigs.push(config)
     }
 
-    update(): void {}
+    update(): void {
+      return undefined
+    }
 
-    destroy(): void {}
+    destroy(): void {
+      return undefined
+    }
   }
 
   class MockChartPart {}
@@ -156,8 +160,7 @@ function renderAccountsPanel(
       statsDisplay: {
         dailyTrend: true,
         modelBreakdown: true,
-        instanceUsage: true,
-        accountUsage: true
+        instanceUsage: true
       },
       wakeSchedulesByAccountId: {},
       loginActionBusy: false,
@@ -520,68 +523,8 @@ describe('AccountsPanel', () => {
 
     expect(
       chartConfigs.some(
-        (config) => JSON.stringify(config.data?.labels ?? []) === JSON.stringify(['Work', 'default'])
-      )
-    ).toBe(true)
-  })
-
-  it('账号图表使用账号展示名而不是裸 account id', async () => {
-    const readTokenCost = vi.fn().mockResolvedValue({
-      instanceId: '__all__',
-      codexHome: '/tmp/.codex',
-      source: 'local',
-      summary: {
-        sessionTokens: 0,
-        sessionCostUSD: null,
-        last30DaysTokens: 0,
-        last30DaysCostUSD: null,
-        updatedAt: '2026-04-21T00:00:00.000Z'
-      },
-      daily: []
-    })
-
-    renderAccountsPanel({
-      usageByAccountId: {
-        'acct-1': {
-          limitId: 'codex',
-          limitName: 'Codex',
-          planType: 'plus',
-          primary: {
-            usedPercent: 25,
-            windowDurationMins: 300,
-            resetsAt: null
-          },
-          secondary: null,
-          credits: null,
-          limits: [],
-          fetchedAt: '2026-04-21T00:00:00.000Z'
-        },
-        'acct-2': {
-          limitId: 'codex',
-          limitName: 'Codex',
-          planType: 'plus',
-          primary: {
-            usedPercent: 80,
-            windowDurationMins: 300,
-            resetsAt: null
-          },
-          secondary: null,
-          credits: null,
-          limits: [],
-          fetchedAt: '2026-04-21T01:00:00.000Z'
-        }
-      },
-      readTokenCost
-    })
-
-    await fireEvent.click(screen.getByRole('button', { name: copy.tokenStats }))
-    await waitFor(() => expect(readTokenCost).toHaveBeenCalledTimes(1))
-
-    expect(
-      chartConfigs.some(
         (config) =>
-          JSON.stringify(config.data?.labels ?? []) ===
-          JSON.stringify(['untagged@example.com', 'tagged@example.com'])
+          JSON.stringify(config.data?.labels ?? []) === JSON.stringify(['Work', 'default'])
       )
     ).toBe(true)
   })
@@ -594,21 +537,20 @@ describe('AccountsPanel', () => {
     })
 
     await fireEvent.click(screen.getByRole('button', { name: copy.tokenStats }))
+    await fireEvent.click(screen.getByRole('button', { name: copy.displayConfig }))
 
     await fireEvent.click(screen.getByRole('checkbox', { name: copy.instanceUsage }))
     expect(updateStatsDisplay).toHaveBeenCalledWith({
       dailyTrend: true,
       modelBreakdown: true,
-      instanceUsage: false,
-      accountUsage: true
+      instanceUsage: false
     })
 
     await fireEvent.click(screen.getByRole('checkbox', { name: copy.modelBreakdown }))
     expect(updateStatsDisplay).toHaveBeenLastCalledWith({
       dailyTrend: true,
       modelBreakdown: false,
-      instanceUsage: false,
-      accountUsage: true
+      instanceUsage: false
     })
   })
 

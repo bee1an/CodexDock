@@ -1476,7 +1476,6 @@
     {updatePollingInterval}
     {updateCheckForUpdatesOnStartup}
     {updateShowLocalMockData}
-    {updateStatsDisplay}
     {updateCodexDesktopExecutablePath}
     showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
     showLocalMockToggle={appMeta.isPackaged === false}

@@ -1,16 +1,13 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildAccountUsageEntries, buildInstanceConsumptionEntries } from '../cost-stats-data'
-import { accountLabel, messages } from '../app-view'
-
-const copy = messages['zh-CN']
+import { buildInstanceConsumptionEntries } from '../cost-stats-data'
 
 describe('cost stats data helpers', () => {
   it('按近 30 天 token 对实例汇总排序并保留实例名称', () => {
     expect(
       buildInstanceConsumptionEntries({
         tokenCostByInstanceId: {
-          '__default__': {
+          __default__: {
             sessionTokens: 20,
             sessionCostUSD: 0.0002,
             last30DaysTokens: 80,
@@ -51,7 +48,9 @@ describe('cost stats data helpers', () => {
         ],
         runningInstanceIds: ['inst-work'],
         resolveLabel: (instanceId, instance) =>
-          instance?.isDefault || instanceId === '__default__' ? 'default' : (instance?.name ?? instanceId)
+          instance?.isDefault || instanceId === '__default__'
+            ? 'default'
+            : (instance?.name ?? instanceId)
       }).map((entry) => entry.label)
     ).toEqual(['Work', 'default'])
   })
@@ -73,59 +72,5 @@ describe('cost stats data helpers', () => {
         resolveLabel: (instanceId) => instanceId
       })
     ).toEqual([])
-  })
-
-  it('账号汇总使用账号展示名并按用量从高到低排序', () => {
-    expect(
-      buildAccountUsageEntries({
-        accounts: [
-          {
-            id: 'acct-1',
-            email: 'tagged@example.com',
-            tagIds: [],
-            createdAt: '2026-04-21T00:00:00.000Z',
-            updatedAt: '2026-04-21T00:00:00.000Z'
-          },
-          {
-            id: 'acct-2',
-            email: 'untagged@example.com',
-            tagIds: [],
-            createdAt: '2026-04-21T00:00:00.000Z',
-            updatedAt: '2026-04-21T00:00:00.000Z'
-          }
-        ],
-        usageByAccountId: {
-          'acct-1': {
-            limitId: 'codex',
-            limitName: 'Codex',
-            planType: 'plus',
-            primary: {
-              usedPercent: 25,
-              windowDurationMins: 300,
-              resetsAt: null
-            },
-            secondary: null,
-            credits: null,
-            limits: [],
-            fetchedAt: '2026-04-21T00:00:00.000Z'
-          },
-          'acct-2': {
-            limitId: 'codex',
-            limitName: 'Codex',
-            planType: 'plus',
-            primary: {
-              usedPercent: 80,
-              windowDurationMins: 300,
-              resetsAt: null
-            },
-            secondary: null,
-            credits: null,
-            limits: [],
-            fetchedAt: '2026-04-21T01:00:00.000Z'
-          }
-        },
-        resolveLabel: (account) => accountLabel(account, copy)
-      }).map((entry) => entry.label)
-    ).toEqual(['untagged@example.com', 'tagged@example.com'])
   })
 })

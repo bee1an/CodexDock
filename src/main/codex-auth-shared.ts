@@ -13,10 +13,7 @@ import type {
   PortOccupant
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
-import {
-  decodeJwtPayload,
-  resolveChatGptAccountIdFromTokens
-} from '../shared/openai-auth'
+import { decodeJwtPayload, resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
 import { defaultStatsDisplaySettings, normalizeStatsDisplaySettings } from '../shared/codex'
 
 export interface CodexAuthPayload {

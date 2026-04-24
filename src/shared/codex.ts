@@ -1,18 +1,12 @@
 export type LoginMethod = 'browser' | 'device'
 export type AppLanguage = 'zh-CN' | 'en'
 export type AppTheme = 'light' | 'dark' | 'system'
-export const statsDisplayKeys = [
-  'dailyTrend',
-  'modelBreakdown',
-  'instanceUsage',
-  'accountUsage'
-] as const
+export const statsDisplayKeys = ['dailyTrend', 'modelBreakdown', 'instanceUsage'] as const
 export type StatsDisplayKey = (typeof statsDisplayKeys)[number]
 export interface StatsDisplaySettings {
   dailyTrend: boolean
   modelBreakdown: boolean
   instanceUsage: boolean
-  accountUsage: boolean
 }
 export const accountTransferFormats = [
   'ilovecodex',
@@ -448,17 +442,18 @@ export function defaultStatsDisplaySettings(): StatsDisplaySettings {
   return {
     dailyTrend: true,
     modelBreakdown: true,
-    instanceUsage: true,
-    accountUsage: true
+    instanceUsage: true
   }
 }
 
 export function normalizeStatsDisplaySettings(
   settings?: Partial<StatsDisplaySettings> | null
 ): StatsDisplaySettings {
+  const defaults = defaultStatsDisplaySettings()
   return {
-    ...defaultStatsDisplaySettings(),
-    ...(settings ?? {})
+    dailyTrend: settings?.dailyTrend ?? defaults.dailyTrend,
+    modelBreakdown: settings?.modelBreakdown ?? defaults.modelBreakdown,
+    instanceUsage: settings?.instanceUsage ?? defaults.instanceUsage
   }
 }
 

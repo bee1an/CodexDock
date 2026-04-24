@@ -1,10 +1,4 @@
-import type {
-  AccountRateLimits,
-  AccountSummary,
-  CodexInstanceSummary,
-  CreditsSnapshot,
-  TokenCostSummary
-} from '../../../shared/codex'
+import type { CodexInstanceSummary, TokenCostSummary } from '../../../shared/codex'
 
 export interface InstanceConsumptionEntry {
   instanceId: string
@@ -17,15 +11,6 @@ export interface InstanceConsumptionEntry {
   isRunning: boolean
 }
 
-export interface AccountUsageEntry {
-  accountId: string
-  label: string
-  sessionUsedPercent: number | null
-  weeklyUsedPercent: number | null
-  credits: CreditsSnapshot | null
-  fetchedAt: string
-}
-
 function timestampScore(value?: string): number {
   if (!value) {
     return -1
@@ -33,10 +18,6 @@ function timestampScore(value?: string): number {
 
   const parsed = Date.parse(value)
   return Number.isNaN(parsed) ? -1 : parsed
-}
-
-function accountUsageSortValue(rateLimits: AccountRateLimits): number {
-  return Math.max(rateLimits.primary?.usedPercent ?? -1, rateLimits.secondary?.usedPercent ?? -1)
 }
 
 export function buildInstanceConsumptionEntries(input: {
@@ -71,45 +52,5 @@ export function buildInstanceConsumptionEntries(input: {
         return right.last30DaysTokens - left.last30DaysTokens
       }
       return timestampScore(right.updatedAt) - timestampScore(left.updatedAt)
-    })
-}
-
-export function buildAccountUsageEntries(input: {
-  accounts: AccountSummary[]
-  usageByAccountId: Record<string, AccountRateLimits>
-  resolveLabel: (account: AccountSummary) => string
-}): AccountUsageEntry[] {
-  return input.accounts
-    .map((account) => {
-      const rateLimits = input.usageByAccountId[account.id]
-      if (!rateLimits) {
-        return null
-      }
-
-      const hasUsage =
-        rateLimits.primary != null || rateLimits.secondary != null || rateLimits.credits != null
-      if (!hasUsage) {
-        return null
-      }
-
-      return {
-        accountId: account.id,
-        label: input.resolveLabel(account),
-        sessionUsedPercent: rateLimits.primary?.usedPercent ?? null,
-        weeklyUsedPercent: rateLimits.secondary?.usedPercent ?? null,
-        credits: rateLimits.credits,
-        fetchedAt: rateLimits.fetchedAt
-      }
-    })
-    .filter((entry): entry is AccountUsageEntry => Boolean(entry))
-    .sort((left, right) => {
-      const leftRateLimits = input.usageByAccountId[left.accountId]
-      const rightRateLimits = input.usageByAccountId[right.accountId]
-      const leftScore = leftRateLimits ? accountUsageSortValue(leftRateLimits) : -1
-      const rightScore = rightRateLimits ? accountUsageSortValue(rightRateLimits) : -1
-      if (leftScore !== rightScore) {
-        return rightScore - leftScore
-      }
-      return timestampScore(right.fetchedAt) - timestampScore(left.fetchedAt)
     })
 }

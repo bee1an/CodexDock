@@ -386,7 +386,6 @@
       {language}
       {accounts}
       {codexInstances}
-      {usageByAccountId}
       {tokenCostByInstanceId}
       {tokenCostErrorByInstanceId}
       {runningTokenCostSummary}

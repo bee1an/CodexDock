@@ -15,8 +15,6 @@
     type ChartConfiguration
   } from 'chart.js'
   import type {
-    AccountRateLimits,
-    AccountSummary,
     AppLanguage,
     CodexInstanceSummary,
     StatsDisplaySettings,
@@ -26,8 +24,8 @@
     TokenCostSummary
   } from '../../../shared/codex'
   import { normalizeStatsDisplaySettings } from '../../../shared/codex'
-  import { buildAccountUsageEntries, buildInstanceConsumptionEntries } from './cost-stats-data'
-  import { accountLabel, type LocalizedCopy } from './app-view'
+  import { buildInstanceConsumptionEntries } from './cost-stats-data'
+  import type { LocalizedCopy } from './app-view'
   import { cascadeIn, reveal } from './gsap-motion'
 
   Chart.register(
@@ -45,14 +43,12 @@
 
   export let copy: LocalizedCopy
   export let language: AppLanguage
-  export let accounts: AccountSummary[] = []
   export let codexInstances: CodexInstanceSummary[] = []
   export let tokenCostByInstanceId: Record<string, TokenCostSummary> = {}
   export let tokenCostErrorByInstanceId: Record<string, string> = {}
   export let runningTokenCostSummary: TokenCostSummary | null = null
   export let runningTokenCostInstanceIds: string[] = []
   export let compactGhostButton: string
-  export let usageByAccountId: Record<string, AccountRateLimits> = {}
   export let statsDisplay: StatsDisplaySettings
   export let updateStatsDisplay: (statsDisplay: StatsDisplaySettings) => Promise<void>
   export let readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
@@ -75,24 +71,20 @@
   let warningMessages: string[] = []
   let modelBreakdowns: TokenCostModelBreakdown[] = []
   let instanceUsageRows: InstanceUsageRow[] = []
-  let accountUsageRows: AccountUsageRow[] = []
   let chartDaily: TokenCostDetail['daily'] = []
   let trendCanvas: HTMLCanvasElement | null = null
   let modelCanvas: HTMLCanvasElement | null = null
   let instanceCanvas: HTMLCanvasElement | null = null
-  let accountCanvas: HTMLCanvasElement | null = null
-  let trendChart: Chart<'line', (number | null)[], string> | null = null
+  let trendChart: Chart<'line', number[], string> | null = null
   let modelChart: Chart<'bar', number[], string> | null = null
   let instanceChart: Chart<'bar', number[], string> | null = null
-  let accountChart: Chart<'bar', number[], string> | null = null
   let trendChartSyncKey = ''
   let modelChartSyncKey = ''
   let instanceChartSyncKey = ''
-  let accountChartSyncKey = ''
   let modelChartHeight = 280
   let instanceChartHeight = 280
-  let accountChartHeight = 280
   let statsDisplayDraft = normalizeStatsDisplaySettings(statsDisplay)
+  let showStatsDisplayPopover = false
 
   const summaryHasData = (summary: TokenCostSummary | null): boolean =>
     Boolean(summary && (summary.sessionTokens > 0 || summary.last30DaysTokens > 0))
@@ -131,32 +123,6 @@
     }).format(date)
   }
 
-  const formatPercent = (value: number | null): string => {
-    if (value === null || Number.isNaN(value)) {
-      return '--'
-    }
-
-    return `${Math.round(value)}%`
-  }
-
-  const formatCredits = (usage: AccountRateLimits): string => {
-    if (!usage.credits?.hasCredits) {
-      return '--'
-    }
-
-    if (usage.credits.unlimited) {
-      return copy.unlimited
-    }
-
-    if (usage.credits.balance === null) {
-      return '--'
-    }
-
-    return new Intl.NumberFormat(language === 'en' ? 'en-US' : 'zh-CN', {
-      maximumFractionDigits: 2
-    }).format(usage.credits.balance)
-  }
-
   const formatInstanceName = (instanceId: string, instance?: CodexInstanceSummary): string => {
     if (instance?.isDefault || instanceId === '__default__') {
       return 'default'
@@ -176,10 +142,7 @@
     return `${Number(month)}/${Number(day)}`
   }
 
-  const setStatsDisplay = (
-    key: keyof StatsDisplaySettings,
-    enabled: boolean
-  ): void => {
+  const setStatsDisplay = (key: keyof StatsDisplaySettings, enabled: boolean): void => {
     const next = normalizeStatsDisplaySettings({
       ...statsDisplayDraft,
       [key]: enabled
@@ -198,13 +161,6 @@
     label: string
     tokens: number
     costUSD: number | null
-  }
-
-  interface AccountUsageRow {
-    label: string
-    sessionUsedPercent: number | null
-    weeklyUsedPercent: number | null
-    credits: string
   }
 
   const createCostRollup = (): CostRollup => ({
@@ -397,21 +353,19 @@
     }
 
     const accentTokens = readCssVar('--ink', '#18181b')
-    const accentCost = readCssVar('--success', '#0f766e')
     const ink = readCssVar('--ink', '#18181b')
     const muted = readCssVar('--muted-strong', '#6b7280')
     const line = readCssVar('--line', 'rgba(24, 24, 27, 0.1)')
     const surface = readCssVar('--panel-strong', '#ffffff')
 
-    const config: ChartConfiguration<'line', (number | null)[], string> = {
+    const config: ChartConfiguration<'line', number[], string> = {
       type: 'line',
       data: {
         labels: chartDaily.map((entry) => formatDayLabel(entry.date)),
         datasets: [
           {
-            label: copy.tokens,
+            label: `${copy.tokens} / ${copy.cost}`,
             data: chartDaily.map((entry) => entry.totalTokens),
-            yAxisID: 'yTokens',
             borderColor: accentTokens,
             backgroundColor: withAlpha(accentTokens, 0.08),
             fill: true,
@@ -421,19 +375,6 @@
             pointHoverRadius: 4,
             pointBackgroundColor: accentTokens,
             pointHitRadius: 14
-          },
-          {
-            label: copy.cost,
-            data: chartDaily.map((entry) => entry.costUSD),
-            yAxisID: 'yCost',
-            borderColor: withAlpha(accentCost, 0.6),
-            backgroundColor: 'transparent',
-            tension: 0.28,
-            borderWidth: 1.5,
-            pointRadius: 0,
-            pointHoverRadius: 3,
-            pointBackgroundColor: accentCost,
-            pointHitRadius: 12
           }
         ]
       },
@@ -449,20 +390,7 @@
         },
         plugins: {
           legend: {
-            position: 'top',
-            align: 'end',
-            labels: {
-              usePointStyle: true,
-              pointStyle: 'circle',
-              boxWidth: 8,
-              boxHeight: 8,
-              color: ink,
-              padding: 14,
-              font: {
-                size: 11,
-                weight: 600
-              }
-            }
+            display: false
           },
           tooltip: {
             backgroundColor: surface,
@@ -471,18 +399,19 @@
             titleColor: ink,
             bodyColor: ink,
             padding: 12,
-            displayColors: true,
+            displayColors: false,
             callbacks: {
               title: (items) => {
                 const index = items[0]?.dataIndex ?? 0
                 return chartDaily[index]?.date ?? items[0]?.label ?? ''
               },
               label: (context) => {
-                const value = typeof context.parsed.y === 'number' ? context.parsed.y : null
-                if (context.dataset.yAxisID === 'yCost') {
-                  return `${copy.cost}: ${formatCost(value)}`
-                }
-                return `${copy.tokens}: ${formatTokens(value ?? 0)}`
+                const value = typeof context.parsed.y === 'number' ? context.parsed.y : 0
+                return `${copy.tokens}: ${formatTokens(value)}`
+              },
+              afterLabel: (context) => {
+                const entry = chartDaily[context.dataIndex]
+                return copy.costReference(formatCost(entry?.costUSD ?? null))
               }
             }
           }
@@ -498,9 +427,8 @@
               maxTicksLimit: 7
             }
           },
-          yTokens: {
+          y: {
             type: 'linear',
-            position: 'left',
             beginAtZero: true,
             grid: {
               color: withAlpha(line, 0.55)
@@ -509,19 +437,6 @@
               color: muted,
               maxTicksLimit: 5,
               callback: (value) => formatTokens(Number(value))
-            }
-          },
-          yCost: {
-            type: 'linear',
-            position: 'right',
-            beginAtZero: true,
-            grid: {
-              drawOnChartArea: false
-            },
-            ticks: {
-              color: muted,
-              maxTicksLimit: 5,
-              callback: (value) => formatCost(Number(value))
             }
           }
         }
@@ -758,143 +673,6 @@
     instanceChart = new Chart(context, config)
   }
 
-  const syncAccountChart = (): void => {
-    if (!accountCanvas) {
-      return
-    }
-
-    if (!accountUsageRows.length) {
-      accountChart?.destroy()
-      accountChart = null
-      return
-    }
-
-    const context = accountCanvas.getContext('2d')
-    if (!context) {
-      return
-    }
-
-    const accentPrimary = readCssVar('--ink', '#18181b')
-    const accentSecondary = readCssVar('--success', '#0f766e')
-    const ink = readCssVar('--ink', '#18181b')
-    const muted = readCssVar('--muted-strong', '#6b7280')
-    const line = readCssVar('--line', 'rgba(24, 24, 27, 0.1)')
-    const surface = readCssVar('--panel-strong', '#ffffff')
-
-    const config: ChartConfiguration<'bar', number[], string> = {
-      type: 'bar',
-      data: {
-        labels: accountUsageRows.map((entry) => entry.label),
-        datasets: [
-          {
-            label: copy.sessionUsed,
-            data: accountUsageRows.map((entry) => entry.sessionUsedPercent ?? 0),
-            backgroundColor: withAlpha(accentPrimary, 0.72),
-            borderColor: accentPrimary,
-            borderWidth: 1,
-            borderRadius: 6,
-            borderSkipped: false,
-            barThickness: 14,
-            maxBarThickness: 16
-          },
-          {
-            label: copy.weeklyUsed,
-            data: accountUsageRows.map((entry) => entry.weeklyUsedPercent ?? 0),
-            backgroundColor: withAlpha(accentSecondary, 0.64),
-            borderColor: accentSecondary,
-            borderWidth: 1,
-            borderRadius: 6,
-            borderSkipped: false,
-            barThickness: 14,
-            maxBarThickness: 16
-          }
-        ]
-      },
-      options: {
-        indexAxis: 'y',
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: {
-          duration: 240
-        },
-        plugins: {
-          legend: {
-            position: 'top',
-            align: 'end',
-            labels: {
-              usePointStyle: true,
-              pointStyle: 'circle',
-              boxWidth: 8,
-              boxHeight: 8,
-              color: ink,
-              padding: 14,
-              font: {
-                size: 11,
-                weight: 600
-              }
-            }
-          },
-          tooltip: {
-            backgroundColor: surface,
-            borderColor: line,
-            borderWidth: 1,
-            titleColor: ink,
-            bodyColor: ink,
-            padding: 12,
-            callbacks: {
-              title: (items) => items[0]?.label ?? '',
-              afterBody: (items) => {
-                const row = accountUsageRows[items[0]?.dataIndex ?? 0]
-                return row ? ["", `${copy.credits}: ${row.credits}`] : []
-              },
-              label: (context) => {
-                const row = accountUsageRows[context.dataIndex]
-                return `${context.dataset.label}: ${formatPercent(
-                  context.datasetIndex === 0 ? row?.sessionUsedPercent ?? null : row?.weeklyUsedPercent ?? null
-                )}`
-              }
-            }
-          }
-        },
-        scales: {
-          x: {
-            beginAtZero: true,
-            max: 100,
-            grid: {
-              color: withAlpha(line, 0.55)
-            },
-            ticks: {
-              color: muted,
-              maxTicksLimit: 5,
-              callback: (value) => `${Number(value)}%`
-            }
-          },
-          y: {
-            grid: {
-              display: false
-            },
-            ticks: {
-              color: ink,
-              font: {
-                size: 11,
-                weight: 600
-              }
-            }
-          }
-        }
-      }
-    }
-
-    if (accountChart) {
-      accountChart.data = config.data
-      accountChart.options = config.options ?? {}
-      accountChart.update()
-      return
-    }
-
-    accountChart = new Chart(context, config)
-  }
-
   async function loadDetail(refresh = false): Promise<void> {
     const requestVersion = ++detailRequestVersion
     const requestTopologyKey = buildSnapshotTopologyKey()
@@ -933,7 +711,6 @@
             syncTrendChart()
             syncModelChart()
             syncInstanceChart()
-            syncAccountChart()
           })
 
     observer?.observe(document.documentElement, {
@@ -944,8 +721,6 @@
     syncTrendChart()
     syncModelChart()
     syncInstanceChart()
-    syncAccountChart()
-
     return () => {
       observer?.disconnect()
       trendChart?.destroy()
@@ -954,8 +729,6 @@
       modelChart = null
       instanceChart?.destroy()
       instanceChart = null
-      accountChart?.destroy()
-      accountChart = null
     }
   })
 
@@ -1003,21 +776,9 @@
     tokens: entry.last30DaysTokens,
     costUSD: entry.last30DaysCostUSD
   }))
-  $: accountUsageRows = buildAccountUsageEntries({
-    accounts,
-    usageByAccountId,
-    resolveLabel: (account) => accountLabel(account, copy)
-  }).map((entry) => ({
-    label: entry.label,
-    sessionUsedPercent: entry.sessionUsedPercent,
-    weeklyUsedPercent: entry.weeklyUsedPercent,
-    credits:
-      usageByAccountId[entry.accountId] != null ? formatCredits(usageByAccountId[entry.accountId]) : '--'
-  }))
   $: chartDaily = detail ? [...detail.daily] : []
   $: modelChartHeight = Math.max(280, modelBreakdowns.length * 38)
   $: instanceChartHeight = Math.max(280, instanceUsageRows.length * 38)
-  $: accountChartHeight = Math.max(280, accountUsageRows.length * 44)
   $: trendChartSyncKey = [
     language,
     copy.tokens,
@@ -1042,17 +803,6 @@
     copy.cost,
     ...instanceUsageRows.map((entry) => `${entry.label}:${entry.tokens}:${entry.costUSD ?? ''}`)
   ].join('|')
-  $: accountChartSyncKey = [
-    language,
-    copy.accountUsage,
-    copy.sessionUsed,
-    copy.weeklyUsed,
-    copy.credits,
-    ...accountUsageRows.map(
-      (entry) =>
-        `${entry.label}:${entry.sessionUsedPercent ?? ''}:${entry.weeklyUsedPercent ?? ''}:${entry.credits}`
-    )
-  ].join('|')
   $: if (!trendCanvas && trendChart) {
     trendChart.destroy()
     trendChart = null
@@ -1065,10 +815,6 @@
     instanceChart.destroy()
     instanceChart = null
   }
-  $: if (!accountCanvas && accountChart) {
-    accountChart.destroy()
-    accountChart = null
-  }
   $: if (trendCanvas && trendChartSyncKey) {
     syncTrendChart()
   }
@@ -1077,9 +823,6 @@
   }
   $: if (instanceCanvas && instanceChartSyncKey) {
     syncInstanceChart()
-  }
-  $: if (accountCanvas && accountChartSyncKey) {
-    syncAccountChart()
   }
 </script>
 
@@ -1106,18 +849,64 @@
         </p>
       </div>
 
-      <button
-        class={`${compactGhostButton} stats-refresh-button h-11 rounded-2xl px-4`}
-        type="button"
-        onclick={() => loadDetail(true)}
-        disabled={loadingDetail}
-        data-motion-item
-      >
-        <span
-          class={`${loadingDetail ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-4 w-4`}
-        ></span>
-        <span>{loadingDetail ? copy.refreshing : copy.refresh}</span>
-      </button>
+      <div class="relative flex items-center gap-2" data-motion-item>
+        <button
+          class={`${compactGhostButton} stats-config-button h-11 w-11 rounded-2xl p-0`}
+          type="button"
+          aria-label={copy.displayConfig}
+          aria-expanded={showStatsDisplayPopover}
+          onclick={() => {
+            showStatsDisplayPopover = !showStatsDisplayPopover
+          }}
+        >
+          <span class="i-lucide-sliders-horizontal h-4 w-4"></span>
+        </button>
+
+        {#if showStatsDisplayPopover}
+          <div
+            class="stats-config-popover absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[min(20rem,calc(100vw-2rem))] rounded-2xl border px-4 py-4 shadow-[0_18px_48px_rgba(15,23,42,0.16)]"
+            role="dialog"
+            aria-label={copy.displayConfig}
+            use:reveal={{ y: -4, duration: 0.12 }}
+          >
+            <div class="mb-3 grid gap-1">
+              <p class="text-sm font-semibold tracking-tight text-ink">{copy.displayConfig}</p>
+              <p class="text-xs leading-5 text-muted-strong">{copy.displayConfigDescription}</p>
+            </div>
+            <div class="grid gap-2">
+              {#each [{ key: 'dailyTrend', label: copy.dailyTrend }, { key: 'modelBreakdown', label: copy.modelBreakdown }, { key: 'instanceUsage', label: copy.instanceUsage }] as option (option.key)}
+                <label
+                  class="stats-toggle-row flex items-center justify-between gap-3 rounded-xl px-3 py-2 text-sm text-ink"
+                >
+                  <span class="font-medium">{option.label}</span>
+                  <input
+                    class="h-4 w-4 accent-black"
+                    type="checkbox"
+                    checked={statsDisplayDraft[option.key]}
+                    onchange={(event) =>
+                      setStatsDisplay(
+                        option.key,
+                        (event.currentTarget as HTMLInputElement).checked
+                      )}
+                  />
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/if}
+
+        <button
+          class={`${compactGhostButton} stats-refresh-button h-11 rounded-2xl px-4`}
+          type="button"
+          onclick={() => loadDetail(true)}
+          disabled={loadingDetail}
+        >
+          <span
+            class={`${loadingDetail ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-4 w-4`}
+          ></span>
+          <span>{loadingDetail ? copy.refreshing : copy.refresh}</span>
+        </button>
+      </div>
     </div>
 
     <div class="mt-5 grid gap-4 xl:grid-cols-[minmax(0,1.18fr)_minmax(300px,0.82fr)]">
@@ -1208,12 +997,6 @@
             </p>
             <p class="text-sm font-medium text-ink">{instanceUsageRows.length}</p>
           </div>
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.accountUsage}
-            </p>
-            <p class="text-sm font-medium text-ink">{accountUsageRows.length}</p>
-          </div>
         </div>
 
         {#if detailError}
@@ -1251,38 +1034,7 @@
   </section>
 
   <div class="grid gap-4">
-    <section
-      class="stats-surface flex flex-col rounded-2xl border px-4 py-4 sm:px-5"
-      use:reveal={{ delay: 0.02 }}
-    >
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-3">
-        <div>
-          <h4 class="text-sm font-semibold tracking-tight text-ink">{copy.displayConfig}</h4>
-          <p class="mt-1 text-xs text-muted-strong">{copy.displayConfigDescription}</p>
-        </div>
-      </div>
-      <div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        {#each [
-          { key: 'dailyTrend', label: copy.dailyTrend },
-          { key: 'modelBreakdown', label: copy.modelBreakdown },
-          { key: 'instanceUsage', label: copy.instanceUsage },
-          { key: 'accountUsage', label: copy.accountUsage }
-        ] as option (option.key)}
-          <label class="stats-toggle-card flex items-center gap-3 rounded-2xl border px-4 py-3 text-sm text-ink">
-            <input
-              class="h-4 w-4 accent-black"
-              type="checkbox"
-              checked={statsDisplayDraft[option.key]}
-              onchange={(event) =>
-                setStatsDisplay(option.key, (event.currentTarget as HTMLInputElement).checked)}
-            />
-            <span class="font-medium">{option.label}</span>
-          </label>
-        {/each}
-      </div>
-    </section>
-
-    {#if !statsDisplayDraft.modelBreakdown && !statsDisplayDraft.dailyTrend && !statsDisplayDraft.instanceUsage && !statsDisplayDraft.accountUsage}
+    {#if !statsDisplayDraft.modelBreakdown && !statsDisplayDraft.dailyTrend && !statsDisplayDraft.instanceUsage}
       <div class="stats-empty-state">
         <span class="i-lucide-layout-dashboard h-8 w-8 opacity-20"></span>
         <p class="text-sm font-medium text-muted-strong">{copy.noChartsVisible}</p>
@@ -1344,34 +1096,6 @@
         {/if}
       </section>
     {/if}
-
-    {#if statsDisplayDraft.accountUsage}
-      <section
-        class="stats-surface flex flex-col rounded-2xl border px-4 py-4 sm:px-5"
-        use:reveal={{ delay: 0.1 }}
-      >
-        <div class="flex items-center justify-between gap-3 border-b border-line/70 pb-3">
-          <div>
-            <h4 class="text-sm font-semibold tracking-tight text-ink">{copy.accountUsage}</h4>
-            <p class="mt-1 text-xs text-muted-strong">{copy.accountUsageDescription}</p>
-          </div>
-          <span class="i-lucide-badge-percent h-4 w-4 text-muted-strong opacity-60"></span>
-        </div>
-
-        {#if accountUsageRows.length}
-          <div class="stats-chart-shell mt-4 rounded-xl border px-3 py-4 sm:px-4">
-            <div class="stats-model-chart-canvas" style={`min-height: ${accountChartHeight}px`}>
-              <canvas bind:this={accountCanvas} aria-label={copy.accountUsage}></canvas>
-            </div>
-          </div>
-        {:else}
-          <div class="mt-4 stats-empty-state">
-            <span class="i-lucide-user-round-x h-8 w-8 opacity-20"></span>
-            <p class="text-sm font-medium text-muted-strong">{copy.noAccountUsageData}</p>
-          </div>
-        {/if}
-      </section>
-    {/if}
   </div>
 
   {#if statsDisplayDraft.dailyTrend}
@@ -1425,12 +1149,14 @@
     border-color: var(--line);
   }
 
-  .stats-refresh-button {
+  .stats-refresh-button,
+  .stats-config-button {
     border-color: var(--line) !important;
     background: var(--panel-strong) !important;
   }
 
-  .stats-refresh-button:hover {
+  .stats-refresh-button:hover,
+  .stats-config-button:hover {
     background: var(--surface-soft) !important;
   }
 
@@ -1447,9 +1173,18 @@
     border-color: var(--line-strong);
   }
 
-  .stats-toggle-card {
-    background: var(--surface-soft);
+  .stats-config-popover {
+    background: var(--panel-strong);
     border-color: var(--line);
+  }
+
+  .stats-toggle-row {
+    background: var(--surface-soft);
+    transition: background-color 140ms ease;
+  }
+
+  .stats-toggle-row:hover {
+    background: var(--surface-hover);
   }
 
   .stats-chart-shell {
@@ -1504,13 +1239,19 @@
 
   :global(html[data-theme='dark']) .stats-info-rail,
   :global(html[data-theme='dark']) .stats-metric-block,
-  :global(html[data-theme='dark']) .stats-toggle-card,
+  :global(html[data-theme='dark']) .stats-toggle-row,
   :global(html[data-theme='dark']) .stats-chart-shell {
     background: var(--surface-hover) !important;
     border-color: var(--line) !important;
   }
 
-  :global(html[data-theme='dark']) .stats-refresh-button {
+  :global(html[data-theme='dark']) .stats-refresh-button,
+  :global(html[data-theme='dark']) .stats-config-button {
     background: var(--surface-soft) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-config-popover {
+    background: var(--panel-strong) !important;
+    border-color: var(--line) !important;
   }
 </style>

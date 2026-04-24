@@ -107,17 +107,15 @@ describe('codex shared helpers', () => {
       serializeStatsDisplaySettings({
         dailyTrend: false,
         modelBreakdown: true,
-        instanceUsage: false,
-        accountUsage: true
+        instanceUsage: false
       })
-    ).toBe('modelBreakdown,accountUsage')
+    ).toBe('modelBreakdown')
     expect(
       serializeStatsDisplaySettings(
         normalizeStatsDisplaySettings({
           dailyTrend: false,
           modelBreakdown: false,
-          instanceUsage: false,
-          accountUsage: false
+          instanceUsage: false
         })
       )
     ).toBe('none')
@@ -131,8 +129,7 @@ describe('codex shared helpers', () => {
     ).toEqual({
       dailyTrend: true,
       modelBreakdown: true,
-      instanceUsage: false,
-      accountUsage: true
+      instanceUsage: false
     })
   })
 

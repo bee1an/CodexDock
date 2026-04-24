@@ -944,7 +944,9 @@ describe('runCli', () => {
     })
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['settings', 'get', 'statsDisplay', '--json'])).resolves.toBe(0)
+    await expect(
+      runCli(runtime as never, ['settings', 'get', 'statsDisplay', '--json'])
+    ).resolves.toBe(0)
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: defaultStatsDisplaySettings(),
@@ -953,14 +955,19 @@ describe('runCli', () => {
 
     logSpy.mockClear()
     await expect(
-      runCli(runtime as never, ['settings', 'set', 'statsDisplay', 'dailyTrend,accountUsage', '--json'])
+      runCli(runtime as never, [
+        'settings',
+        'set',
+        'statsDisplay',
+        'dailyTrend,instanceUsage',
+        '--json'
+      ])
     ).resolves.toBe(0)
     expect(runtime.services.settings.update).toHaveBeenCalledWith({
       statsDisplay: {
         dailyTrend: true,
         modelBreakdown: false,
-        instanceUsage: false,
-        accountUsage: true
+        instanceUsage: true
       }
     })
   })
