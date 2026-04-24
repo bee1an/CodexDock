@@ -163,6 +163,8 @@ jobs:
             --url "$URL" \
             --output ".homebrew-tap/Casks/codexdock.rb"
 
+          rm -f ".homebrew-tap/Casks/ilovecodex.rb"
+
       - name: Commit and push Homebrew cask update
         if: steps.tap.outputs.enabled == 'true'
         shell: bash
@@ -170,7 +172,9 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          if git diff --quiet -- Casks/codexdock.rb; then
+          git add -A Casks
+
+          if git diff --cached --quiet -- Casks; then
             echo "Homebrew cask is already up to date."
             exit 0
           fi
@@ -178,6 +182,5 @@ jobs:
           VERSION="${TAG_NAME#v}"
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Casks/codexdock.rb
           git commit -m "Update codexdock to ${VERSION}"
           git push origin HEAD

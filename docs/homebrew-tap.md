@@ -28,7 +28,7 @@ brew upgrade --cask codexdock
 
 ## 自动化会做什么
 
-当前 `/Users/bee/j/codexdock/.github/workflows/release.yml` 在 tag 发布完成后会：
+当前 `.github/workflows/release.yml` 在 tag 发布完成后会：
 
 1. 从 GitHub Release 下载本次的 macOS `.dmg`
 2. 计算 `sha256`
