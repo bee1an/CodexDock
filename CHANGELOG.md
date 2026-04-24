@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.3.8 - 2026-04-24
+
+This patch release tunes the macOS app icon size and completes the CodexDock Homebrew tap migration.
+
+- Reduced the visible CodexDock app icon footprint so it appears closer in size to neighboring macOS Dock and Launchpad icons.
+- Regenerated the PNG, ICNS, ICO, renderer, and documentation logo assets from the adjusted icon.
+- Fixed the release workflow so new or renamed Homebrew cask files are staged and pushed correctly after tagged releases.
+- Migrated the Homebrew tap to `bee1an/homebrew-codexdock` and updated cask URL rendering to use Homebrew version interpolation.
+
 ## 0.3.7 - 2026-04-24
 
 This patch release refreshes the CodexDock branding and documentation assets.
