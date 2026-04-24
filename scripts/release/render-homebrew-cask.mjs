@@ -34,7 +34,16 @@ function requiredArg(args, name) {
   return value
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function renderHomebrewUrl(url, version) {
+  return url.replace(new RegExp(escapeRegExp(version), 'g'), '#{version}')
+}
+
 function renderCask(options) {
+  const url = renderHomebrewUrl(options.url, options.version)
   const lines = [
     '# typed: false',
     '# frozen_string_literal: true',
@@ -43,7 +52,7 @@ function renderCask(options) {
     `  version "${options.version}"`,
     `  sha256 "${options.sha256}"`,
     '',
-    `  url "${options.url}"`,
+    `  url "${url}"`,
     `  name "${options.name}"`,
     `  desc "${options.desc}"`,
     `  homepage "${options.homepage}"`,
