@@ -28,6 +28,7 @@ import {
   type LoginEvent,
   type ProviderCheckReport,
   type CustomProviderSummary,
+  type LocalGatewayStatus,
   type TokenCostDetail,
   type TokenCostReadOptions,
   type WakeAccountRateLimitsResult,
@@ -338,6 +339,12 @@ export interface CodexServices {
   cost: {
     read(input?: TokenCostReadOptions): Promise<TokenCostDetail>
   }
+  gateway: {
+    start(): Promise<AppSnapshot>
+    stop(): Promise<AppSnapshot>
+    status(): Promise<LocalGatewayStatus>
+    rotateKey(): Promise<LocalGatewayStatus & { apiKey: string }>
+  }
   login: {
     start(
       method: 'browser' | 'device'
@@ -372,7 +379,7 @@ export interface CreateCodexServicesOptions {
 
 export { resolveWindowsCodexDesktopExecutable }
 
-interface StoredAuthRefreshResult {
+export interface StoredAuthRefreshResult {
   accountId: string
   auth: CodexAuthPayload
   refreshed: boolean
@@ -399,7 +406,6 @@ export interface CodexServicesRuntimeContext {
 }
 
 export {
-  type StoredAuthRefreshResult,
   type StoredUsageReadResult,
   type StoredWakeReadResult,
   DEFAULT_CODEX_INSTANCE_ID,

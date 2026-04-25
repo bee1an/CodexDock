@@ -13,7 +13,7 @@ import type {
   UpdateAccountWakeScheduleInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
-import { normalizeStatsDisplaySettings } from '../shared/codex'
+import { normalizeLocalGatewaySettings, normalizeStatsDisplaySettings } from '../shared/codex'
 import {
   type CodexAuthPayload,
   type LegacyPersistedState,
@@ -76,7 +76,12 @@ export class CodexAccountStore {
         tokenCostByInstanceId: {},
         tokenCostErrorByInstanceId: {},
         runningTokenCostSummary: null,
-        runningTokenCostInstanceIds: []
+        runningTokenCostInstanceIds: [],
+        localGatewayStatus: {
+          running: false,
+          baseUrl: '',
+          apiKeyPreview: ''
+        }
       }
     })
   }
@@ -89,6 +94,9 @@ export class CodexAccountStore {
         ...nextSettings,
         statsDisplay: normalizeStatsDisplaySettings(
           nextSettings.statsDisplay ?? state.settings.statsDisplay
+        ),
+        localGateway: normalizeLocalGatewaySettings(
+          nextSettings.localGateway ?? state.settings.localGateway
         ),
         statusBarAccountIds: (
           nextSettings.statusBarAccountIds ?? state.settings.statusBarAccountIds

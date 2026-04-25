@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path'
 
 import type {
   CreateCustomProviderInput,
+  CustomProviderProtocol,
   CustomProviderSummary,
   UpdateCustomProviderInput
 } from '../shared/codex'
@@ -13,6 +14,7 @@ interface PersistedCustomProvider {
   id: string
   name?: string
   baseUrl: string
+  protocol?: CustomProviderProtocol
   apiKey: ProtectedPayload
   model: string
   fastMode: boolean
@@ -43,6 +45,11 @@ function normalizeModel(value?: string | null): string {
   return normalized || '5.4'
 }
 
+function normalizeProtocol(value?: string | null): CustomProviderProtocol {
+  void value
+  return 'openai'
+}
+
 function normalizeBaseUrl(value: string): string {
   const normalized = value.trim()
   if (!normalized) {
@@ -60,6 +67,7 @@ function toProviderSummary(provider: PersistedCustomProvider): CustomProviderSum
     id: provider.id,
     name: provider.name,
     baseUrl: provider.baseUrl,
+    protocol: normalizeProtocol(provider.protocol),
     model: provider.model,
     fastMode: provider.fastMode,
     createdAt: provider.createdAt,
@@ -94,6 +102,7 @@ export class CodexProviderStore {
       id: randomUUID(),
       name: normalizeOptionalName(input.name),
       baseUrl: normalizeBaseUrl(input.baseUrl),
+      protocol: normalizeProtocol(input.protocol),
       apiKey: this.platform.protect(this.requireApiKey(input.apiKey)),
       model: normalizeModel(input.model),
       fastMode: input.fastMode ?? true,
@@ -122,6 +131,10 @@ export class CodexProviderStore {
 
     if (typeof input.baseUrl === 'string') {
       provider.baseUrl = normalizeBaseUrl(input.baseUrl)
+    }
+
+    if (input.protocol !== undefined) {
+      provider.protocol = normalizeProtocol(input.protocol)
     }
 
     if (typeof input.apiKey === 'string') {
@@ -234,6 +247,7 @@ export class CodexProviderStore {
           id: provider.id ?? randomUUID(),
           name: normalizeOptionalName(provider.name),
           baseUrl: normalizeBaseUrl(provider.baseUrl ?? ''),
+          protocol: normalizeProtocol(provider.protocol),
           apiKey: provider.apiKey as ProtectedPayload,
           model: normalizeModel(provider.model),
           fastMode: typeof provider.fastMode === 'boolean' ? provider.fastMode : true,

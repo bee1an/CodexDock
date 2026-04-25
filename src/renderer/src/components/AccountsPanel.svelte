@@ -10,6 +10,7 @@
     CodexInstanceSummary,
     CustomProviderDetail,
     CustomProviderSummary,
+    LocalGatewayStatus,
     StatsDisplaySettings,
     TokenCostDetail,
     TokenCostReadOptions,
@@ -22,6 +23,7 @@
   import AccountsTagsView from './AccountsTagsView.svelte'
   import Checkbox from './Checkbox.svelte'
   import CostStatsView from './CostStatsView.svelte'
+  import LocalGatewayView from './LocalGatewayView.svelte'
   import { taggedAccountCount as taggedAccountCountForAccounts } from './accounts-panel-account'
   import {
     buildProviderUpdateInput,
@@ -51,6 +53,9 @@
   export let accounts: AccountSummary[] = []
   export let codexInstances: CodexInstanceSummary[] = []
   export let providers: CustomProviderSummary[] = []
+  export let localGatewayStatus: LocalGatewayStatus
+  export let localGatewayBusy = false
+  export let localGatewayApiKey = ''
   export let tags: AccountTag[] = []
   export let activeAccountId: string | undefined
   export let usageByAccountId: Record<string, AccountRateLimits>
@@ -76,6 +81,9 @@
   export let reorderProviders: (providerIds: string[]) => Promise<void>
   export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
   export let removeProvider: (providerId: string) => Promise<void>
+  export let startLocalGateway: () => Promise<void>
+  export let stopLocalGateway: () => Promise<void>
+  export let rotateLocalGatewayKey: () => Promise<void>
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let createTag: (name: string) => Promise<void>
   export let updateTag: (tag: AccountTag, name: string) => Promise<void>
@@ -91,7 +99,7 @@
   export let startLogin: (method: 'browser' | 'device') => void
   export let importCurrent: () => void
 
-  let currentView: 'accounts' | 'providers' | 'tags' | 'stats' = 'accounts'
+  let currentView: 'accounts' | 'providers' | 'gateway' | 'tags' | 'stats' = 'accounts'
   let activeTagFilter = 'all'
   let newTagName = ''
   let editingTagId: string | null = null
@@ -361,6 +369,20 @@
         </button>
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
+            currentView === 'gateway'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
+          }`}
+          type="button"
+          onclick={() => {
+            currentView = 'gateway'
+          }}
+        >
+          <span class="i-lucide-radio-tower h-3.5 w-3.5"></span>
+          <span>{copy.localGateway}</span>
+        </button>
+        <button
+          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'tags'
               ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
@@ -454,6 +476,19 @@
       {removeAccount}
       {removeAccounts}
       {exportSelectedAccounts}
+    />
+  {:else if currentView === 'gateway'}
+    <LocalGatewayView
+      {copy}
+      {iconRowButton}
+      {primaryActionButton}
+      {compactGhostButton}
+      {localGatewayStatus}
+      {localGatewayBusy}
+      {localGatewayApiKey}
+      {startLocalGateway}
+      {stopLocalGateway}
+      {rotateLocalGatewayKey}
     />
   {:else if currentView === 'providers'}
     <AccountsProvidersView

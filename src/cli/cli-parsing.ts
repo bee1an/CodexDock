@@ -3,6 +3,7 @@ import type {
   CliSettingsKey,
   CreateCodexInstanceInput,
   CreateCustomProviderInput,
+  CustomProviderProtocol,
   StatsDisplaySettings,
   UpdateCodexInstanceInput,
   UpdateCustomProviderInput
@@ -31,6 +32,7 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'showLocalMockData',
   'codexDesktopExecutablePath',
   'statsDisplay',
+  'localGateway',
   'toolbarIconMovable',
   'collapsedToolbarIconDefaultPosition'
 ]
@@ -204,7 +206,20 @@ export function parseSettingsValue(
       return rawValue.trim()
     case 'statsDisplay':
       return parseStatsDisplay(rawValue)
+    case 'localGateway':
+      throw new CliError(
+        'localGateway cannot be set as a single value; use gateway commands instead',
+        EXIT_USAGE
+      )
   }
+}
+
+function parseProviderProtocol(value: string): CustomProviderProtocol {
+  if (value === 'openai') {
+    return value
+  }
+
+  throw new CliError('--protocol must be openai', EXIT_USAGE)
 }
 
 export function ensureSettingsKey(value: string): CliSettingsKey {
@@ -249,6 +264,15 @@ export function parseProviderOptions(argv: string[]): {
         throw new CliError('Missing value for --api-key', EXIT_USAGE)
       }
       input.apiKey = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--protocol') {
+      if (!value) {
+        throw new CliError('Missing value for --protocol', EXIT_USAGE)
+      }
+      input.protocol = parseProviderProtocol(value)
       index += 1
       continue
     }

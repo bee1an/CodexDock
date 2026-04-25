@@ -177,6 +177,7 @@ async function execute(
             name: input.name,
             baseUrl: input.baseUrl,
             apiKey: input.apiKey,
+            protocol: input.protocol,
             model: input.model ?? '5.4',
             fastMode: input.fastMode
           })
@@ -200,6 +201,9 @@ async function execute(
           }
           if (input.apiKey !== undefined) {
             updateInput.apiKey = input.apiKey
+          }
+          if (input.protocol !== undefined) {
+            updateInput.protocol = input.protocol
           }
           if (input.model !== undefined) {
             updateInput.model = input.model
@@ -505,6 +509,57 @@ async function execute(
       })
       printTokenCost(detail, silent)
       return { code: EXIT_OK, payload: toCliResult(detail) }
+    }
+    case 'gateway': {
+      switch (subcommand) {
+        case 'status': {
+          const status = await runtime.services.gateway.status()
+          printIfNeeded(
+            `${status.running ? 'Running' : 'Stopped'} ${status.baseUrl} ${status.apiKeyPreview || '(no key)'}`,
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(status) }
+        }
+        case 'start': {
+          const snapshot = await runtime.services.gateway.start()
+          const status = snapshot.localGatewayStatus ?? (await runtime.services.gateway.status())
+          if (flags.json) {
+            console.log(JSON.stringify(toCliResult(status)))
+          } else {
+            printIfNeeded(`Local gateway started: ${status.baseUrl}`, silent)
+            printIfNeeded('Press Ctrl+C to stop the local gateway.', silent)
+          }
+          await new Promise<void>((resolve) => {
+            const cleanup = (): void => {
+              process.off('SIGINT', stop)
+              process.off('SIGTERM', stop)
+            }
+            const stop = (): void => {
+              cleanup()
+              void runtime.services.gateway.stop().finally(resolve)
+            }
+            process.once('SIGINT', stop)
+            process.once('SIGTERM', stop)
+          })
+          return { code: EXIT_OK }
+        }
+        case 'stop': {
+          const snapshot = await runtime.services.gateway.stop()
+          const status = snapshot.localGatewayStatus ?? (await runtime.services.gateway.status())
+          printIfNeeded('Local gateway stopped', silent)
+          return { code: EXIT_OK, payload: toCliResult(status) }
+        }
+        case 'key': {
+          if (rest[0] !== 'rotate') {
+            throw new CliError('Usage: cdock gateway key rotate [--json]', EXIT_USAGE)
+          }
+          const result = await runtime.services.gateway.rotateKey()
+          printIfNeeded(`Local gateway API key: ${result.apiKey}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        default:
+          throw new CliError('Unknown gateway command', EXIT_USAGE)
+      }
     }
     case 'login': {
       if (subcommand === 'port') {

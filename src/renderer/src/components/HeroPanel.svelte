@@ -109,6 +109,7 @@
         name: newProviderName.trim() || undefined,
         baseUrl,
         apiKey,
+        protocol: 'openai',
         model: newProviderModel.trim() || '5.4',
         fastMode: newProviderFastMode
       })

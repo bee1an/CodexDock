@@ -15,6 +15,7 @@ describe('accounts panel provider helpers', () => {
       name: 'Mirror',
       baseUrl: 'https://mirror.example.com',
       apiKey: '',
+      protocol: 'openai',
       model: 'gpt-5.4',
       fastMode: true
     })
@@ -26,6 +27,7 @@ describe('accounts panel provider helpers', () => {
         {
           name: 'Mirror',
           baseUrl: 'https://mirror.example.com',
+          protocol: 'openai',
           model: 'gpt-5.4',
           fastMode: false
         },
@@ -33,6 +35,7 @@ describe('accounts panel provider helpers', () => {
           name: ' Mirror 2 ',
           baseUrl: ' https://mirror-2.example.com ',
           apiKey: ' sk-test ',
+          protocol: 'openai',
           model: ' ',
           fastMode: true
         }
@@ -52,6 +55,7 @@ describe('accounts panel provider helpers', () => {
         {
           name: 'Mirror',
           baseUrl: 'https://mirror.example.com',
+          protocol: 'openai',
           model: 'gpt-5.4',
           fastMode: true
         },
@@ -59,6 +63,7 @@ describe('accounts panel provider helpers', () => {
           name: 'Mirror',
           baseUrl: 'https://mirror.example.com',
           apiKey: '   ',
+          protocol: 'openai',
           model: 'gpt-5.4',
           fastMode: true
         }

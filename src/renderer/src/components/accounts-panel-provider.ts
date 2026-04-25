@@ -4,13 +4,17 @@ import type {
   UpdateCustomProviderInput
 } from '../../../shared/codex'
 
-type ProviderDraftSource = Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'model' | 'fastMode'> &
+type ProviderDraftSource = Pick<
+  CustomProviderSummary,
+  'name' | 'baseUrl' | 'protocol' | 'model' | 'fastMode'
+> &
   Partial<Pick<CustomProviderDetail, 'apiKey'>>
 
 export interface ProviderDraft {
   name: string
   baseUrl: string
   apiKey: string
+  protocol: NonNullable<CustomProviderSummary['protocol']>
   model: string
   fastMode: boolean
 }
@@ -20,13 +24,14 @@ export function createProviderDraft(provider: ProviderDraftSource): ProviderDraf
     name: provider.name ?? '',
     baseUrl: provider.baseUrl,
     apiKey: provider.apiKey ?? '',
+    protocol: provider.protocol ?? 'openai',
     model: provider.model,
     fastMode: provider.fastMode
   }
 }
 
 export function buildProviderUpdateInput(
-  provider: Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'model' | 'fastMode'>,
+  provider: Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'protocol' | 'model' | 'fastMode'>,
   draft: ProviderDraft
 ): UpdateCustomProviderInput {
   const input: UpdateCustomProviderInput = {}
@@ -45,6 +50,10 @@ export function buildProviderUpdateInput(
 
   if (nextApiKey) {
     input.apiKey = nextApiKey
+  }
+
+  if (draft.protocol !== (provider.protocol ?? 'openai')) {
+    input.protocol = draft.protocol
   }
 
   if (nextModel !== provider.model) {

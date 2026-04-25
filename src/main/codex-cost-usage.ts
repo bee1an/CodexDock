@@ -181,6 +181,11 @@ const CODEX_PRICING: Record<string, CodexPricing> = {
     inputCostPerToken: 3e-5,
     outputCostPerToken: 1.8e-4,
     cacheReadInputCostPerToken: null
+  },
+  'gpt-5.5': {
+    inputCostPerToken: 5e-6,
+    outputCostPerToken: 3e-5,
+    cacheReadInputCostPerToken: 5e-7
   }
 }
 

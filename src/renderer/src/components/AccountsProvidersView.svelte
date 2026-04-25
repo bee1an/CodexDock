@@ -93,7 +93,7 @@
                     disabled={loginActionBusy || providerMutationBusy}
                   />
                   <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16 md:col-span-2"
+                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                     type="password"
                     bind:value={providerDrafts[provider.id].apiKey}
                     placeholder={copy.providerApiKeyPlaceholder}
@@ -123,6 +123,12 @@
                     {/if}
                   </div>
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <span
+                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                    >
+                      <span class="font-medium uppercase tracking-[0.08em]">API</span>
+                      <span>{provider.protocol ?? 'openai'}</span>
+                    </span>
                     <span
                       class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
                     >

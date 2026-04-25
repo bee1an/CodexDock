@@ -27,8 +27,8 @@ Usage:
   cdock account best [--json]
   cdock account remove <account-id> [--json]
   cdock provider list [--json]
-  cdock provider create --base-url <url> --api-key <key> [--name <name>] [--model <model>] [--fast <true|false>] [--json]
-  cdock provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--model <model>] [--fast <true|false>] [--json]
+  cdock provider create --base-url <url> --api-key <key> [--protocol openai] [--name <name>] [--model <model>] [--fast <true|false>] [--json]
+  cdock provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--protocol openai] [--model <model>] [--fast <true|false>] [--json]
   cdock provider remove <provider-id> [--json]
   cdock provider check <provider-id> [--json]
   cdock provider open <provider-id> [--json]
@@ -47,6 +47,8 @@ Usage:
   cdock session current [--json]
   cdock usage read [account-id] [--json]
   cdock cost read [--refresh] [--json]
+  cdock gateway start|stop|status [--json]
+  cdock gateway key rotate [--json]
   cdock login browser [--json] [--no-open] [--timeout <sec>]
   cdock login device [--json] [--timeout <sec>]
   cdock login port status [--json]
@@ -242,7 +244,7 @@ export function printProviders(providers: CustomProviderSummary[], quiet: boolea
 
   for (const provider of providers) {
     console.log(
-      `${provider.id}  ${providerLabel(provider)}  ${provider.model}  ${provider.fastMode ? 'fast' : 'normal'}`
+      `${provider.id}  ${providerLabel(provider)}  ${provider.protocol}  ${provider.model}  ${provider.fastMode ? 'fast' : 'normal'}`
     )
   }
 }

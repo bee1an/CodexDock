@@ -37,6 +37,7 @@ import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
 import { createCodexCostUsageService } from './codex-cost-usage'
 import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
 import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
+import { CodexLocalGatewayService } from './local-gateway'
 
 export type { CodexServices, CreateCodexServicesOptions } from './codex-services-shared'
 export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
@@ -89,6 +90,13 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     listInstances: () => instanceRuntime.listCodexInstances()
   })
   const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
+  const localGatewayService = new CodexLocalGatewayService({
+    store,
+    providerStore,
+    platform: options.platform,
+    refreshAuthForUse: authRuntime.refreshAuthForUse,
+    refreshStoredAuthGuarded: authRuntime.refreshStoredAuthGuarded
+  })
 
   const {
     readStoredMockUsage,
@@ -118,9 +126,11 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   const getSnapshot = async (): Promise<AppSnapshot> => {
     const snapshot = await getBaseSnapshot()
     const costSnapshot = await costUsageService.readSnapshotSummaries(snapshot.codexInstances)
+    const localGatewayStatus = await localGatewayService.status()
     return {
       ...snapshot,
-      ...costSnapshot
+      ...costSnapshot,
+      localGatewayStatus
     }
   }
 
@@ -205,7 +215,8 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         providers,
         codexInstances,
         codexInstanceDefaults: instanceStore.getDefaults(),
-        ...costSnapshot
+        ...costSnapshot,
+        localGatewayStatus: await localGatewayService.status()
       }
     } catch {
       return undefined
@@ -444,6 +455,18 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     },
     cost: {
       read: (input) => costUsageService.read(input)
+    },
+    gateway: {
+      start: async () => {
+        await localGatewayService.start()
+        return getSnapshot()
+      },
+      stop: async () => {
+        await localGatewayService.stop()
+        return getSnapshot()
+      },
+      status: () => localGatewayService.status(),
+      rotateKey: () => localGatewayService.rotateKey()
     },
     login: {
       start: (method) => loginCoordinator.start(method),

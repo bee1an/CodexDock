@@ -95,6 +95,12 @@ interface CliTestRuntime {
     cost: {
       read: ReturnType<typeof vi.fn>
     }
+    gateway: {
+      start: ReturnType<typeof vi.fn>
+      stop: ReturnType<typeof vi.fn>
+      status: ReturnType<typeof vi.fn>
+      rotateKey: ReturnType<typeof vi.fn>
+    }
     login: {
       start: ReturnType<typeof vi.fn>
       isRunning: ReturnType<typeof vi.fn>
@@ -354,6 +360,37 @@ function createRuntime(): {
       },
       cost: {
         read: vi.fn(async () => tokenCostDetail)
+      },
+      gateway: {
+        start: vi.fn(async () =>
+          createSnapshot({
+            localGatewayStatus: {
+              running: true,
+              baseUrl: 'http://127.0.0.1:11456',
+              apiKeyPreview: 'sk-cdock…test'
+            }
+          })
+        ),
+        stop: vi.fn(async () =>
+          createSnapshot({
+            localGatewayStatus: {
+              running: false,
+              baseUrl: 'http://127.0.0.1:11456',
+              apiKeyPreview: 'sk-cdock…test'
+            }
+          })
+        ),
+        status: vi.fn(async () => ({
+          running: false,
+          baseUrl: 'http://127.0.0.1:11456',
+          apiKeyPreview: 'sk-cdock…test'
+        })),
+        rotateKey: vi.fn(async () => ({
+          running: false,
+          baseUrl: 'http://127.0.0.1:11456',
+          apiKeyPreview: 'sk-cdock…new1',
+          apiKey: 'sk-cdock-new-key'
+        }))
       },
       login: {
         start: vi.fn(async (method: 'browser' | 'device') => {
@@ -686,6 +723,48 @@ describe('runCli', () => {
     expect(plainOutput).toContain('Last 30 days:')
     expect(plainOutput).toContain('Warnings:')
     expect(plainOutput).toContain('Failed to read broken (/tmp/broken): boom')
+  })
+
+  it('covers local gateway commands', async () => {
+    const { runtime } = createRuntime()
+
+    await expect(runCli(runtime as never, ['gateway', 'status', '--json'])).resolves.toBe(0)
+    expect(runtime.services.gateway.status).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        running: false,
+        baseUrl: 'http://127.0.0.1:11456'
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    const start = runCli(runtime as never, ['gateway', 'start', '--json'])
+    await vi.waitFor(() => expect(runtime.services.gateway.start).toHaveBeenCalledTimes(1))
+    expect(runtime.services.gateway.start).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        running: true,
+        baseUrl: 'http://127.0.0.1:11456'
+      },
+      error: null
+    })
+    process.emit('SIGINT', 'SIGINT')
+    await expect(start).resolves.toBe(0)
+    expect(runtime.services.gateway.stop).toHaveBeenCalledTimes(1)
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['gateway', 'key', 'rotate', '--json'])).resolves.toBe(0)
+    expect(runtime.services.gateway.rotateKey).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        apiKey: 'sk-cdock-new-key'
+      },
+      error: null
+    })
   })
 
   it('covers tag commands', async () => {

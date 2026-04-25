@@ -73,6 +73,10 @@ const codexApp = {
     ipcRenderer.invoke('codex:wake-account-rate-limits', accountId, input),
   readTokenCost: (input?: TokenCostReadOptions): Promise<TokenCostDetail> =>
     ipcRenderer.invoke('codex:read-token-cost', input),
+  getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
+  startLocalGateway: () => ipcRenderer.invoke('codex:start-local-gateway'),
+  stopLocalGateway: () => ipcRenderer.invoke('codex:stop-local-gateway'),
+  rotateLocalGatewayKey: () => ipcRenderer.invoke('codex:rotate-local-gateway-key'),
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
   downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),

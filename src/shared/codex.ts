@@ -1,6 +1,9 @@
+import type { ProtectedPayload } from './codex-platform'
+
 export type LoginMethod = 'browser' | 'device'
 export type AppLanguage = 'zh-CN' | 'en'
 export type AppTheme = 'light' | 'dark' | 'system'
+export type CustomProviderProtocol = 'openai' | 'anthropic' | 'gemini'
 export const statsDisplayKeys = ['dailyTrend', 'modelBreakdown', 'instanceUsage'] as const
 export type StatsDisplayKey = (typeof statsDisplayKeys)[number]
 export interface StatsDisplaySettings {
@@ -8,6 +11,36 @@ export interface StatsDisplaySettings {
   modelBreakdown: boolean
   instanceUsage: boolean
 }
+
+export interface LocalGatewaySettings {
+  host: string
+  port: number
+  apiKey?: string | ProtectedPayload
+  stickyTtlMinutes: number
+  requestTimeoutMs: number
+}
+
+export interface LocalGatewayStatus {
+  running: boolean
+  baseUrl: string
+  apiKeyPreview: string
+  lastError?: string
+  logs?: LocalGatewayLogEntry[]
+}
+
+export interface LocalGatewayLogEntry {
+  id: string
+  timestamp: string
+  method: string
+  path: string
+  status: number
+  durationMs: number
+  provider?: string
+  model?: string
+  tokens?: number
+  message?: string
+}
+
 export const accountTransferFormats = [
   'codexdock',
   'cockpit_tools',
@@ -27,12 +60,14 @@ export interface AppSettings {
   statsDisplay?: StatsDisplaySettings
   toolbarIconMovable?: boolean
   collapsedToolbarIconDefaultPosition?: boolean
+  localGateway?: LocalGatewaySettings
 }
 
 export interface CustomProviderSummary {
   id: string
   name?: string
   baseUrl: string
+  protocol?: CustomProviderProtocol
   model: string
   fastMode: boolean
   createdAt: string
@@ -48,6 +83,7 @@ export interface CreateCustomProviderInput {
   name?: string
   baseUrl: string
   apiKey: string
+  protocol?: CustomProviderProtocol
   model?: string
   fastMode?: boolean
 }
@@ -56,6 +92,7 @@ export interface UpdateCustomProviderInput {
   name?: string
   baseUrl?: string
   apiKey?: string
+  protocol?: CustomProviderProtocol
   model?: string
   fastMode?: boolean
 }
@@ -291,6 +328,7 @@ export interface AppSnapshot {
   tokenCostErrorByInstanceId: Record<string, string>
   runningTokenCostSummary: TokenCostSummary | null
   runningTokenCostInstanceIds: string[]
+  localGatewayStatus?: LocalGatewayStatus
 }
 
 export interface LoginAttempt {
@@ -457,6 +495,58 @@ export function normalizeStatsDisplaySettings(
     modelBreakdown: settings?.modelBreakdown ?? defaults.modelBreakdown,
     instanceUsage: settings?.instanceUsage ?? defaults.instanceUsage
   }
+}
+
+export function defaultLocalGatewaySettings(): LocalGatewaySettings {
+  return {
+    host: '127.0.0.1',
+    port: 11456,
+    stickyTtlMinutes: 360,
+    requestTimeoutMs: 120_000
+  }
+}
+
+export function normalizeLocalGatewaySettings(
+  settings?: Partial<LocalGatewaySettings> | null
+): LocalGatewaySettings {
+  const defaults = defaultLocalGatewaySettings()
+  const port = Number(settings?.port)
+  const stickyTtlMinutes = Number(settings?.stickyTtlMinutes)
+  const requestTimeoutMs = Number(settings?.requestTimeoutMs)
+  return {
+    host: settings?.host?.trim() || defaults.host,
+    port:
+      port === 1456
+        ? defaults.port
+        : Number.isInteger(port) && port > 0 && port < 65536
+          ? port
+          : defaults.port,
+    apiKey:
+      typeof settings?.apiKey === 'string' ? settings.apiKey.trim() || undefined : settings?.apiKey,
+    stickyTtlMinutes:
+      Number.isFinite(stickyTtlMinutes) && stickyTtlMinutes > 0
+        ? Math.floor(stickyTtlMinutes)
+        : defaults.stickyTtlMinutes,
+    requestTimeoutMs:
+      Number.isFinite(requestTimeoutMs) && requestTimeoutMs >= 1000
+        ? Math.floor(requestTimeoutMs)
+        : defaults.requestTimeoutMs
+  }
+}
+
+export function localGatewayBaseUrl(settings?: Partial<LocalGatewaySettings> | null): string {
+  const normalized = normalizeLocalGatewaySettings(settings)
+  return `http://${normalized.host}:${normalized.port}`
+}
+
+export function maskLocalGatewayApiKey(apiKey?: string): string {
+  if (!apiKey) {
+    return ''
+  }
+
+  return apiKey.length <= 12
+    ? `${apiKey.slice(0, 6)}…`
+    : `${apiKey.slice(0, 10)}…${apiKey.slice(-4)}`
 }
 
 export function serializeStatsDisplaySettings(

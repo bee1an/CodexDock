@@ -415,7 +415,14 @@ function createTray(): void {
             language: 'zh-CN',
             theme: 'light',
             checkForUpdatesOnStartup: true,
-            codexDesktopExecutablePath: ''
+            codexDesktopExecutablePath: '',
+            localGateway: {
+              host: '127.0.0.1',
+              port: 11456,
+              apiKey: '',
+              stickyTtlMinutes: 360,
+              requestTimeoutMs: 120_000
+            }
           },
           usageByAccountId: {},
           usageErrorByAccountId: {},
@@ -423,7 +430,12 @@ function createTray(): void {
           tokenCostByInstanceId: {},
           tokenCostErrorByInstanceId: {},
           runningTokenCostSummary: null,
-          runningTokenCostInstanceIds: []
+          runningTokenCostInstanceIds: [],
+          localGatewayStatus: {
+            running: false,
+            baseUrl: 'http://127.0.0.1:11456',
+            apiKeyPreview: ''
+          }
         })
       : nativeImage.createFromPath(icon).resize({ width: 18, height: 18 })
 
@@ -812,6 +824,20 @@ app.whenReady().then(async () => {
         void refreshTrayTitle().catch(() => undefined)
       }, 0)
     }
+  })
+  ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())
+  ipcMain.handle('codex:start-local-gateway', async () => {
+    await codexServices.gateway.start()
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:stop-local-gateway', async () => {
+    await codexServices.gateway.stop()
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:rotate-local-gateway-key', async () => {
+    const result = await codexServices.gateway.rotateKey()
+    await refreshTrayTitle()
+    return result
   })
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => triggerUpdateDownload())

@@ -51,6 +51,7 @@ describe('CodexProviderStore', () => {
 
     expect(created.name).toBe('Bee')
     expect(created.baseUrl).toBe('https://api.bee1an.us.kg/v1')
+    expect(created.protocol).toBe('openai')
     expect(created.model).toBe('5.4')
 
     const raw = JSON.parse(await readFile(join(directory, 'codex-providers.json'), 'utf8')) as {
@@ -74,11 +75,13 @@ describe('CodexProviderStore', () => {
 
     const updated = await store.update(created.id, {
       name: 'Bee 2',
+      protocol: 'openai',
       model: 'gpt-5.4',
       fastMode: false
     })
 
     expect(updated.name).toBe('Bee 2')
+    expect(updated.protocol).toBe('openai')
     expect(updated.model).toBe('gpt-5.4')
     expect(updated.fastMode).toBe(false)
   })

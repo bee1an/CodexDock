@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.0 - 2026-04-25
+
+This release adds a local gateway for reusing CodexDock accounts from OpenAI-compatible clients and expands provider metadata for gateway routing.
+
+- Added a local reverse-proxy gateway in the desktop app with start, stop, key rotation, health status, and recent request logs.
+- Added `cdock gateway` commands so the local gateway can be started, stopped, inspected, and have its API key rotated from the CLI.
+- Added OpenAI-compatible chat, responses, Claude messages, and Gemini content routes that can use saved Codex accounts and fall back to configured providers.
+- Extended custom providers with protocol metadata and surfaced it in desktop and CLI provider lists.
+- Added persisted local gateway settings, protected gateway API key storage, and preload APIs for the renderer.
+- Updated token-cost pricing data for GPT-5.5 and added tests for the new provider and gateway CLI behavior.
+
 ## 0.3.8 - 2026-04-24
 
 This patch release tunes the macOS app icon size and completes the CodexDock Homebrew tap migration.

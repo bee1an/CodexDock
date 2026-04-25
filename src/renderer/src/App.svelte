@@ -87,7 +87,14 @@
       showLocalMockData: true,
       statsDisplay: defaultStatsDisplaySettings(),
       toolbarIconMovable: true,
-      collapsedToolbarIconDefaultPosition: true
+      collapsedToolbarIconDefaultPosition: true,
+      localGateway: {
+        host: '127.0.0.1',
+        port: 11456,
+        apiKey: '',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000
+      }
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
@@ -95,7 +102,12 @@
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
-    runningTokenCostInstanceIds: []
+    runningTokenCostInstanceIds: [],
+    localGatewayStatus: {
+      running: false,
+      baseUrl: 'http://127.0.0.1:11456',
+      apiKeyPreview: ''
+    }
   }
   let rawSnapshot: AppSnapshot = snapshot
   let appMeta: AppMeta = {
@@ -140,6 +152,8 @@
   let exportDialogError = ''
   let exportDialogAccountIds: string[] | null = null
   let exportDialogFormat: AccountTransferFormat = 'codexdock'
+  let localGatewayBusy = false
+  let localGatewayApiKey = ''
   let wakeScheduleEnabledDraft = true
   let wakeScheduleTimesDraft: string[] = ['09:00']
   let wakeSchedulePromptDraft = 'ping'
@@ -574,6 +588,42 @@
       window.codexApp.removeProvider(providerId)
     )
   }
+
+  const runLocalGatewayAction = async (task: () => Promise<void>): Promise<void> => {
+    if (localGatewayBusy) {
+      return
+    }
+
+    localGatewayBusy = true
+    try {
+      await task()
+    } finally {
+      localGatewayBusy = false
+    }
+  }
+
+  const startLocalGateway = async (): Promise<void> =>
+    runLocalGatewayAction(async () => {
+      await runAction('gateway:start', () => window.codexApp.startLocalGateway())
+    })
+
+  const stopLocalGateway = async (): Promise<void> =>
+    runLocalGatewayAction(async () => {
+      await runAction('gateway:stop', () => window.codexApp.stopLocalGateway())
+    })
+
+  const rotateLocalGatewayKey = async (): Promise<void> =>
+    runLocalGatewayAction(async () => {
+      pageError = ''
+      try {
+        const result = await window.codexApp.rotateLocalGatewayKey()
+        localGatewayApiKey = result.apiKey
+        await navigator.clipboard.writeText(result.apiKey)
+        await refreshSnapshot()
+      } catch (error) {
+        pageError = localizeKnownError(error, copyForLanguage().actionFailed)
+      }
+    })
 
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
     window.codexApp.getProvider(providerId)
@@ -1351,6 +1401,13 @@
               accounts={snapshot.accounts}
               codexInstances={snapshot.codexInstances}
               providers={snapshot.providers}
+              localGatewayStatus={snapshot.localGatewayStatus ?? {
+                running: false,
+                baseUrl: 'http://127.0.0.1:11456',
+                apiKeyPreview: ''
+              }}
+              {localGatewayBusy}
+              {localGatewayApiKey}
               tags={snapshot.tags}
               activeAccountId={snapshot.activeAccountId}
               {usageByAccountId}
@@ -1386,6 +1443,9 @@
               {reorderProviders}
               {updateProvider}
               {removeProvider}
+              {startLocalGateway}
+              {stopLocalGateway}
+              {rotateLocalGatewayKey}
               {openProviderInCodex}
               {reorderAccounts}
               {createTag}

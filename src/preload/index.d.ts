@@ -15,6 +15,7 @@ import type {
   PortOccupant,
   TokenCostDetail,
   TokenCostReadOptions,
+  LocalGatewayStatus,
   UpdateAccountWakeScheduleInput,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
@@ -65,6 +66,10 @@ interface CodexDesktopApi {
     input?: WakeAccountRateLimitsInput
   ) => Promise<WakeAccountRateLimitsResult>
   readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
+  getLocalGatewayStatus: () => Promise<LocalGatewayStatus>
+  startLocalGateway: () => Promise<AppSnapshot>
+  stopLocalGateway: () => Promise<AppSnapshot>
+  rotateLocalGatewayKey: () => Promise<LocalGatewayStatus & { apiKey: string }>
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>
   installUpdate: () => Promise<void>
