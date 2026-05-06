@@ -213,16 +213,37 @@ function buildAuthorizeUrl(redirectUri: string, codeChallenge: string, state: st
   return `${OPENAI_AUTHORIZE_URL}?${query}`
 }
 
-function parseTokenEndpointError(raw: string): string {
+function stringifyTokenEndpointErrorValue(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    return trimmed || undefined
+  }
+
+  if (value === undefined || value === null) {
+    return undefined
+  }
+
   try {
-    const parsed = JSON.parse(raw) as {
-      error?: string
-      error_description?: string
-      message?: string
-    }
-    return parsed.error_description ?? parsed.message ?? parsed.error ?? raw.trim()
+    return JSON.stringify(value)
   } catch {
-    return raw.trim()
+    return String(value)
+  }
+}
+
+function parseTokenEndpointError(raw: string): string {
+  const fallback = raw.trim()
+
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return (
+      stringifyTokenEndpointErrorValue(parsed.error_description) ??
+      stringifyTokenEndpointErrorValue(parsed.message) ??
+      stringifyTokenEndpointErrorValue(parsed.error) ??
+      stringifyTokenEndpointErrorValue(parsed) ??
+      fallback
+    )
+  } catch {
+    return fallback
   }
 }
 

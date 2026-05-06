@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { CodexAccountStore, type CodexAuthPayload } from '../codex-auth'
+import { parseTokenEndpointError } from '../codex-auth-shared'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../../shared/codex-platform'
 
 function createPlatform(): CodexPlatformAdapter {
@@ -50,6 +51,34 @@ function createAuthPayload(
     }
   }
 }
+
+describe('parseTokenEndpointError', () => {
+  it('serializes object-shaped token endpoint errors instead of showing [object Object]', () => {
+    const raw = JSON.stringify({
+      error: {
+        code: 'unsupported_country_region_territory',
+        message: 'Country, region, or territory not supported',
+        param: null,
+        type: 'request_forbidden'
+      }
+    })
+
+    expect(parseTokenEndpointError(raw)).toBe(
+      '{"code":"unsupported_country_region_territory","message":"Country, region, or territory not supported","param":null,"type":"request_forbidden"}'
+    )
+  })
+
+  it('keeps plain string token endpoint details readable', () => {
+    expect(
+      parseTokenEndpointError(
+        JSON.stringify({
+          error: 'invalid_grant',
+          error_description: 'refresh_token_expired'
+        })
+      )
+    ).toBe('refresh_token_expired')
+  })
+})
 
 describe('CodexAccountStore', () => {
   const createdDirectories: string[] = []
