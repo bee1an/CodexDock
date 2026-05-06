@@ -216,7 +216,7 @@
   <section class="grid gap-2 px-1 py-1">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
-        <p class="text-sm font-semibold tracking-[-0.01em] text-ink">{copy.skillsTitle}</p>
+        <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.skillsTitle}</p>
         <p class="max-w-3xl text-xs leading-5 text-muted-strong">
           {copy.skillsDescription}
         </p>
@@ -274,7 +274,7 @@
       <label class="skills-search inline-flex items-center rounded-[0.35rem] px-2 py-1.5">
         <span class="i-lucide-search h-3.5 w-3.5 text-faint"></span>
         <input
-          class="ml-1.5 w-44 bg-transparent text-xs text-ink outline-none placeholder:text-faint"
+          class="ml-1.5 w-44 bg-transparent text-xs text-carbon outline-none placeholder:text-faint"
           placeholder={copy.skillsSearchPlaceholder}
           bind:value={searchQuery}
         />
@@ -324,7 +324,7 @@
         >
           <div class="flex flex-wrap items-center gap-2">
             <span class="i-lucide-box h-3.5 w-3.5 text-faint"></span>
-            <span class="text-sm font-semibold text-ink">
+            <span class="text-sm font-semibold text-carbon">
               {group.instance.name || copy.defaultInstance}
             </span>
             <span
@@ -434,7 +434,7 @@
         <div class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-muted-strong">SKILL.md</span>
           <pre
-            class="theme-code-surface max-h-80 overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-ink">{detailSkill.content}</pre>
+            class="theme-code-surface max-h-80 overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{detailSkill.content}</pre>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
@@ -514,7 +514,7 @@
                     class="accent-ink"
                   />
                   <span class="min-w-0">
-                    <span class="block truncate text-sm font-semibold text-ink">
+                    <span class="block truncate text-sm font-semibold text-carbon">
                       {target.name || copy.defaultInstance}
                     </span>
                     <span class="block truncate text-[11px] text-faint">{target.codexHome}</span>
@@ -527,7 +527,7 @@
 
         {#if copyResult}
           <div class="skills-result-panel">
-            <span class="text-sm font-semibold text-ink">{copy.skillsCopyResult}</span>
+            <span class="text-sm font-semibold text-carbon">{copy.skillsCopyResult}</span>
             {#if copyResult.copied.length > 0}
               <span class="text-success">
                 {copy.skillsCopySuccess(copyResult.copied.length)}
@@ -611,13 +611,13 @@
   }
 
   .skills-tab.is-active {
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
-    color: var(--ink);
+    background: color-mix(in srgb, var(--color-carbon) 5%, transparent);
+    color: var(--color-carbon);
   }
 
   .skills-tab-count {
     border-radius: 999px;
-    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    background: color-mix(in srgb, var(--color-carbon) 7%, transparent);
     color: var(--ink-faint);
     font-size: 0.625rem;
     font-weight: 700;
@@ -688,7 +688,7 @@
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: start;
     gap: 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     border-radius: 0.45rem;
     background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
     padding: 0.62rem 0.75rem;
@@ -708,7 +708,7 @@
     min-width: 0;
     border: 0;
     background: transparent;
-    color: var(--ink);
+    color: var(--color-carbon);
     cursor: pointer;
     font: inherit;
     padding: 0;
@@ -717,7 +717,7 @@
 
   .skills-title-button:hover,
   .skills-title-button:focus-visible {
-    color: var(--ink);
+    color: var(--color-carbon);
     text-decoration: underline;
     text-underline-offset: 2px;
   }
@@ -747,7 +747,7 @@
     justify-content: center;
     width: 1.65rem;
     height: 1.65rem;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     border-radius: 0.38rem;
     background: transparent;
     color: var(--ink-faint);
@@ -763,14 +763,14 @@
   .skills-icon-button:focus-visible {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .skills-detail-meta {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: 0.5rem 0.75rem;
-    border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 78%, transparent);
     border-radius: 0.5rem;
     background: color-mix(in srgb, var(--surface-soft) 54%, transparent);
     padding: 0.75rem;
@@ -789,7 +789,7 @@
 
   .skills-detail-meta dd {
     min-width: 0;
-    color: var(--ink);
+    color: var(--color-carbon);
     font-weight: 600;
   }
 
@@ -797,7 +797,7 @@
   .skills-copy-target-panel,
   .skills-copy-empty-state,
   .skills-result-panel {
-    border-color: color-mix(in srgb, var(--line) 82%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 54%, transparent);
   }
 
@@ -825,7 +825,7 @@
   .skills-copy-meta-item dd {
     min-width: 0;
     overflow: hidden;
-    color: var(--ink);
+    color: var(--color-carbon);
     font-weight: 650;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -836,7 +836,7 @@
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
     gap: 0.65rem;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     border-radius: 0.45rem;
     background: transparent;
     cursor: pointer;
@@ -854,14 +854,14 @@
 
   .skills-copy-target.is-selected {
     border-color: var(--line-strong);
-    background: var(--surface-selected, color-mix(in srgb, var(--ink) 5%, transparent));
+    background: var(--surface-selected, color-mix(in srgb, var(--color-carbon) 5%, transparent));
   }
 
   .skills-result-panel {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     border-radius: 0.45rem;
     padding: 0.62rem 0.75rem;
     font-size: 0.72rem;
@@ -887,7 +887,7 @@
 
   .skills-secondary-button {
     min-height: 2.1rem;
-    border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
     background: transparent;
     color: var(--ink-soft-strong);
     font-size: 0.8125rem;
@@ -898,22 +898,22 @@
   .skills-secondary-button:focus-visible {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .skills-confirm-button {
     min-height: 2.2rem;
-    border: 1px solid color-mix(in srgb, var(--ink) 72%, transparent);
-    background: var(--ink);
-    color: var(--paper);
+    border: 1px solid color-mix(in srgb, var(--color-carbon) 72%, transparent);
+    background: var(--color-carbon);
+    color: var(--color-snow);
     font-size: 0.8125rem;
     padding: 0.48rem 0.85rem;
   }
 
   .skills-confirm-button:hover,
   .skills-confirm-button:focus-visible {
-    border-color: var(--ink);
-    background: color-mix(in srgb, var(--ink) 88%, var(--surface-soft));
+    border-color: var(--color-carbon);
+    background: color-mix(in srgb, var(--color-carbon) 88%, var(--surface-soft));
   }
 
   .skills-confirm-button:disabled {

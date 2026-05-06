@@ -1048,13 +1048,13 @@ export function loginTone(phase: LoginEvent['phase']): string {
     return 'text-danger'
   }
 
-  return 'text-ink'
+  return 'text-carbon'
 }
 
 export function accountCardTone(active: boolean): string {
   return active
     ? 'theme-account-card theme-account-card-active border-[var(--line-strong)] bg-[var(--surface-selected)]'
-    : 'theme-account-card border-[var(--line)] bg-[var(--panel-strong)]'
+    : 'theme-account-card border-[var(--color-arctic-mist)] bg-[var(--panel-strong)]'
 }
 
 export function usageErrorKind(message?: string): 'expired' | 'workspace' | 'error' | null {

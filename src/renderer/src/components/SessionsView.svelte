@@ -97,7 +97,7 @@
   }
 
   const floatingSelectButtonClass =
-    'theme-select flex h-11 w-full items-center justify-between rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-60'
+    'theme-select flex h-11 w-full items-center justify-between rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-60'
   const floatingSelectMenuClass = 'theme-tag-picker-surface z-[999] rounded-[0.75rem] p-1.5'
   const floatingSelectOptionClass =
     'theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16'
@@ -562,7 +562,7 @@
   <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-black/8 px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
-        <p class="text-sm font-semibold tracking-[-0.01em] text-ink">{copy.sessionsTitle}</p>
+        <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.sessionsTitle}</p>
         <p class="max-w-3xl text-xs leading-5 text-muted-strong">
           {copy.sessionsDescription}
         </p>
@@ -632,7 +632,7 @@
         <div class="min-w-0">
           <p class="text-xs text-faint">{copy.sessionsDetail}</p>
           <h3
-            class="session-line-clamp-2 mt-1 text-base font-semibold tracking-[-0.015em] text-ink"
+            class="session-line-clamp-2 mt-1 text-base font-semibold tracking-[-0.015em] text-carbon"
           >
             {selectedDetail?.session.title || selectedSummary.title || selectedSummary.id}
           </h3>
@@ -803,7 +803,7 @@
             >
               <div class="flex flex-wrap items-center gap-2">
                 <span class={`tree-caret ${instanceCollapsed ? '' : 'is-open'}`}>›</span>
-                <span class="text-sm font-semibold text-ink">{instanceLabel(instance)}</span>
+                <span class="text-sm font-semibold text-carbon">{instanceLabel(instance)}</span>
                 <span
                   class="theme-version-pill rounded-[0.3rem] border border-black/6 px-1.5 py-0.5 text-[10px] text-muted-strong"
                 >
@@ -833,7 +833,7 @@
 
           {#if !instanceCollapsed}
             <input
-              class="theme-select rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-select rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               value={searchByInstanceId[instance.id] ?? ''}
               placeholder={copy.sessionsInstanceSearchPlaceholder}
               disabled={loading}
@@ -878,7 +878,7 @@
                       >
                       <span class="min-w-0">
                         <span
-                          class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-ink"
+                          class="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-carbon"
                         >
                           <span class="i-lucide-server h-3.5 w-3.5 flex-none text-faint"></span>
                           <span class="truncate">
@@ -924,7 +924,7 @@
                                 >›</span
                               >
                               <span class="min-w-0">
-                                <span class="block truncate text-sm font-semibold text-ink">
+                                <span class="block truncate text-sm font-semibold text-carbon">
                                   {projectTitle(project)}
                                 </span>
                                 {#if projectSubtitle(project)}
@@ -965,7 +965,7 @@
                                       >
                                         <div class="min-w-0">
                                           <p
-                                            class="session-line-clamp-2 text-sm font-semibold text-ink"
+                                            class="session-line-clamp-2 text-sm font-semibold text-carbon"
                                           >
                                             {session.title || session.id}
                                           </p>
@@ -1067,7 +1067,7 @@
               <span class="i-lucide-copy-plus h-3 w-3"></span>
               {copy.sessionsCopyToProvider}
             </p>
-            <h3 class="session-line-clamp-2 mt-3 text-base font-semibold leading-6 text-ink">
+            <h3 class="session-line-clamp-2 mt-3 text-base font-semibold leading-6 text-carbon">
               {copyTargetSession.title || copyTargetSession.id}
             </h3>
             <p class="mt-1 text-xs leading-5 text-muted-strong">
@@ -1129,7 +1129,7 @@
             data-dialog-motion
           >
             <div class="grid gap-1">
-              <p class="text-sm font-semibold text-ink">{copy.sessionsCopyToProvider}</p>
+              <p class="text-sm font-semibold text-carbon">{copy.sessionsCopyToProvider}</p>
               <p class="text-xs leading-5 text-muted-strong">
                 {copy.sessionsCopyTargetInstanceHelp}
               </p>
@@ -1230,7 +1230,7 @@
   .session-card,
   .session-message {
     background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft));
-    color: var(--ink);
+    color: var(--color-carbon);
     box-shadow: none;
     transition:
       background-color 140ms ease,
@@ -1264,7 +1264,7 @@
     justify-content: center;
     width: 1.75rem;
     height: 1.75rem;
-    border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
     border-radius: 0.4rem;
     background: transparent;
     color: var(--muted-strong);
@@ -1279,7 +1279,7 @@
   .session-copy-button:focus-visible {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   :global(.session-copy-dialog-panel) {
@@ -1291,7 +1291,7 @@
     ) !important;
     box-shadow:
       0 30px 80px -50px var(--paper-shadow),
-      0 0 0 1px color-mix(in srgb, var(--line) 72%, transparent) !important;
+      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
   }
 
   .session-copy-dialog-close-button,
@@ -1302,7 +1302,7 @@
     justify-content: center;
     gap: 0.4rem;
     min-height: 2.25rem;
-    border: 1px solid color-mix(in srgb, var(--line) 86%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
     border-radius: 0.65rem;
     background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
     color: var(--muted-strong);
@@ -1328,15 +1328,15 @@
   .session-copy-secondary-button:focus-visible {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .session-copy-source-card,
   .session-copy-target-card,
   .session-copy-empty-state {
-    border-color: color-mix(in srgb, var(--line) 82%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 68%, transparent);
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--paper) 34%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--color-snow) 34%, transparent);
   }
 
   .session-copy-target-card {
@@ -1369,7 +1369,7 @@
   .session-copy-meta-item dd {
     min-width: 0;
     overflow: hidden;
-    color: var(--ink);
+    color: var(--color-carbon);
     font-weight: 600;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1400,10 +1400,10 @@
     justify-content: center;
     gap: 0.4rem;
     min-height: 2.45rem;
-    border: 1px solid color-mix(in srgb, var(--ink) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-carbon) 82%, transparent);
     border-radius: 0.65rem;
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--color-carbon);
+    color: var(--color-snow);
     font: inherit;
     font-size: 0.875rem;
     font-weight: 700;
@@ -1416,8 +1416,8 @@
 
   .session-copy-confirm-button:hover,
   .session-copy-confirm-button:focus-visible {
-    border-color: var(--ink);
-    background: color-mix(in srgb, var(--ink) 88%, var(--surface-soft));
+    border-color: var(--color-carbon);
+    background: color-mix(in srgb, var(--color-carbon) 88%, var(--surface-soft));
   }
 
   .session-copy-confirm-button:disabled {
@@ -1450,7 +1450,7 @@
   .provider-toggle,
   .project-toggle {
     background: color-mix(in srgb, var(--panel-strong) 64%, transparent);
-    color: var(--ink);
+    color: var(--color-carbon);
     transition:
       background-color 140ms ease,
       border-color 140ms ease;
@@ -1468,19 +1468,19 @@
 
   .provider-children,
   .project-children {
-    border-left: 1px solid color-mix(in srgb, var(--line) 84%, transparent);
+    border-left: 1px solid color-mix(in srgb, var(--color-arctic-mist) 84%, transparent);
   }
 
   .session-message-user {
     justify-self: end;
     max-width: min(88%, 64rem);
-    border-color: color-mix(in srgb, var(--ink) 10%, transparent);
-    background: color-mix(in srgb, var(--ink) 7%, var(--panel-strong));
+    border-color: color-mix(in srgb, var(--color-carbon) 10%, transparent);
+    background: color-mix(in srgb, var(--color-carbon) 7%, var(--panel-strong));
   }
 
   .session-message-assistant {
     justify-self: start;
-    border-color: color-mix(in srgb, var(--success) 24%, var(--line));
+    border-color: color-mix(in srgb, var(--success) 24%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft));
   }
 
@@ -1498,8 +1498,8 @@
   }
 
   .session-message-user .message-role-badge {
-    border-color: color-mix(in srgb, var(--ink) 10%, transparent);
-    background: color-mix(in srgb, var(--ink) 5%, transparent);
+    border-color: color-mix(in srgb, var(--color-carbon) 10%, transparent);
+    background: color-mix(in srgb, var(--color-carbon) 5%, transparent);
     color: var(--ink-soft);
   }
 
@@ -1509,17 +1509,17 @@
     gap: 0.35rem;
     width: fit-content;
     border-radius: 999px;
-    border: 1px solid color-mix(in srgb, var(--line) 78%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 78%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 58%, transparent);
     padding: 0.15rem 0.45rem;
-    color: var(--ink);
+    color: var(--color-carbon);
     font-size: 0.6875rem;
     font-weight: 600;
     line-height: 1;
   }
 
   .message-role-badge.is-auxiliary {
-    border-color: color-mix(in srgb, var(--line) 58%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 34%, transparent);
     color: var(--muted-strong);
     font-weight: 500;
@@ -1558,7 +1558,7 @@
     max-height: 28rem;
     margin: 0.5rem 0;
     border-radius: 0.5rem;
-    border: 1px solid color-mix(in srgb, var(--line) 82%, transparent);
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     object-fit: contain;
     background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
   }
@@ -1593,7 +1593,7 @@
   .message-expand-button:hover,
   .message-expand-button:focus-visible {
     background: color-mix(in srgb, var(--surface-hover) 76%, transparent);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .message-expand-button span {
@@ -1610,20 +1610,20 @@
 
   :global(html[data-theme='dark']) .session-card,
   :global(html[data-theme='dark']) .session-message {
-    background: color-mix(in srgb, var(--surface-soft) 72%, var(--panel) 28%);
+    background: color-mix(in srgb, var(--surface-soft) 72%, var(--color-fog) 28%);
   }
 
   :global(html[data-theme='dark']) .session-message-user {
-    border-color: color-mix(in srgb, var(--ink) 9%, transparent);
-    background: color-mix(in srgb, var(--ink) 9%, var(--surface-soft) 38%);
+    border-color: color-mix(in srgb, var(--color-carbon) 9%, transparent);
+    background: color-mix(in srgb, var(--color-carbon) 9%, var(--surface-soft) 38%);
   }
 
   :global(html[data-theme='dark']) .session-message-assistant {
-    background: color-mix(in srgb, var(--surface-soft) 72%, var(--panel) 28%);
+    background: color-mix(in srgb, var(--surface-soft) 72%, var(--color-fog) 28%);
   }
 
   :global(html[data-theme='dark']) .session-message-auxiliary {
-    background: color-mix(in srgb, var(--surface-soft) 36%, var(--panel) 64%);
+    background: color-mix(in srgb, var(--surface-soft) 36%, var(--color-fog) 64%);
   }
 
   :global(html[data-theme='dark']) .provider-toggle,

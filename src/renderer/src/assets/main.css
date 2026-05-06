@@ -6,8 +6,8 @@ body {
 }
 
 ::selection {
-  background: color-mix(in srgb, var(--accent) 16%, transparent);
-  color: var(--ink);
+  background: color-mix(in srgb, var(--color-carbon) 16%, transparent);
+  color: var(--color-carbon);
 }
 
 code {
@@ -31,7 +31,7 @@ code {
 }
 
 :focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--ink) 22%);
+  outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--color-carbon) 22%);
   outline-offset: 2px;
 }
 
@@ -289,15 +289,15 @@ code {
 }
 
 a {
-  color: var(--accent-deep);
+  color: var(--color-carbon);
   text-decoration: none;
 }
 
 button {
   border: 0;
-  border-radius: 999px;
-  background: var(--accent);
-  color: var(--paper);
+  border-radius: var(--radius-buttons);
+  background: var(--color-carbon);
+  color: var(--color-snow);
   font: inherit;
   font-weight: 700;
   cursor: pointer;
@@ -321,8 +321,8 @@ button.secondary {
 
 button.ghost {
   background: transparent;
-  color: var(--ink);
-  border: 1px solid var(--line);
+  color: var(--color-carbon);
+  border: 1px solid var(--color-arctic-mist);
   box-shadow: none;
 }
 
@@ -332,7 +332,7 @@ button.compact {
 }
 
 .shell {
-  padding: 40px 32px 32px;
+  padding: var(--spacing-64) var(--spacing-20); max-width: var(--page-max-width); margin: 0 auto;
   display: grid;
   gap: 24px;
 }
@@ -340,22 +340,22 @@ button.compact {
 .hero,
 .panel,
 .error-banner {
-  background: var(--panel);
-  border: 1px solid var(--line);
+  background: var(--color-fog);
+  border: 1px solid var(--color-arctic-mist);
   box-shadow:
     0 12px 30px -24px var(--paper-shadow),
     0 1px 2px color-mix(in srgb, var(--paper-shadow) 24%, transparent);
 }
 
 .hero {
-  border-radius: 28px;
+  border-radius: var(--radius-input);
   padding: 32px;
 }
 
 .eyebrow {
   text-transform: uppercase;
   letter-spacing: 0.16em;
-  color: var(--accent-deep);
+  color: var(--color-carbon);
   font-size: 0.74rem;
   font-weight: 800;
 }
@@ -371,7 +371,7 @@ button.compact {
 .lede {
   margin-top: 14px;
   max-width: 760px;
-  color: var(--ink-soft);
+  color: var(--color-pewter);
   font-size: 1.02rem;
 }
 
@@ -395,12 +395,12 @@ button.compact {
 }
 
 .panel {
-  border-radius: 24px;
+  border-radius: var(--radius-lg);
   padding: 24px;
 }
 
 .spotlight {
-  background: var(--panel-strong);
+  background: var(--color-snow);
 }
 
 .panel-header {
@@ -421,10 +421,10 @@ button.compact {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
-  border-radius: 999px;
+  border-radius: var(--radius-buttons);
   padding: 0.32rem 0.75rem;
   background: rgba(16, 32, 51, 0.08);
-  color: var(--ink-soft);
+  color: var(--color-pewter);
   font-size: 0.82rem;
   font-weight: 700;
 }
@@ -449,14 +449,14 @@ button.compact {
   font-size: 0.78rem;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--ink-faint);
+  color: var(--color-stone);
   font-weight: 800;
 }
 
 .meta-grid dd {
   margin-top: 0.3rem;
   font-size: 0.98rem;
-  color: var(--ink);
+  color: var(--color-carbon);
   word-break: break-word;
 }
 
@@ -466,7 +466,7 @@ button.compact {
 
 .empty-note,
 .subtle {
-  color: var(--ink-soft);
+  color: var(--color-pewter);
 }
 
 .login-state {
@@ -504,7 +504,7 @@ button.compact {
 }
 
 .error-banner {
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
   padding: 16px 18px;
   color: var(--danger);
   background: rgba(173, 61, 55, 0.08);
@@ -523,9 +523,9 @@ button.compact {
 
 .account-card {
   padding: 20px;
-  border-radius: 22px;
-  background: var(--panel-strong);
-  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--color-snow);
+  border: 1px solid var(--color-arctic-mist);
   display: grid;
   gap: 18px;
 }
@@ -549,7 +549,7 @@ button.compact {
 
 .card-subtitle {
   margin-top: 0.2rem;
-  color: var(--ink-faint);
+  color: var(--color-stone);
   font-size: 0.88rem;
   word-break: break-all;
 }

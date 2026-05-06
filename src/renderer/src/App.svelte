@@ -176,22 +176,22 @@
   const bodyClasses = [
     'm-0',
     'min-h-screen',
-    isTrayView ? 'bg-transparent' : 'bg-paper',
-    'text-ink',
+    isTrayView ? 'bg-transparent' : 'bg-snow',
+    'text-carbon',
     'font-ui',
     'antialiased'
   ]
 
   const heroClass = 'theme-surface rounded-[1.1rem] border border-black/8 bg-white p-5 sm:p-6'
-  const panelClass = 'theme-workspace bg-paper p-0'
+  const panelClass = 'theme-workspace bg-snow p-0'
   const primaryActionButton =
     'theme-primary-button inline-flex items-center justify-center gap-2 rounded-[0.4rem] bg-black px-4 py-3 text-sm font-semibold text-white transition-[background-color,opacity] duration-160 hover:bg-black/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const compactGhostButton =
-    'theme-ghost-button inline-flex items-center justify-center rounded-[0.35rem] border border-black/8 bg-white px-3 py-2 text-sm font-medium text-ink transition-[background-color,border-color,opacity] duration-160 hover:border-black/12 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
+    'theme-ghost-button inline-flex items-center justify-center rounded-[0.35rem] border border-black/8 bg-white px-3 py-2 text-sm font-medium text-carbon transition-[background-color,border-color,opacity] duration-160 hover:border-black/12 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const iconToolbarButton =
-    'theme-icon-button inline-flex h-8 w-8 appearance-none items-center justify-center border border-transparent rounded-[0.38rem] bg-transparent p-0 text-ink outline-none shadow-none transition-[background-color,border-color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
+    'theme-icon-button inline-flex h-8 w-8 appearance-none items-center justify-center border border-transparent rounded-[0.38rem] bg-transparent p-0 text-carbon outline-none shadow-none transition-[background-color,border-color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
   const iconRowButton =
-    'theme-row-button inline-flex h-7 w-7 appearance-none items-center justify-center border border-transparent rounded-[0.35rem] bg-transparent p-0 text-black/58 outline-none shadow-none transition-[background-color,border-color,color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-40'
+    'theme-row-button inline-flex h-7 w-7 appearance-none items-center justify-center border border-transparent rounded-[0.35rem] bg-transparent p-0 text-black/58 outline-none shadow-none transition-[background-color,border-color,color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] hover:text-carbon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-40'
 
   const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
   const exportFormatOptionOrder = [...accountTransferFormats]
@@ -1680,7 +1680,7 @@
         <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
           {exportDialogScopeLabel()}
         </p>
-        <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-ink">
+        <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
           {copyForLanguage().exportFormatDialogTitle}
         </h2>
         <p class="text-sm leading-6 text-muted-strong">
@@ -1706,7 +1706,7 @@
                 }}
               />
               <div class="grid gap-1">
-                <span class="text-sm font-medium text-ink">{exportFormatLabel(format)}</span>
+                <span class="text-sm font-medium text-carbon">{exportFormatLabel(format)}</span>
                 <span class="text-xs leading-5 text-muted-strong">
                   {exportFormatDescription(format)}
                 </span>
@@ -1821,7 +1821,7 @@
   .app-shell {
     position: relative;
     isolation: isolate;
-    background: var(--paper);
+    background: var(--color-snow);
   }
 
   .mac-inactive-traffic-lights {
@@ -1851,12 +1851,12 @@
   }
 
   :global(.theme-workspace) {
-    background: var(--paper) !important;
+    background: var(--color-snow) !important;
     box-shadow: none;
   }
 
   :global(html[data-theme='dark']) .app-shell {
-    background: var(--paper);
+    background: var(--color-snow);
   }
 
   :global(.theme-surface) {
@@ -1869,7 +1869,7 @@
   :global(.wake-dialog-panel) {
     border-radius: 0.6rem !important;
     border-color: color-mix(in srgb, var(--line-strong) 82%, transparent) !important;
-    background: var(--panel) !important;
+    background: var(--color-fog) !important;
     box-shadow: var(--elevation-2) !important;
   }
 
@@ -1879,7 +1879,7 @@
 
   :global(.theme-toolbar),
   :global(.theme-soft-panel) {
-    border-color: color-mix(in srgb, var(--line) 82%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
     background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)) !important;
     box-shadow: none;
   }
@@ -1888,7 +1888,7 @@
     position: relative;
     z-index: 1;
     border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 74%, transparent);
-    background: color-mix(in srgb, var(--panel) 78%, var(--paper));
+    background: color-mix(in srgb, var(--color-fog) 78%, var(--color-snow));
     box-shadow:
       0 1px 0 var(--edge-light) inset,
       0 1px 0 color-mix(in srgb, var(--edge-dark) 22%, transparent);
@@ -1924,7 +1924,7 @@
     right: 0.75rem;
     left: 3.25rem;
     height: 1px;
-    background: color-mix(in srgb, var(--line) 62%, transparent);
+    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
     pointer-events: none;
   }
 
@@ -1951,8 +1951,8 @@
   }
 
   :global(.theme-filter-chip-active) {
-    background: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
     box-shadow: none;
   }
 
@@ -1977,7 +1977,7 @@
   :global(.theme-tag-manager-card) {
     border-width: 0 0 1px !important;
     border-radius: 0 !important;
-    border-color: color-mix(in srgb, var(--line) 88%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 88%, transparent) !important;
     background: transparent !important;
     box-shadow: none;
   }
@@ -1985,7 +1985,7 @@
   :global(.theme-tag-empty),
   :global(.theme-tag-picker-surface) {
     border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--paper)) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-snow)) !important;
     box-shadow: none;
   }
 
@@ -2025,7 +2025,7 @@
   }
 
   :global(.border-soft) {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   :global(html[data-theme='dark'] .theme-surface) {
@@ -2036,7 +2036,7 @@
 
   :global(html[data-theme='dark'] .theme-tray-panel) {
     border-color: var(--line-strong) !important;
-    background: var(--panel) !important;
+    background: var(--color-fog) !important;
     box-shadow: var(--elevation-2) !important;
   }
 
@@ -2050,7 +2050,7 @@
   }
 
   :global(html[data-theme='dark'] .theme-soft-panel) {
-    border-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
   }
 
   :global(html[data-theme='dark'] [class*='bg-white']) {
@@ -2062,14 +2062,14 @@
   }
 
   :global(html[data-theme='dark'] .theme-primary-button) {
-    background: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
   }
 
   :global(html[data-theme='dark'] .theme-ghost-button) {
-    border-color: var(--line) !important;
-    background: var(--panel) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    background: var(--color-fog) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-ghost-button:disabled) {
@@ -2109,7 +2109,7 @@
   :global(html[data-theme='dark'] .theme-row-button),
   :global(html[data-theme='dark'] .theme-menu-choice),
   :global(html[data-theme='dark'] .theme-select) {
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-ghost-button:hover),
@@ -2129,20 +2129,20 @@
   }
 
   :global(html[data-theme='dark'] .theme-select) {
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     background: var(--panel-strong) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-card) {
     border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--panel) 8%) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-fog) 8%) !important;
     box-shadow: var(--elevation-1) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-input),
   :global(html[data-theme='dark'] .theme-provider-toggle) {
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-input) {
@@ -2154,7 +2154,7 @@
   }
 
   :global(html[data-theme='dark'] .theme-provider-toggle) {
-    background: color-mix(in srgb, var(--surface-soft) 88%, var(--panel) 12%) !important;
+    background: color-mix(in srgb, var(--surface-soft) 88%, var(--color-fog) 12%) !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-status) {
@@ -2175,23 +2175,23 @@
   }
 
   :global(html[data-theme='dark'] .theme-provider-meta) {
-    border-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
-    background: color-mix(in srgb, var(--surface-soft) 82%, var(--panel) 18%) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--surface-soft) 82%, var(--color-fog) 18%) !important;
     color: var(--ink-soft) !important;
   }
 
   :global(html[data-theme='dark'] .theme-select option) {
-    color: var(--ink);
+    color: var(--color-carbon);
     background: var(--panel-strong);
   }
 
   :global(html[data-theme='dark'] .theme-inline-code) {
     background: var(--panel-strong) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-code-surface) {
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     background: var(--code-bg) !important;
     color: var(--code-ink) !important;
   }
@@ -2202,7 +2202,7 @@
   }
 
   :global(html[data-theme='dark'] .theme-account-card) {
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     background: var(--panel-strong) !important;
   }
 
@@ -2213,12 +2213,12 @@
 
   :global(html[data-theme='dark'] .theme-export-format-option) {
     border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--panel) 8%) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-fog) 8%) !important;
   }
 
   :global(html[data-theme='dark'] .theme-progress-track) {
     background: var(--progress-track) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 70%, transparent) !important;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 70%, transparent) !important;
   }
 
   :global(html[data-theme='dark'] .theme-progress-fill) {
@@ -2227,8 +2227,8 @@
   }
 
   :global(html[data-theme='dark'] .theme-active-pill) {
-    background: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
   }
 
   :global(html[data-theme='dark'] .theme-status-active) {

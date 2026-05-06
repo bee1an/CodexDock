@@ -545,7 +545,7 @@
       >
         {#if selectedVisibleCount}
           <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-ink"
+            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
           >
             <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
             <span class="truncate">{copy.selectedAccountCount(selectedVisibleCount)}</span>
@@ -554,7 +554,7 @@
 
         {#if activeTagFilter !== 'all'}
           <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-ink"
+            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
           >
             <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
             <span class="max-w-[12rem] truncate">{tagFilterLabel(activeTagFilter, tags, copy)}</span
@@ -640,7 +640,7 @@
           <div class="flex min-w-0 flex-wrap items-center gap-1.5">
             {#if selectedVisibleCount}
               <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-ink"
+                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-carbon"
               >
                 <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
                 <span>{copy.selectedAccountCount(selectedVisibleCount)}</span>
@@ -649,7 +649,7 @@
 
             {#if activeTagFilter !== 'all'}
               <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-ink"
+                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-carbon"
               >
                 <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
                 <span>{tagFilterLabel(activeTagFilter, tags, copy)}</span>
@@ -682,7 +682,7 @@
               </button>
 
               <button
-                class="theme-selection-export inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-none text-ink transition-colors duration-140 hover:bg-black/[0.04]"
+                class="theme-selection-export inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-none text-carbon transition-colors duration-140 hover:bg-black/[0.04]"
                 type="button"
                 onclick={() => void exportCurrentSelection()}
                 disabled={loginActionBusy}
@@ -792,7 +792,7 @@
               <span
                 class={`h-2 w-2 flex-none rounded-full ${activeAccountId === accountId ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
               ></span>
-              <p class="min-w-0 truncate text-sm font-medium leading-5 text-ink">
+              <p class="min-w-0 truncate text-sm font-medium leading-5 text-carbon">
                 {accountEmail(account, copy)}
               </p>
             </div>
@@ -892,7 +892,7 @@
                         {copy.accountUsageRefreshFailed}
                       </span>
                       <button
-                        class="inline-flex h-6 w-6 flex-none appearance-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-[var(--ink-faint)] shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] hover:text-ink"
+                        class="inline-flex h-6 w-6 flex-none appearance-none items-center justify-center rounded-full border-0 bg-transparent p-0 text-[var(--ink-faint)] shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] hover:text-carbon"
                         type="button"
                         onclick={closeUsageErrorPopover}
                         aria-label="关闭"
@@ -902,7 +902,7 @@
                       </button>
                     </div>
                     <div
-                      class="max-h-52 overflow-auto rounded-[0.85rem] bg-black/[0.035] p-2.5 text-[12px] leading-5 text-ink"
+                      class="max-h-52 overflow-auto rounded-[0.85rem] bg-black/[0.035] p-2.5 text-[12px] leading-5 text-carbon"
                     >
                       <pre
                         class="m-0 whitespace-pre-wrap break-words font-sans">{usageBadge.detail}</pre>
@@ -1115,7 +1115,7 @@
 
                   {#if showWakeAccount(accountId)}
                     <button
-                      class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                      class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                       type="button"
                       onclick={() => {
                         openWakeDialog(actionAccount)
@@ -1124,7 +1124,7 @@
                       disabled={wakeDialogDisabled(actionAccount)}
                     >
                       <span
-                        class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--paper)] group-hover:text-ink"
+                        class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                       >
                         {#if wakingAccountId === accountId}
                           <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
@@ -1137,7 +1137,7 @@
                   {/if}
 
                   <button
-                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                     type="button"
                     onclick={() => {
                       openAccountInIsolatedCodex(accountId)
@@ -1146,7 +1146,7 @@
                     disabled={accountLaunchDisabled(actionAccount)}
                   >
                     <span
-                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--paper)] group-hover:text-ink"
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                     >
                       {#if openingIsolatedAccountId === accountId}
                         <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
@@ -1158,13 +1158,13 @@
                   </button>
 
                   <button
-                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                     type="button"
                     onclick={() => void exportSingleAccount(actionAccount)}
                     disabled={loginActionBusy}
                   >
                     <span
-                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--paper)] group-hover:text-ink"
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                     >
                       <span class="i-lucide-download h-4 w-4"></span>
                     </span>
@@ -1181,7 +1181,7 @@
                     disabled={loginActionBusy}
                   >
                     <span
-                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-danger transition-colors duration-140 group-hover:bg-[var(--paper)]"
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-danger transition-colors duration-140 group-hover:bg-[var(--color-snow)]"
                     >
                       <span class="i-lucide-trash-2 h-4 w-4"></span>
                     </span>
@@ -1189,14 +1189,14 @@
                   </button>
 
                   {#if assignableTags.length}
-                    <div class="mx-2 my-1.5 border-t border-[var(--line)]"></div>
+                    <div class="mx-2 my-1.5 border-t border-[var(--color-arctic-mist)]"></div>
                     <button
-                      class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+                      class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
                       type="button"
                       onclick={() => openAccountTagMenuFromActionMenu(accountId)}
                     >
                       <span
-                        class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--paper)] group-hover:text-ink"
+                        class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                       >
                         <span class="i-lucide-tags h-4 w-4"></span>
                       </span>
@@ -1224,7 +1224,7 @@
                   style="background-color: var(--panel-strong); box-shadow: var(--elevation-2), 0 0 0 1px var(--line-strong);"
                 >
                   <button
-                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-faint)] shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] hover:text-ink active:scale-[0.98]"
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--ink-faint)] shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] hover:text-carbon active:scale-[0.98]"
                     type="button"
                     onclick={returnToAccountActionMenu}
                   >
@@ -1232,18 +1232,18 @@
                     ></span>
                     {copy.addTag}
                   </button>
-                  <div class="mx-2 my-1 border-t border-[var(--line)]"></div>
+                  <div class="mx-2 my-1 border-t border-[var(--color-arctic-mist)]"></div>
                   <div class="mt-1 max-h-[300px] overflow-y-auto pr-1">
                     {#each assignableTags as tag (tag.id)}
                       <button
-                        class="theme-tag-picker-item group flex w-full appearance-none items-center justify-between gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-ink shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                        class="theme-tag-picker-item group flex w-full appearance-none items-center justify-between gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                         type="button"
                         onclick={() => void addTagToAccount(actionAccount, tag.id)}
                         disabled={loginActionBusy || tagMutationBusy}
                       >
                         <span class="flex-1 truncate">{tag.name}</span>
                         <span
-                          class="theme-tag-picker-plus inline-flex h-6 w-6 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--paper)] group-hover:text-ink"
+                          class="theme-tag-picker-plus inline-flex h-6 w-6 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                         >
                           <span class="i-lucide-plus h-3.5 w-3.5"></span>
                         </span>
@@ -1293,7 +1293,7 @@
   .theme-workbench-toggle:hover .theme-workbench-chevron,
   .theme-workbench-toggle:focus-visible .theme-workbench-chevron {
     background: rgba(24, 24, 27, 0.06);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .theme-selection-group-button:disabled,
@@ -1310,7 +1310,7 @@
 
   .theme-selection-group-button {
     background: transparent;
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .theme-selection-group-button:hover:not(:disabled) {
@@ -1337,14 +1337,14 @@
   }
 
   :global(html[data-theme='dark']) .theme-account-divider {
-    background: var(--line) !important;
+    background: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-picker-surface,
   :global(html[data-theme='dark']) .theme-tag-empty {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-assigned {
@@ -1368,29 +1368,29 @@
   }
 
   :global(html[data-theme='dark']) .theme-tag-picker-item {
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-picker-item:hover,
   :global(html[data-theme='dark']) .theme-tag-picker-item:focus-visible {
     background: color-mix(in srgb, var(--surface-hover) 88%, transparent) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-picker-item:hover .theme-tag-picker-plus,
   :global(html[data-theme='dark']) .theme-tag-picker-item:focus-visible .theme-tag-picker-plus {
-    background: color-mix(in srgb, var(--ink) 10%, var(--surface-soft)) !important;
-    color: var(--ink) !important;
+    background: color-mix(in srgb, var(--color-carbon) 10%, var(--surface-soft)) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-filter-chip-active {
-    background: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
   }
 
   :global(html[data-theme='dark']) .theme-workbench-toolbar {
-    background: color-mix(in srgb, var(--surface-soft) 90%, var(--panel) 10%) !important;
-    border-color: var(--line) !important;
+    background: color-mix(in srgb, var(--surface-soft) 90%, var(--color-fog) 10%) !important;
+    border-color: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .theme-workbench-toggle,
@@ -1398,8 +1398,8 @@
   :global(html[data-theme='dark']) .theme-workbench-chevron,
   :global(html[data-theme='dark']) .theme-workbench-empty {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-workbench-toggle:hover {
@@ -1409,43 +1409,43 @@
   :global(html[data-theme='dark']) .theme-workbench-toggle:hover .theme-workbench-chevron,
   :global(html[data-theme='dark']) .theme-workbench-toggle:focus-visible .theme-workbench-chevron {
     background: var(--surface-hover) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-filter-chip-idle {
     background: var(--surface-soft) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     color: var(--ink-soft) !important;
   }
 
   :global(html[data-theme='dark']) .theme-filter-chip-idle:hover {
     background: var(--surface-hover) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-toolbar-idle {
-    color: var(--ink) !important;
-    border-top-color: color-mix(in srgb, var(--line) 72%, transparent) !important;
+    color: var(--color-carbon) !important;
+    border-top-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-toolbar-active {
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
     border-top-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-group,
   :global(html[data-theme='dark']) .theme-selection-export {
     background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
-    border-color: color-mix(in srgb, var(--line) 78%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-divider {
-    background: color-mix(in srgb, var(--line) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-group-button,
   :global(html[data-theme='dark']) .theme-selection-export {
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-selection-group-button:hover:not(:disabled) {
@@ -1465,7 +1465,7 @@
   :global(html[data-theme='dark']) .theme-selection-export[disabled] {
     background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
     color: var(--ink-faint) !important;
-    border-color: color-mix(in srgb, var(--line) 78%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, transparent) !important;
   }
 
   .theme-reset-time-neutral {
@@ -1486,17 +1486,17 @@
 
   :global(html[data-theme='dark']) .theme-account-card-selected {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .theme-account-selector {
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     background: var(--panel-strong) !important;
     color: var(--ink-soft) !important;
   }
 
   :global(html[data-theme='dark']) .theme-account-selector-input {
-    accent-color: var(--ink);
+    accent-color: var(--color-carbon);
   }
 
   :global(html[data-theme='dark']) .theme-reset-time-neutral {

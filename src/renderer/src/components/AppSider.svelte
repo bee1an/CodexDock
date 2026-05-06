@@ -346,7 +346,7 @@
           options={compactLanguageOptions}
           value={language}
           ariaLabel={copy.switchLanguage}
-          buttonClass="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-black/8 bg-transparent px-0 py-0 text-[11px] font-semibold text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          buttonClass="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-black/8 bg-transparent px-0 py-0 text-[11px] font-semibold text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           menuClass="theme-tag-picker-surface z-[999] rounded-[1rem] p-1.5"
           optionClass="theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
@@ -404,13 +404,13 @@
   .theme-app-sider-rail {
     filter: none;
     border-radius: 0.5rem;
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--paper)) !important;
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--color-snow)) !important;
   }
 
   .theme-app-sider-rail,
   .theme-app-sider-collapsed {
     grid-area: 1 / 1;
-    color: var(--ink);
+    color: var(--color-carbon);
     box-shadow: var(--elevation-2);
   }
 
@@ -463,7 +463,7 @@
   }
 
   .theme-sider-divider {
-    background: var(--line);
+    background: var(--color-arctic-mist);
   }
 
   .theme-sider-tool-button:active:not(:disabled),
@@ -474,7 +474,7 @@
   .theme-sider-tool-button:hover:not(:disabled),
   .theme-sider-language-select:hover,
   .theme-sider-utility-button:hover:not(:disabled) {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: var(--surface-hover);
   }
 
@@ -485,15 +485,15 @@
 
   :global(html[data-theme='dark']) .theme-app-sider-rail {
     filter: none;
-    border-color: var(--line) !important;
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--paper)) !important;
+    border-color: var(--color-arctic-mist) !important;
+    background: color-mix(in srgb, var(--panel-strong) 86%, var(--color-snow)) !important;
     box-shadow: var(--elevation-2) !important;
   }
 
   :global(html[data-theme='dark']) .theme-app-sider-collapsed {
-    border-color: var(--line) !important;
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--paper)) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    background: color-mix(in srgb, var(--panel-strong) 86%, var(--color-snow)) !important;
+    color: var(--color-carbon) !important;
     box-shadow: var(--elevation-2) !important;
   }
 
@@ -510,8 +510,8 @@
   :global(html[data-theme='dark']) .theme-sider-language-select,
   :global(html[data-theme='dark']) .theme-sider-utility-button {
     background: transparent !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-sider-tool-button:hover:not(:disabled),

@@ -842,7 +842,7 @@
         <p class="text-[11px] font-bold uppercase tracking-[0.26em] text-faint opacity-80">
           {copy.tokenStats}
         </p>
-        <h2 class="text-[1.4rem] font-semibold tracking-[-0.03em] text-ink sm:text-[1.65rem]">
+        <h2 class="text-[1.4rem] font-semibold tracking-[-0.03em] text-carbon sm:text-[1.65rem]">
           {copy.tokenStatsTitle}
         </h2>
         <p class="max-w-2xl text-sm text-muted-strong">
@@ -871,13 +871,13 @@
             use:reveal={{ y: -4, duration: 0.12 }}
           >
             <div class="mb-3 grid gap-1">
-              <p class="text-sm font-semibold tracking-tight text-ink">{copy.displayConfig}</p>
+              <p class="text-sm font-semibold tracking-tight text-carbon">{copy.displayConfig}</p>
               <p class="text-xs leading-5 text-muted-strong">{copy.displayConfigDescription}</p>
             </div>
             <div class="grid gap-2">
               {#each [{ key: 'dailyTrend', label: copy.dailyTrend }, { key: 'modelBreakdown', label: copy.modelBreakdown }, { key: 'instanceUsage', label: copy.instanceUsage }] as option (option.key)}
                 <label
-                  class="stats-toggle-row flex items-center justify-between gap-3 rounded-[0.35rem] px-3 py-2 text-sm text-ink"
+                  class="stats-toggle-row flex items-center justify-between gap-3 rounded-[0.35rem] px-3 py-2 text-sm text-carbon"
                 >
                   <span class="font-medium">{option.label}</span>
                   <Checkbox
@@ -919,7 +919,7 @@
             </div>
             <div class="flex items-end gap-2">
               <span
-                class="text-[1.8rem] font-semibold tabular-nums tracking-[-0.04em] text-ink sm:text-[2.25rem]"
+                class="text-[1.8rem] font-semibold tabular-nums tracking-[-0.04em] text-carbon sm:text-[2.25rem]"
               >
                 {formatTokens(selectedSummary?.sessionTokens ?? 0)}
               </span>
@@ -946,7 +946,7 @@
             </div>
             <div class="flex items-end gap-2">
               <span
-                class="text-[1.8rem] font-semibold tabular-nums tracking-[-0.04em] text-ink sm:text-[2.25rem]"
+                class="text-[1.8rem] font-semibold tabular-nums tracking-[-0.04em] text-carbon sm:text-[2.25rem]"
               >
                 {formatTokens(selectedSummary?.last30DaysTokens ?? 0)}
               </span>
@@ -971,29 +971,29 @@
           <p class="text-[11px] font-bold uppercase tracking-[0.2em] text-faint">
             {copy.updatedAt}
           </p>
-          <p class="text-sm font-medium tabular-nums text-ink">
+          <p class="text-sm font-medium tabular-nums text-carbon">
             {formatUpdatedAt(selectedSummary?.updatedAt)}
           </p>
         </div>
 
-        <div class="grid grid-cols-2 gap-3 border-t border-line/70 pt-3">
+        <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
               {copy.dailyTrend}
             </p>
-            <p class="text-sm font-medium text-ink">{chartDaily.length}</p>
+            <p class="text-sm font-medium text-carbon">{chartDaily.length}</p>
           </div>
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
               {copy.modelBreakdown}
             </p>
-            <p class="text-sm font-medium text-ink">{modelBreakdowns.length}</p>
+            <p class="text-sm font-medium text-carbon">{modelBreakdowns.length}</p>
           </div>
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
               {copy.instanceUsage}
             </p>
-            <p class="text-sm font-medium text-ink">{instanceUsageRows.length}</p>
+            <p class="text-sm font-medium text-carbon">{instanceUsageRows.length}</p>
           </div>
         </div>
 
@@ -1005,14 +1005,14 @@
           </div>
         {:else if loadingDetail && !detail}
           <div
-            class="flex items-center gap-2 rounded-[0.45rem] border border-line bg-panel-strong/50 px-3 py-3 text-sm text-muted-strong"
+            class="flex items-center gap-2 rounded-[0.45rem] border border-arcticMist bg-snow/50 px-3 py-3 text-sm text-muted-strong"
           >
             <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
             <span>{copy.refreshing}</span>
           </div>
         {:else if !summaryHasData(selectedSummary)}
           <div
-            class="rounded-[0.45rem] border border-dashed border-line bg-panel-strong/35 px-3 py-3 text-sm text-muted-strong"
+            class="rounded-[0.45rem] border border-dashed border-arcticMist bg-snow/35 px-3 py-3 text-sm text-muted-strong"
           >
             {copy.tokenStatsNoData}
           </div>
@@ -1044,9 +1044,9 @@
         class="stats-surface flex flex-col rounded-[0.45rem] border px-4 py-4 sm:px-5"
         use:reveal={{ delay: 0.04 }}
       >
-        <div class="flex items-center justify-between gap-3 border-b border-line/70 pb-3">
+        <div class="flex items-center justify-between gap-3 border-b border-arcticMist/70 pb-3">
           <div>
-            <h4 class="text-sm font-semibold tracking-tight text-ink">{copy.modelBreakdown}</h4>
+            <h4 class="text-sm font-semibold tracking-tight text-carbon">{copy.modelBreakdown}</h4>
             <p class="mt-1 text-xs text-muted-strong">{copy.last30Days}</p>
           </div>
           <span class="i-lucide-pie-chart h-4 w-4 text-muted-strong opacity-60"></span>
@@ -1072,9 +1072,9 @@
         class="stats-surface flex flex-col rounded-[0.45rem] border px-4 py-4 sm:px-5"
         use:reveal={{ delay: 0.08 }}
       >
-        <div class="flex items-center justify-between gap-3 border-b border-line/70 pb-3">
+        <div class="flex items-center justify-between gap-3 border-b border-arcticMist/70 pb-3">
           <div>
-            <h4 class="text-sm font-semibold tracking-tight text-ink">{copy.instanceUsage}</h4>
+            <h4 class="text-sm font-semibold tracking-tight text-carbon">{copy.instanceUsage}</h4>
             <p class="mt-1 text-xs text-muted-strong">{copy.instanceUsageDescription}</p>
           </div>
           <span class="i-lucide-monitor-smartphone h-4 w-4 text-muted-strong opacity-60"></span>
@@ -1101,9 +1101,11 @@
       class="stats-surface flex flex-col rounded-[0.45rem] border px-4 py-4 sm:px-5"
       use:reveal={{ delay: 0.12 }}
     >
-      <div class="flex flex-wrap items-center justify-between gap-3 border-b border-line/70 pb-3">
+      <div
+        class="flex flex-wrap items-center justify-between gap-3 border-b border-arcticMist/70 pb-3"
+      >
         <div>
-          <h4 class="text-sm font-semibold tracking-tight text-ink">{copy.dailyTrend}</h4>
+          <h4 class="text-sm font-semibold tracking-tight text-carbon">{copy.dailyTrend}</h4>
           <p class="mt-1 text-xs text-muted-strong">
             {formatTokens(selectedSummary?.last30DaysTokens ?? 0)}
             {copy.tokens}
@@ -1139,19 +1141,19 @@
 
   .stats-surface {
     background: transparent;
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     box-shadow: none;
   }
 
   .stats-info-rail {
     background: var(--surface-soft);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     box-shadow: none;
   }
 
   .stats-refresh-button,
   .stats-config-button {
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     background: var(--panel-strong) !important;
   }
 
@@ -1162,7 +1164,7 @@
 
   .stats-metric-block {
     background: var(--surface-soft);
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-arctic-mist);
     box-shadow: none;
     transition:
       background-color 140ms ease,
@@ -1176,7 +1178,7 @@
 
   .stats-config-popover {
     background: var(--panel-strong);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     box-shadow: var(--elevation-1);
   }
 
@@ -1192,7 +1194,7 @@
 
   .stats-chart-shell {
     background: var(--surface-soft);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     box-shadow: none;
   }
 
@@ -1224,7 +1226,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border: 1px dashed var(--line);
+    border: 1px dashed var(--color-arctic-mist);
     border-radius: 1rem;
     background: var(--surface-soft);
     text-align: center;
@@ -1238,7 +1240,7 @@
 
   :global(html[data-theme='dark']) .stats-surface {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .stats-info-rail,
@@ -1246,7 +1248,7 @@
   :global(html[data-theme='dark']) .stats-toggle-row,
   :global(html[data-theme='dark']) .stats-chart-shell {
     background: var(--surface-hover) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .stats-refresh-button,
@@ -1256,6 +1258,6 @@
 
   :global(html[data-theme='dark']) .stats-config-popover {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
   }
 </style>

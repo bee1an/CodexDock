@@ -132,7 +132,7 @@
 
 <div class="relative" bind:this={root}>
   <button
-    class={`theme-compact-select-trigger inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-ink outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${open ? 'bg-black/[0.05]' : ''}`}
+    class={`theme-compact-select-trigger inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${open ? 'bg-black/[0.05]' : ''}`}
     aria-label={ariaLabel}
     aria-expanded={open}
     aria-haspopup="listbox"
@@ -167,7 +167,7 @@
 
 <style>
   :global(html[data-theme='dark'] .theme-compact-select-trigger) {
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-compact-select-trigger:hover),
@@ -181,7 +181,7 @@
 
   :global(html[data-theme='dark'] .theme-compact-select-panel) {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     box-shadow: var(--elevation-2) !important;
   }
 
@@ -192,11 +192,11 @@
   :global(html[data-theme='dark'] .theme-compact-select-option-idle:hover),
   :global(html[data-theme='dark'] .theme-compact-select-option-idle:focus-visible) {
     background: var(--surface-hover) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark'] .theme-compact-select-option-active) {
-    background: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
   }
 </style>

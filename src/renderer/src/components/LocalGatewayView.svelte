@@ -61,7 +61,7 @@
   const latencyClass = (durationMs: number): string => {
     if (durationMs >= 800) return 'gateway-latency-error'
     if (durationMs >= 350) return 'gateway-latency-warn'
-    return 'text-ink'
+    return 'text-carbon'
   }
 
   const statusFilterLabel = (filter: StatusFilter): string => {
@@ -143,7 +143,7 @@
       </div>
       <div class="min-w-0">
         <div class="flex min-w-0 items-center gap-2">
-          <h2 class="truncate text-[13px] font-semibold text-ink text-balance">
+          <h2 class="truncate text-[13px] font-semibold text-carbon text-balance">
             {copy.localGatewayTitle}
           </h2>
           <div
@@ -249,7 +249,7 @@
                 <span class="i-lucide-sliders-horizontal h-3.5 w-3.5"></span>
               </span>
               <div class="min-w-0">
-                <h3 class="truncate text-[12px] font-semibold leading-4 text-ink">
+                <h3 class="truncate text-[12px] font-semibold leading-4 text-carbon">
                   {copy.localGatewayConfigHint}
                 </h3>
                 <p class="truncate text-[10px] leading-4 text-muted-strong">
@@ -288,7 +288,7 @@
                     OPENAI_BASE_URL
                   </p>
                   <code
-                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-ink select-all"
+                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
                     title={endpointUrl}
                     translate="no"
                   >
@@ -322,7 +322,7 @@
                     OPENAI_API_KEY
                   </p>
                   <code
-                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-ink select-all"
+                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
                     title={gatewayKey}
                     translate="no"
                   >
@@ -364,7 +364,7 @@
               <span class="i-lucide-heart-pulse h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
               ></span>
             </div>
-            <p class="truncate text-sm font-semibold text-ink">{healthText}</p>
+            <p class="truncate text-sm font-semibold text-carbon">{healthText}</p>
           </div>
           <div class="gateway-metric-card rounded-[0.45rem] border p-3">
             <div class="mb-2 flex items-center justify-between gap-2">
@@ -375,7 +375,7 @@
               ></span>
             </div>
             <p
-              class="truncate font-mono text-sm font-semibold tabular-nums text-ink"
+              class="truncate font-mono text-sm font-semibold tabular-nums text-carbon"
               translate="no"
             >
               {formatNumber(totalRequests)}
@@ -389,7 +389,7 @@
               <span class="i-lucide-badge-check h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
               ></span>
             </div>
-            <p class="truncate font-mono text-sm font-semibold tabular-nums text-ink">
+            <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
               {successRate}
             </p>
           </div>
@@ -400,7 +400,7 @@
               </p>
               <span class="i-lucide-timer h-3.5 w-3.5 text-muted-strong" aria-hidden="true"></span>
             </div>
-            <p class="truncate font-mono text-sm font-semibold tabular-nums text-ink">
+            <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
               {avgLatency}
             </p>
           </div>
@@ -417,7 +417,7 @@
           <div class="flex min-w-0 items-center gap-2">
             <div class="min-w-0">
               <div class="flex min-w-0 items-center gap-2">
-                <h3 id="local-gateway-logs-heading" class="text-[12px] font-semibold text-ink">
+                <h3 id="local-gateway-logs-heading" class="text-[12px] font-semibold text-carbon">
                   {copy.localGatewayLogs}
                 </h3>
                 <span
@@ -448,7 +448,7 @@
               ></span>
               <input
                 id="local-gateway-log-search"
-                class="gateway-input h-7 w-full rounded-[0.35rem] border pl-7 pr-2 text-xs text-ink placeholder-muted-strong outline-none"
+                class="gateway-input h-7 w-full rounded-[0.35rem] border pl-7 pr-2 text-xs text-carbon placeholder-muted-strong outline-none"
                 type="search"
                 name="local-gateway-log-search"
                 autocomplete="off"
@@ -536,7 +536,7 @@
                         >
                       </td>
                       <td
-                        class="px-3 py-1.5 font-mono text-[11px] text-ink truncate max-w-[280px]"
+                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
                         title={log.path}
                         translate="no">{log.path}</td
                       >
@@ -545,7 +545,7 @@
                         title={log.provider ?? '—'}>{log.provider ?? '—'}</td
                       >
                       <td
-                        class="px-3 py-1.5 font-mono text-[11px] text-ink truncate max-w-[140px]"
+                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
                         title={log.model ?? '—'}
                         translate="no">{log.model ?? '—'}</td
                       >
@@ -595,8 +595,8 @@
   }
 
   .gateway-toolbar {
-    border-color: var(--line);
-    background: color-mix(in srgb, var(--surface-soft) 88%, var(--panel) 12%);
+    border-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--surface-soft) 88%, var(--color-fog) 12%);
   }
 
   .gateway-title-icon,
@@ -606,7 +606,7 @@
   .gateway-config-badge,
   .gateway-config-field,
   .gateway-metric-card {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft));
   }
 
@@ -617,7 +617,7 @@
 
   .gateway-panel {
     background: var(--panel-strong);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   .gateway-config-panel {
@@ -625,7 +625,7 @@
   }
 
   .gateway-config-header {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: color-mix(in srgb, var(--surface-soft) 48%, transparent);
   }
 
@@ -649,7 +649,7 @@
     padding: 0;
     border-radius: 0;
     background: transparent;
-    color: var(--ink);
+    color: var(--color-carbon);
     line-height: 1.2;
   }
 
@@ -667,7 +667,7 @@
   }
 
   .gateway-status-pill {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: var(--surface-soft);
     color: var(--ink-soft-strong);
   }
@@ -682,12 +682,12 @@
   }
 
   .gateway-error {
-    border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+    border-color: color-mix(in srgb, var(--danger) 30%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--danger) 8%, transparent);
   }
 
   .gateway-divide {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   .gateway-action-button,
@@ -699,7 +699,7 @@
   }
 
   .gateway-compact-chip {
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-arctic-mist);
     border-radius: 0.35rem;
     background: var(--panel-strong);
     color: var(--ink-soft-strong);
@@ -716,7 +716,7 @@
   .gateway-compact-chip:hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .gateway-action-button {
@@ -725,7 +725,7 @@
     align-items: center;
     justify-content: center;
     gap: 0.375rem;
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-arctic-mist);
     border-radius: 0.35rem;
     padding: 0.375rem 0.625rem;
     font-size: 11px;
@@ -743,13 +743,13 @@
   .gateway-compact-chip:focus-visible,
   .gateway-filter-chip:focus-visible,
   .gateway-input:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--ink) 22%);
+    outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--color-carbon) 22%);
     outline-offset: 2px;
   }
 
   .gateway-action-muted {
     background: var(--panel-strong);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .gateway-action-muted:hover {
@@ -759,8 +759,8 @@
 
   .gateway-action-primary {
     border-color: transparent;
-    background: var(--ink);
-    color: var(--paper);
+    background: var(--color-carbon);
+    color: var(--color-snow);
     box-shadow: var(--control-shadow);
   }
 
@@ -769,7 +769,7 @@
   }
 
   .gateway-action-danger {
-    border-color: color-mix(in srgb, var(--danger) 18%, var(--line));
+    border-color: color-mix(in srgb, var(--danger) 18%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--danger) 10%, transparent);
     color: var(--danger);
   }
@@ -789,18 +789,18 @@
       color 140ms ease,
       background-color 140ms ease,
       border-color 140ms ease;
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   .gateway-icon-button:hover {
-    color: var(--ink);
+    color: var(--color-carbon);
     background: var(--surface-hover);
     border-color: var(--line-strong);
   }
 
   .gateway-input {
     background: var(--panel-strong);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     transition:
       border-color 140ms ease,
       background-color 140ms ease;
@@ -811,34 +811,34 @@
   }
 
   .gateway-input:focus {
-    border-color: color-mix(in srgb, var(--ink) 30%, var(--line));
+    border-color: color-mix(in srgb, var(--color-carbon) 30%, var(--color-arctic-mist));
   }
 
   .gateway-filter-chip-idle {
-    border: 1px solid var(--line);
+    border: 1px solid var(--color-arctic-mist);
     background: var(--surface-soft);
     color: var(--ink-soft-strong);
   }
 
   .gateway-filter-chip-idle:hover {
     background: var(--surface-hover);
-    color: var(--ink);
+    color: var(--color-carbon);
   }
 
   .gateway-filter-chip-active {
-    border: 1px solid var(--ink);
-    background: var(--ink);
-    color: var(--paper);
+    border: 1px solid var(--color-carbon);
+    background: var(--color-carbon);
+    color: var(--color-snow);
   }
 
   .gateway-table-container {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: var(--panel-strong);
   }
 
   .gateway-table-head {
     background: color-mix(in srgb, var(--surface-soft) 86%, var(--panel-strong));
-    border-bottom: 1px solid var(--line);
+    border-bottom: 1px solid var(--color-arctic-mist);
     backdrop-filter: blur(10px);
   }
 
@@ -852,7 +852,7 @@
     min-width: 2.75rem;
     align-items: center;
     justify-content: center;
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: var(--surface-soft);
   }
 
@@ -861,37 +861,37 @@
   }
 
   .gateway-method-get {
-    border-color: color-mix(in srgb, var(--success) 22%, var(--line));
+    border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--success) 8%, transparent);
     color: var(--success);
   }
 
   .gateway-method-system {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: color-mix(in srgb, var(--surface-soft) 80%, transparent);
     color: var(--ink-soft-strong);
   }
 
   .gateway-method-write {
-    border-color: color-mix(in srgb, var(--accent) 18%, var(--line));
-    background: color-mix(in srgb, var(--accent) 7%, transparent);
+    border-color: color-mix(in srgb, var(--color-carbon) 18%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--color-carbon) 7%, transparent);
     color: var(--accent-deep);
   }
 
   .gateway-status-success {
-    border-color: color-mix(in srgb, var(--success) 22%, var(--line));
+    border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--success) 8%, transparent);
     color: var(--success);
   }
 
   .gateway-status-warn {
-    border-color: color-mix(in srgb, var(--warn) 24%, var(--line));
+    border-color: color-mix(in srgb, var(--warn) 24%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--warn) 10%, transparent);
     color: var(--warn);
   }
 
   .gateway-status-error {
-    border-color: color-mix(in srgb, var(--danger) 24%, var(--line));
+    border-color: color-mix(in srgb, var(--danger) 24%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--danger) 10%, transparent);
     color: var(--danger);
   }
@@ -905,7 +905,7 @@
   }
 
   :global(html[data-theme='dark']) .gateway-toolbar {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: transparent;
   }
 
@@ -922,12 +922,12 @@
   :global(html[data-theme='dark']) .gateway-panel,
   :global(html[data-theme='dark']) .gateway-table-container {
     background: var(--panel-strong);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   :global(html[data-theme='dark']) .gateway-config-header {
     background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
   }
 
   :global(html[data-theme='dark']) .gateway-config-value {
@@ -936,24 +936,24 @@
 
   :global(html[data-theme='dark']) .gateway-table-head {
     background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
-    border-bottom-color: var(--line);
+    border-bottom-color: var(--color-arctic-mist);
   }
 
   :global(html[data-theme='dark']) .gateway-filter-chip-active {
-    background: var(--ink) !important;
-    border-color: var(--ink) !important;
-    color: var(--paper) !important;
+    background: var(--color-carbon) !important;
+    border-color: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
   }
 
   :global(html[data-theme='dark']) .gateway-filter-chip-idle {
     background: var(--surface-soft) !important;
-    border-color: var(--line) !important;
+    border-color: var(--color-arctic-mist) !important;
     color: var(--ink-soft) !important;
   }
 
   :global(html[data-theme='dark']) .gateway-filter-chip-idle:hover {
     background: var(--surface-hover) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   @media (prefers-reduced-motion: reduce) {

@@ -75,25 +75,25 @@
                   class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]"
                 >
                   <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                     bind:value={providerDrafts[provider.id].name}
                     placeholder={copy.providerNamePlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
                   <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                     bind:value={providerDrafts[provider.id].baseUrl}
                     placeholder={copy.providerBaseUrlPlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
                   <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                     bind:value={providerDrafts[provider.id].model}
                     placeholder={copy.providerModelPlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
                   <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                     type="password"
                     bind:value={providerDrafts[provider.id].apiKey}
                     placeholder={copy.providerApiKeyPlaceholder}
@@ -106,7 +106,7 @@
                     <span
                       class="theme-provider-status h-1.5 w-1.5 flex-none rounded-full bg-sky-500/55 ring-2 ring-sky-500/12"
                     ></span>
-                    <p class="min-w-0 truncate text-sm font-medium text-ink">
+                    <p class="min-w-0 truncate text-sm font-medium text-carbon">
                       {providerLabel(provider, copy)}
                     </p>
                     <span
@@ -150,7 +150,7 @@
           <div class="flex items-center justify-end gap-1">
             {#if editingProviderId === provider.id}
               <label
-                class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-[0.35rem] border border-black/10 bg-white px-2.5 py-1.5 text-sm text-ink"
+                class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-[0.35rem] border border-black/10 bg-white px-2.5 py-1.5 text-sm text-carbon"
               >
                 <Checkbox
                   bind:checked={providerDrafts[provider.id].fastMode}
@@ -225,7 +225,7 @@
 <style>
   :global(html[data-theme='dark']) .theme-tag-empty {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 </style>

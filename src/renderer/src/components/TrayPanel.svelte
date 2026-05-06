@@ -39,7 +39,7 @@
         class="h-9 w-9 flex-none rounded-[0.95rem] border border-black/[0.05]"
       />
       <div class="min-w-0">
-        <p class="text-sm font-medium text-ink">CodexDock</p>
+        <p class="text-sm font-medium text-carbon">CodexDock</p>
         <p class="text-xs text-faint">{copy.statusBarAccountCount(statusAccounts.length)}</p>
       </div>
     </div>
@@ -71,7 +71,7 @@
             <span
               class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'theme-status-idle bg-black/14'}`}
             ></span>
-            <p class="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+            <p class="min-w-0 flex-1 truncate text-sm font-medium text-carbon">
               {accountEmail(account, copy)}
             </p>
             <span
@@ -163,7 +163,7 @@
   <div class="flex items-center justify-between gap-3 border-t border-black/6 pt-3">
     <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
     <select
-      class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+      class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
       value={snapshot.settings.usagePollingMinutes}
       on:change={(event) =>
         updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}

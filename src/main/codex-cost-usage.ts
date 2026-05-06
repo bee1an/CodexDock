@@ -73,7 +73,6 @@ interface CodexPricing {
 interface CostRollup {
   total: number
   hasKnown: boolean
-  hasUnknown: boolean
 }
 
 interface AggregatedModelBreakdownState {
@@ -816,7 +815,7 @@ function buildDailyEntries(
       const costUSD = codexCostUSD(model, input, cached, output)
       inputTokens += input
       outputTokens += output
-      addCostToRollup(dayCost, costUSD, totalTokens)
+      addCostToRollup(dayCost, costUSD)
       modelBreakdowns.push({ modelName: model, totalTokens, costUSD })
     }
 
@@ -845,7 +844,7 @@ function buildSummary(
 
   for (const entry of daily) {
     last30DaysTokens += entry.totalTokens
-    addCostToRollup(last30DaysCost, entry.costUSD, entry.totalTokens)
+    addCostToRollup(last30DaysCost, entry.costUSD)
   }
 
   return {
@@ -1114,16 +1113,12 @@ function uniqueInstancesByCodexHome(
 function createCostRollup(): CostRollup {
   return {
     total: 0,
-    hasKnown: false,
-    hasUnknown: false
+    hasKnown: false
   }
 }
 
-function addCostToRollup(rollup: CostRollup, costUSD: number | null, totalTokens: number): void {
+function addCostToRollup(rollup: CostRollup, costUSD: number | null): void {
   if (costUSD === null) {
-    if (totalTokens > 0) {
-      rollup.hasUnknown = true
-    }
     return
   }
 
@@ -1132,10 +1127,6 @@ function addCostToRollup(rollup: CostRollup, costUSD: number | null, totalTokens
 }
 
 function finalizeCostRollup(rollup: CostRollup): number | null {
-  if (rollup.hasUnknown) {
-    return null
-  }
-
   if (!rollup.hasKnown) {
     return null
   }
@@ -1180,7 +1171,7 @@ function aggregateTokenCostDetails(
       current.inputTokens += entry.inputTokens
       current.outputTokens += entry.outputTokens
       current.totalTokens += entry.totalTokens
-      addCostToRollup(current.cost, entry.costUSD, entry.totalTokens)
+      addCostToRollup(current.cost, entry.costUSD)
       for (const model of entry.modelsUsed) {
         current.modelsUsed.add(model)
       }
@@ -1191,7 +1182,7 @@ function aggregateTokenCostDetails(
           totalTokens: (existing?.totalTokens ?? 0) + breakdown.totalTokens,
           cost: (() => {
             const cost = existing?.cost ?? createCostRollup()
-            addCostToRollup(cost, breakdown.costUSD, breakdown.totalTokens)
+            addCostToRollup(cost, breakdown.costUSD)
             return cost
           })()
         })

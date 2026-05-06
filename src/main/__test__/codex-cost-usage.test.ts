@@ -303,7 +303,7 @@ describe('Codex token/cost usage scanner', () => {
     })
   })
 
-  it('同一天混入未知模型时，整天成本应标记为未知', async () => {
+  it('同一天混入未知模型时，只累计已知价格模型的成本', async () => {
     const root = await createTempDir()
     const codexHome = join(root, '.codex')
     await writeJsonl(join(codexHome, 'sessions/2026/04/22/mixed.jsonl'), [
@@ -327,9 +327,14 @@ describe('Codex token/cost usage scanner', () => {
     const detail = await scanCodexTokenCost('__default__', codexHome, NOW)
 
     expect(detail.summary.sessionTokens).toBe(25)
-    expect(detail.summary.sessionCostUSD).toBeNull()
-    expect(detail.summary.last30DaysCostUSD).toBeNull()
-    expect(detail.daily[0]?.costUSD).toBeNull()
+    const knownCost = codexCostUSD('gpt-5', 12, 0, 4) ?? 0
+    expect(detail.summary.sessionCostUSD).toBeCloseTo(knownCost, 12)
+    expect(detail.summary.last30DaysCostUSD).toBeCloseTo(knownCost, 12)
+    expect(detail.daily[0]?.costUSD).toBeCloseTo(knownCost, 12)
+    expect(detail.daily[0]?.modelBreakdowns).toEqual([
+      { modelName: 'gpt-5', totalTokens: 16, costUSD: knownCost },
+      { modelName: 'unknown-model', totalTokens: 9, costUSD: null }
+    ])
   })
 })
 

@@ -212,7 +212,7 @@
           <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
             {copy.toolbarDialogTitle}
           </p>
-          <h2 id="hero-panel-dialog-title" class="text-[1.15rem] font-semibold text-ink">
+          <h2 id="hero-panel-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
             {dialogTitle()}
           </h2>
         </div>
@@ -225,14 +225,14 @@
       {#if showSettings}
         <div class="grid gap-3" data-hero-motion>
           <div class="grid gap-1">
-            <p class="text-sm font-medium text-ink">{copy.generalSettings}</p>
+            <p class="text-sm font-medium text-carbon">{copy.generalSettings}</p>
             <p class="text-xs leading-5 text-muted-strong">{copy.generalSettingsDescription}</p>
           </div>
 
           <div class="flex flex-wrap items-center gap-3">
             <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
             <select
-              class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-ink outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               value={settings.usagePollingMinutes}
               onchange={(event) =>
                 updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
@@ -274,7 +274,7 @@
             class="theme-soft-panel grid gap-3 rounded-xl border border-black/8 bg-black/[0.02] px-3 py-3"
           >
             <div class="grid gap-1">
-              <p class="text-sm font-medium text-ink">{copy.toolbarSettings}</p>
+              <p class="text-sm font-medium text-carbon">{copy.toolbarSettings}</p>
               <p class="text-xs leading-5 text-muted-strong">{copy.toolbarSettingsDescription}</p>
             </div>
 
@@ -285,7 +285,7 @@
                 onCheckedChange={(checked) => updateToolbarIconMovable(checked)}
               />
               <span class="grid gap-0.5">
-                <span class="font-medium text-ink">{copy.toolbarIconMovable}</span>
+                <span class="font-medium text-carbon">{copy.toolbarIconMovable}</span>
                 <span>{copy.toolbarIconMovableDescription}</span>
               </span>
             </label>
@@ -297,7 +297,7 @@
                 onCheckedChange={(checked) => updateCollapsedToolbarIconDefaultPosition(checked)}
               />
               <span class="grid gap-0.5">
-                <span class="font-medium text-ink">
+                <span class="font-medium text-carbon">
                   {copy.collapsedToolbarIconDefaultPosition}
                 </span>
                 <span>{copy.collapsedToolbarIconDefaultPositionDescription}</span>
@@ -325,11 +325,11 @@
               <div
                 class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white"
               >
-                <span class="w-[168px] shrink-0 text-xs font-medium text-ink">
+                <span class="w-[168px] shrink-0 text-xs font-medium text-carbon">
                   {copy.codexDesktopExecutablePath}
                 </span>
                 <input
-                  class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-ink outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-carbon outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                   type="text"
                   bind:value={codexDesktopExecutablePathDraft}
                   placeholder={copy.codexDesktopExecutablePlaceholder}
@@ -352,25 +352,25 @@
           class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
           data-hero-motion
         >
-          <p class="text-sm font-medium text-ink">{copy.createProvider}</p>
+          <p class="text-sm font-medium text-carbon">{copy.createProvider}</p>
 
           <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
             <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               type="text"
               bind:value={newProviderName}
               placeholder={copy.providerNamePlaceholder}
               disabled={loginActionBusy || providerMutationBusy}
             />
             <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               type="text"
               bind:value={newProviderBaseUrl}
               placeholder={copy.providerBaseUrlPlaceholder}
               disabled={loginActionBusy || providerMutationBusy}
             />
             <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               type="text"
               bind:value={newProviderModel}
               placeholder={copy.providerModelPlaceholder}
@@ -380,7 +380,7 @@
 
           <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
             <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               type="password"
               bind:value={newProviderApiKey}
               placeholder={copy.providerApiKeyPlaceholder}
@@ -392,7 +392,7 @@
               }}
             />
             <label
-              class="theme-provider-toggle inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-ink"
+              class="theme-provider-toggle inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon"
             >
               <Checkbox
                 bind:checked={newProviderFastMode}

@@ -317,7 +317,7 @@
   >
     <div class="min-w-0 flex flex-1 items-center self-stretch">
       <div class="workspace-meta min-w-0 flex flex-wrap items-center gap-x-2 gap-y-0.5">
-        <span class="workspace-title text-[13px] font-semibold tracking-[-0.015em] text-ink">
+        <span class="workspace-title text-[13px] font-semibold tracking-[-0.015em] text-carbon">
           CodexDock
         </span>
         <span
@@ -374,7 +374,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'accounts'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -389,7 +389,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'providers'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -404,7 +404,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'gateway'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -418,7 +418,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'tags'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -432,7 +432,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'stats'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -446,7 +446,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'sessions'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -460,7 +460,7 @@
         <button
           class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
             currentView === 'skills'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-ink'
+              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
               : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
           }`}
           type="button"
@@ -598,7 +598,7 @@
         </div>
 
         <div class="mx-auto grid max-w-xl gap-2 text-center">
-          <h3 class="text-lg font-semibold text-ink sm:text-xl">{copy.emptyStateTitle}</h3>
+          <h3 class="text-lg font-semibold text-carbon sm:text-xl">{copy.emptyStateTitle}</h3>
           <p class="text-sm leading-6 text-muted-strong">{copy.emptyStateDescription}</p>
         </div>
 
@@ -660,7 +660,7 @@
 
   :global(html[data-theme='dark']) .theme-view-toggle-active {
     background: var(--panel-strong) !important;
-    color: var(--ink) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-view-toggle-idle {

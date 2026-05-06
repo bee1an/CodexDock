@@ -52,14 +52,32 @@ export default defineConfig({
   ],
   theme: {
     colors: {
-      paper: 'var(--paper)',
-      ink: 'var(--ink)',
+      carbon: 'var(--color-carbon)',
+      snow: 'var(--color-snow)',
+      fog: 'var(--color-fog)',
+      pewter: 'var(--color-pewter)',
+      stone: 'var(--color-stone)',
+      arcticMist: 'var(--color-arctic-mist)',
+      linkBlue: 'var(--color-link-blue)',
+      midnightCanvas: 'var(--color-midnight-canvas)',
+      frostWhite: 'var(--color-frost-white)',
+      deepShadow: 'var(--color-deep-shadow)',
+      whisperGray: 'var(--color-whisper-gray)',
+      mistyGray: 'var(--color-misty-gray)',
+      deepOceanGradient: 'var(--color-deep-ocean-gradient)',
       success: 'var(--success)',
       warn: 'var(--warn)',
-      danger: 'var(--danger)'
+      danger: 'var(--danger)',
+      ink: 'var(--color-carbon)',
+      paper: 'var(--color-snow)',
+      panel: 'var(--color-fog)',
+      line: 'var(--color-arctic-mist)'
     },
     fontFamily: {
-      ui: '"SF Pro Display","Segoe UI Variable","Avenir Next","PingFang SC","Hiragino Sans GB",sans-serif',
+      ui: 'var(--font-ui-sans-serif)',
+      openai: 'var(--font-openai-sans)',
+      roobert: 'var(--font-roobert)',
+      raleway: 'var(--font-raleway)',
       mono: '"SF Mono","Fira Code",ui-monospace,monospace'
     }
   }

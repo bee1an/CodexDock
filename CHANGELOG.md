@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.3 - 2026-05-06
+
+This patch release refreshes the desktop visual system and fixes token-cost reporting edge cases.
+
+- Reworked the desktop app styling around the new frosted grayscale design reference, including shared colors, typography, radii, and neutral component states.
+- Improved account, provider, stats, sessions, skills, wake, tray, and gateway surfaces so controls and status chips follow the updated compact light design system.
+- Fixed token-cost totals so models without configured input or output prices are skipped for cost math without hiding the cost from priced models used on the same day.
+- Kept unknown-price models visible in token breakdowns with empty cost values so usage remains auditable while paid totals stay accurate.
+- Fixed token endpoint error formatting so object-shaped auth errors remain readable instead of surfacing as `[object Object]`.
+
 ## 0.4.2 - 2026-04-30
 
 This release adds session and skill management while polishing desktop motion and navigation.

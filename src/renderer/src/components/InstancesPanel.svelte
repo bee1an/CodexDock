@@ -117,13 +117,13 @@
     <div class="theme-soft-panel grid gap-3 rounded-2xl border border-black/8 p-4">
       <div class="grid gap-3 md:grid-cols-2">
         <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           bind:value={newInstanceName}
           placeholder={copy.instanceNamePlaceholder}
           disabled={busy}
         />
         <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           bind:value={newInstanceDir}
           placeholder={copy.instanceDirPlaceholder}
           disabled={busy}
@@ -132,13 +132,13 @@
 
       <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
         <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           bind:value={newInstanceArgs}
           placeholder={copy.instanceArgsPlaceholder}
           disabled={busy}
         />
         <select
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
           bind:value={newInstanceBindAccountId}
           disabled={busy}
         >
@@ -162,7 +162,7 @@
         <article class="theme-soft-panel grid gap-3 rounded-2xl border border-black/8 p-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
-              <div class="text-sm font-medium text-ink">
+              <div class="text-sm font-medium text-carbon">
                 {instance.isDefault ? copy.defaultInstance : instance.name}
               </div>
               <div class="mt-1 text-xs text-muted">
@@ -178,7 +178,7 @@
           <div class="grid gap-3 md:grid-cols-2">
             {#if !instance.isDefault}
               <input
-                class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                 bind:value={drafts[instance.id].name}
                 placeholder={copy.instanceNamePlaceholder}
                 disabled={busy}
@@ -186,7 +186,7 @@
             {/if}
 
             <select
-              class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
               bind:value={drafts[instance.id].bindAccountId}
               disabled={busy}
             >
@@ -198,7 +198,7 @@
           </div>
 
           <input
-            class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+            class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
             bind:value={drafts[instance.id].extraArgs}
             placeholder={copy.instanceArgsPlaceholder}
             disabled={busy}

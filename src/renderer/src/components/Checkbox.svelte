@@ -43,7 +43,7 @@
     height: 1rem;
     flex: none;
     place-items: center;
-    color: var(--ink);
+    color: var(--color-carbon);
     vertical-align: middle;
   }
 
@@ -63,7 +63,7 @@
     place-items: center;
     border: 1px solid var(--line-strong, rgba(0, 0, 0, 0.18));
     border-radius: 0.28rem;
-    background: var(--panel);
+    background: var(--color-fog);
     color: transparent;
     box-shadow: var(--input-shadow);
   }
@@ -74,9 +74,9 @@
   }
 
   .theme-checkbox-checked .theme-checkbox-box {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: var(--paper);
+    border-color: var(--color-carbon);
+    background: var(--color-carbon);
+    color: var(--color-snow);
     box-shadow: var(--control-shadow);
   }
 
@@ -94,13 +94,13 @@
   }
 
   :global(html[data-theme='dark']) .theme-checkbox-box {
-    border-color: var(--line);
+    border-color: var(--color-arctic-mist);
     background: var(--panel-strong);
   }
 
   :global(html[data-theme='dark']) .theme-checkbox-checked .theme-checkbox-box {
-    border-color: var(--ink);
-    background: var(--ink);
-    color: var(--paper);
+    border-color: var(--color-carbon);
+    background: var(--color-carbon);
+    color: var(--color-snow);
   }
 </style>

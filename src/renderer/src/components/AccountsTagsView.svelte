@@ -37,7 +37,7 @@
 
   <div class="flex flex-wrap items-center gap-2">
     <input
-      class="theme-tag-input min-w-[220px] flex-1 rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+      class="theme-tag-input min-w-[220px] flex-1 rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
       type="text"
       bind:value={newTagName}
       placeholder={copy.newTagPlaceholder}
@@ -69,7 +69,7 @@
             {#if editingTagId === tag.id}
               <div class="flex flex-wrap items-center gap-2">
                 <input
-                  class="theme-tag-input min-w-[180px] flex-1 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-sm text-ink outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  class="theme-tag-input min-w-[180px] flex-1 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
                   type="text"
                   bind:value={editingTagName}
                   onkeydown={(event) => {
@@ -103,7 +103,7 @@
                 >
                   {copy.taggedAccountCount(taggedAccountCount(tag.id))}
                 </span>
-                <span class="min-w-0 flex-1 truncate text-sm font-medium text-ink">
+                <span class="min-w-0 flex-1 truncate text-sm font-medium text-carbon">
                   {tag.name}
                 </span>
                 <div class="flex items-center gap-1">
@@ -165,8 +165,8 @@
   :global(html[data-theme='dark']) .theme-tag-input,
   :global(html[data-theme='dark']) .theme-tag-empty {
     background: var(--panel-strong) !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-count-pill {
@@ -176,8 +176,8 @@
 
   :global(html[data-theme='dark']) .theme-tag-create-button {
     background: var(--surface-soft) !important;
-    border-color: var(--line) !important;
-    color: var(--ink) !important;
+    border-color: var(--color-arctic-mist) !important;
+    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-create-button:hover {

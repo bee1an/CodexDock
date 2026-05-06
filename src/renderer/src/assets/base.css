@@ -1,55 +1,126 @@
 :root {
-  --paper: #efebe1;
-  --paper-shadow: rgba(22, 21, 18, 0.08);
-  --ink: #171612;
-  --ink-soft: rgba(23, 22, 18, 0.7);
-  --ink-soft-strong: rgba(23, 22, 18, 0.82);
-  --ink-faint: rgba(23, 22, 18, 0.5);
-  --panel: #f7f4ed;
-  --panel-strong: #fffdf8;
-  --panel-solid: #fcf8f0;
-  --line: rgba(23, 22, 18, 0.09);
-  --line-strong: rgba(23, 22, 18, 0.16);
-  --accent: #141414;
-  --accent-deep: #080808;
-  --accent-warm: #504a43;
-  --accent-glow: rgba(20, 20, 20, 0.16);
+  /* Colors */
+  --color-carbon: #0d0d0d;
+  --color-snow: #ffffff;
+  --color-fog: #f9f9f9;
+  --color-pewter: #5d5d5d;
+  --color-stone: #8f8f8f;
+  --color-arctic-mist: #ececec;
+  --color-link-blue: #007aff;
+
+  /* Typography — Font Families */
+  --font-ui-sans-serif: 'ui-sans-serif', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-openai-sans: 'OpenAI Sans', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  /* Typography — Scale */
+  --text-caption: 14px;
+  --leading-caption: 1.43;
+  --text-body: 16px;
+  --leading-body: 1.5;
+  --text-subheading: 18px;
+  --leading-subheading: 1.56;
+  --text-heading: 24px;
+  --leading-heading: 1;
+
+  /* Typography — Weights */
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+
+  /* Spacing */
+  --spacing-4: 4px;
+  --spacing-6: 6px;
+  --spacing-8: 8px;
+  --spacing-10: 10px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-60: 60px;
+  --spacing-64: 64px;
+  --spacing-127: 127px;
+
+  /* Layout */
+  --page-max-width: 1150px;
+  --section-gap: 64px;
+  --card-padding: 20px;
+  --element-gap: 4px;
+
+  /* Border Radius */
+  --radius-lg: 10px;
+  --radius-2xl: 16px;
+  --radius-3xl: 28px;
+
+  /* Named Radii */
+  --radius-input: 28px;
+  --radius-buttons: 10px;
+  --radius-default: 10px;
+
+
+  /* Dark Theme Tokens (monopo saigon) */
+  --color-midnight-canvas: #000000;
+  --color-frost-white: #ffffff;
+  --color-deep-shadow: #181818;
+  --color-whisper-gray: #6d6d6d;
+  --color-misty-gray: #636363;
+  --color-deep-ocean-gradient: #a0e0ab;
+  --gradient-deep-ocean: linear-gradient(90deg, rgb(160, 224, 171), rgb(255, 172, 46) 50%, rgb(165, 45, 37));
+
+  --font-roobert: 'Roobert', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-raleway: 'Raleway', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+
+  --text-heading-sm: 29px;
+  --leading-heading-sm: 1.21;
+  --text-heading-lg: 54px;
+  --leading-heading-lg: 1.39;
+  --text-display: 225px;
+  --leading-display: 0.7;
+
+  --spacing-28: 28px;
+  --spacing-40: 40px;
+  --spacing-48: 48px;
+  --spacing-68: 68px;
+  --spacing-152: 152px;
+
+  --radius-full: 75.024px;
+  --radius-cards: 10px;
+
+  /* Legacy aliases for un-migrated components */
+  --paper: var(--color-snow);
+  --paper-shadow: rgba(0, 0, 0, 0.05);
+  --ink: var(--color-carbon);
+  --ink-soft: var(--color-pewter);
+  --ink-soft-strong: var(--color-pewter);
+  --ink-faint: var(--color-stone);
+  --panel: var(--color-fog);
+  --panel-strong: var(--color-snow);
+  --panel-solid: var(--color-snow);
+  --line: var(--color-arctic-mist);
+  --line-strong: var(--color-stone);
+  --accent: var(--color-carbon);
+  --accent-deep: var(--color-carbon);
+  --accent-warm: var(--color-pewter);
+  --accent-glow: rgba(0, 0, 0, 0.05);
   --success: #0f766e;
   --warn: #a16207;
   --danger: #b42318;
-  --code-bg: rgba(10, 13, 18, 0.94);
-  --code-ink: rgba(250, 250, 248, 0.98);
-  --surface-soft: rgba(23, 22, 18, 0.046);
-  --surface-hover: rgba(23, 22, 18, 0.07);
-  --surface-selected: rgba(23, 22, 18, 0.11);
-  --progress-track: rgba(21, 21, 20, 0.1);
-  --progress-fill: rgba(21, 21, 20, 0.74);
-  --dot-idle: rgba(21, 21, 20, 0.14);
-  --ring: rgba(21, 21, 20, 0.16);
-  --edge-light: rgba(255, 255, 255, 0.88);
-  --edge-dark: rgba(21, 21, 20, 0.1);
-  --elevation-1:
-    0 1px 0 var(--edge-light) inset,
-    0 0 0 1px rgba(255, 255, 255, 0.34) inset,
-    0 1px 1px rgba(20, 20, 18, 0.035);
-  --elevation-2:
-    0 1px 0 var(--edge-light) inset,
-    0 0 0 1px rgba(255, 255, 255, 0.24) inset,
-    0 1px 2px rgba(20, 20, 18, 0.045),
-    0 8px 22px -22px rgba(20, 20, 18, 0.18);
-  --elevation-floating:
-    0 1px 0 var(--edge-light) inset,
-    0 4px 10px -8px rgba(20, 20, 18, 0.2),
-    0 14px 34px -30px rgba(20, 20, 18, 0.3);
-  --control-shadow:
-    0 1px 0 var(--edge-light) inset,
-    0 1px 1px rgba(20, 20, 18, 0.035);
-  --input-shadow:
-    0 1px 0 var(--edge-light),
-    inset 0 1px 2px rgba(20, 20, 18, 0.06);
-  --pressed-shadow:
-    inset 0 1px 2px rgba(20, 20, 18, 0.12),
-    0 1px 0 rgba(255, 255, 255, 0.78);
+  --code-bg: var(--color-fog);
+  --code-ink: var(--color-carbon);
+  --surface-soft: rgba(0, 0, 0, 0.03);
+  --surface-hover: var(--color-arctic-mist);
+  --surface-selected: var(--color-arctic-mist);
+  --progress-track: var(--color-arctic-mist);
+  --progress-fill: var(--color-carbon);
+  --dot-idle: var(--color-stone);
+  --ring: var(--color-arctic-mist);
+  --edge-light: rgba(255, 255, 255, 0.5);
+  --edge-dark: rgba(0, 0, 0, 0.05);
+
+  --elevation-1: 0 1px 2px rgba(0,0,0,0.05);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.08);
+  --elevation-floating: 0 8px 24px rgba(0,0,0,0.12);
+  --control-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  --input-shadow: inset 0 0 0 1px var(--color-arctic-mist);
+  --pressed-shadow: inset 0 1px 2px rgba(0,0,0,0.05);
 }
 
 /* transitions-dev — copy this :root block into your project once.
@@ -117,59 +188,6 @@
   --icon-swap-ease: ease-in-out;
 }
 
-[data-theme='dark'] {
-  --paper: #0b0c0b;
-  --paper-shadow: rgba(0, 0, 0, 0.34);
-  --ink: #f3f2ec;
-  --ink-soft: rgba(243, 242, 236, 0.7);
-  --ink-soft-strong: rgba(243, 242, 236, 0.84);
-  --ink-faint: rgba(243, 242, 236, 0.48);
-  --panel: #171815;
-  --panel-strong: #20211d;
-  --panel-solid: #1b1c19;
-  --line: rgba(243, 242, 236, 0.085);
-  --line-strong: rgba(243, 242, 236, 0.145);
-  --accent: #f1f1ed;
-  --accent-deep: #ffffff;
-  --accent-warm: #d8d6cc;
-  --accent-glow: rgba(241, 241, 237, 0.14);
-  --success: #5eead4;
-  --warn: #facc15;
-  --danger: #fca5a5;
-  --code-bg: rgba(5, 9, 14, 0.96);
-  --code-ink: rgba(242, 246, 250, 0.96);
-  --surface-soft: rgba(243, 242, 236, 0.055);
-  --surface-hover: rgba(243, 242, 236, 0.085);
-  --surface-selected: rgba(243, 242, 236, 0.12);
-  --progress-track: rgba(244, 244, 245, 0.14);
-  --progress-fill: rgba(244, 244, 245, 0.84);
-  --dot-idle: rgba(244, 244, 245, 0.18);
-  --ring: rgba(244, 244, 245, 0.18);
-  --edge-light: rgba(255, 255, 255, 0.065);
-  --edge-dark: rgba(0, 0, 0, 0.34);
-  --elevation-1:
-    0 1px 0 var(--edge-light) inset,
-    0 0 0 1px rgba(255, 255, 255, 0.018) inset,
-    0 1px 1px rgba(0, 0, 0, 0.22);
-  --elevation-2:
-    0 1px 0 var(--edge-light) inset,
-    0 0 0 1px rgba(255, 255, 255, 0.018) inset,
-    0 1px 2px rgba(0, 0, 0, 0.26),
-    0 10px 28px -26px rgba(0, 0, 0, 0.54);
-  --elevation-floating:
-    0 1px 0 var(--edge-light) inset,
-    0 5px 14px -10px rgba(0, 0, 0, 0.52),
-    0 18px 44px -34px rgba(0, 0, 0, 0.72);
-  --control-shadow:
-    0 1px 0 var(--edge-light) inset,
-    0 1px 1px rgba(0, 0, 0, 0.24);
-  --input-shadow:
-    0 1px 0 var(--edge-light),
-    inset 0 1px 2px rgba(0, 0, 0, 0.34);
-  --pressed-shadow:
-    inset 0 1px 3px rgba(0, 0, 0, 0.42),
-    0 1px 0 rgba(255, 255, 255, 0.04);
-}
 
 *,
 *::before,
@@ -185,17 +203,54 @@ ul {
 
 body {
   min-height: 100vh;
-  color: var(--ink);
-  background: var(--paper);
-  line-height: 1.6;
-  font-family:
-    'SF Pro Display', 'Segoe UI Variable', 'Avenir Next', 'PingFang SC', 'Hiragino Sans GB',
-    sans-serif;
+  color: var(--color-carbon);
+  background: var(--color-snow);
+  line-height: var(--leading-body);
+  font-family: var(--font-ui-sans-serif);
+  font-size: var(--text-body);
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
 
-[data-theme='dark'] body {
-  background: var(--paper);
+[data-theme='dark'] {
+  /* Override light tokens with monopo saigon dark tokens */
+  --color-snow: var(--color-midnight-canvas);
+  --color-carbon: var(--color-frost-white);
+  --color-fog: var(--color-deep-shadow);
+  --color-pewter: var(--color-whisper-gray);
+  --color-stone: var(--color-misty-gray);
+  --color-arctic-mist: rgba(255, 255, 255, 0.1);
+  
+  /* Typography swap */
+  --font-ui-sans-serif: var(--font-roobert);
+  --font-openai-sans: var(--font-raleway);
+
+  /* Shape swap */
+  --radius-input: var(--radius-full);
+  --radius-buttons: var(--radius-full);
+  --radius-lg: var(--radius-cards);
+
+  /* Layout tweaks to match dark theme spacing if necessary */
+  --section-gap: 46px;
+  --card-padding: 34px;
+  --element-gap: 14px;
+  --page-max-width: 1078px;
+
+  /* Legacy mappings */
+  --paper-shadow: rgba(0, 0, 0, 0.5);
+  --accent-glow: rgba(255, 255, 255, 0.05);
+  --success: #a0e0ab;
+  --warn: #ffac2e;
+  --danger: #a52d25;
+  --surface-soft: rgba(255, 255, 255, 0.05);
+  --edge-light: rgba(255, 255, 255, 0.1);
+  --edge-dark: rgba(0, 0, 0, 0.5);
+
+  --elevation-1: 0 1px 2px rgba(0,0,0,0.8);
+  --elevation-2: 0 4px 12px rgba(0,0,0,0.9);
+  --elevation-floating: 0 8px 24px rgba(0,0,0,0.95);
+  --control-shadow: 0 1px 2px rgba(0,0,0,0.8);
+  --input-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+  --pressed-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
 }
