@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.4 - 2026-05-09
+
+This release adds prompt management and unifies core desktop controls across the app.
+
+- Added Prompt management in the desktop app with search, category filtering, create/edit flows, and a dedicated category manager dialog.
+- Added `cdock prompt` CLI commands for listing, viewing, creating, updating, removing, importing, exporting, and categorizing prompts from the command line.
+- Introduced shared button, input, popover, and dialog components so action sizing, focus states, and dark-mode surfaces stay consistent across management views.
+- Improved Skills, Tags, Usage, Prompt, and Local Gateway spacing so page gutters and nested content padding no longer compound into oversized margins.
+- Refined the Local Gateway layout with clearer section boundaries, log controls, and status surfaces in both light and dark modes.
+- Strengthened dark-mode modal and popover boundaries so dialogs stand out more clearly from dimmed backgrounds.
+
 ## 0.4.3 - 2026-05-06
 
 This patch release refreshes the desktop visual system and fixes token-cost reporting edge cases.
