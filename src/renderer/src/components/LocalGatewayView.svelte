@@ -2,6 +2,8 @@
   import { onDestroy, onMount } from 'svelte'
   import type { LocalGatewayLogEntry, LocalGatewayStatus } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
 
   type StatusFilter = 'all' | 'ok' | 'warn' | 'error'
 
@@ -131,9 +133,9 @@
   })
 </script>
 
-<div class="gateway-container flex h-full min-h-0 flex-1 flex-col overflow-hidden">
+<div class="gateway-container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
   <div
-    class="gateway-toolbar flex flex-wrap items-center justify-between gap-3 border-b px-4 py-2.5"
+    class="gateway-toolbar theme-soft-panel flex flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4"
   >
     <div class="flex min-w-[18rem] flex-1 items-center gap-3">
       <div
@@ -158,35 +160,36 @@
     </div>
 
     <div class="flex flex-wrap items-center justify-end gap-1.5">
-      <button
-        class="gateway-compact-chip hidden max-w-[18rem] items-center gap-1.5 rounded-[0.35rem] border px-2 py-1.5 text-[10px] text-muted-strong lg:inline-flex"
-        type="button"
+      <AppButton
+        variant="secondary"
+        size="xs"
+        class="hidden max-w-[18rem] gap-1.5 text-muted-strong lg:inline-flex"
         onclick={() => void copyText(endpointUrl)}
-        aria-label={copy.copyLocalGatewayBaseUrl}
+        ariaLabel={copy.copyLocalGatewayBaseUrl}
         title={endpointUrl}
       >
         <span class="i-lucide-link h-3.5 w-3.5 flex-none" aria-hidden="true"></span>
         <span class="truncate font-mono tabular-nums" translate="no">{endpointUrl}</span>
-      </button>
+      </AppButton>
 
-      <button
-        class="gateway-action-button gateway-action-muted"
-        type="button"
+      <AppButton
+        variant="secondary"
+        size="xs"
         onclick={() => void rotateLocalGatewayKey()}
         disabled={localGatewayBusy}
-        aria-label={copy.rotateLocalGatewayKey}
+        ariaLabel={copy.rotateLocalGatewayKey}
       >
         <span class="i-lucide-rotate-cw h-3.5 w-3.5" aria-hidden="true"></span>
         <span>{copy.rotateLocalGatewayKey}</span>
-      </button>
+      </AppButton>
 
       {#if displayedStatus.running}
-        <button
-          class="gateway-action-button gateway-action-danger"
-          type="button"
+        <AppButton
+          variant="danger"
+          size="xs"
           onclick={() => void stopLocalGateway()}
           disabled={localGatewayBusy}
-          aria-label={copy.stopLocalGateway}
+          ariaLabel={copy.stopLocalGateway}
         >
           {#if localGatewayBusy}
             <span
@@ -197,14 +200,14 @@
             <span class="i-lucide-square h-3.5 w-3.5" aria-hidden="true"></span>
           {/if}
           <span>{copy.stopLocalGateway}</span>
-        </button>
+        </AppButton>
       {:else}
-        <button
-          class="gateway-action-button gateway-action-primary"
-          type="button"
+        <AppButton
+          variant="primary"
+          size="xs"
           onclick={() => void startLocalGateway()}
           disabled={localGatewayBusy}
-          aria-label={copy.startLocalGateway}
+          ariaLabel={copy.startLocalGateway}
         >
           {#if localGatewayBusy}
             <span
@@ -215,377 +218,372 @@
             <span class="i-lucide-play h-3.5 w-3.5" aria-hidden="true"></span>
           {/if}
           <span>{copy.startLocalGateway}</span>
-        </button>
+        </AppButton>
       {/if}
     </div>
   </div>
 
-  <div class="gateway-scroll flex-1 overflow-y-auto overflow-x-hidden px-4 py-4 pb-8">
-    <div class="mx-auto flex max-w-[1180px] flex-col gap-4">
-      {#if displayedStatus.lastError}
-        <div
-          class="gateway-error flex items-start gap-2 rounded-[0.45rem] border p-2.5 text-xs text-danger"
-          role="alert"
-          aria-live="polite"
-        >
-          <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true"></span>
-          <span class="min-w-0 break-words leading-relaxed">{displayedStatus.lastError}</span>
-        </div>
-      {/if}
-
-      <section
-        class="grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]"
-        aria-label={copy.localGatewayConfigHint}
+  <div class="gateway-scroll flex flex-col gap-4 overflow-x-hidden">
+    {#if displayedStatus.lastError}
+      <div
+        class="gateway-error flex items-start gap-2 rounded-[0.45rem] border p-2.5 text-xs text-danger"
+        role="alert"
+        aria-live="polite"
       >
-        <div class="gateway-panel gateway-config-panel overflow-hidden rounded-[0.45rem] border">
-          <div
-            class="gateway-config-header flex items-center justify-between gap-3 border-b px-3 py-2"
-          >
-            <div class="flex min-w-0 items-center gap-2">
-              <span
-                class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
-                aria-hidden="true"
-              >
-                <span class="i-lucide-sliders-horizontal h-3.5 w-3.5"></span>
-              </span>
-              <div class="min-w-0">
-                <h3 class="truncate text-[12px] font-semibold leading-4 text-carbon">
-                  {copy.localGatewayConfigHint}
-                </h3>
-                <p class="truncate text-[10px] leading-4 text-muted-strong">
-                  OpenAI / Claude / Gemini
-                </p>
-              </div>
-            </div>
-            <div class="flex flex-none items-center gap-1.5">
-              <span
-                class="gateway-config-badge inline-flex items-center rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-medium text-muted-strong"
-              >
-                Sub2API
-              </span>
-              <span
-                class="gateway-config-badge inline-flex items-center gap-1 rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-mono font-medium tabular-nums text-muted-strong"
-              >
-                <span class="i-lucide-radio-tower h-3 w-3" aria-hidden="true"></span>
-                {gatewayPort}
-              </span>
-            </div>
-          </div>
+        <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true"></span>
+        <span class="min-w-0 break-words leading-relaxed">{displayedStatus.lastError}</span>
+      </div>
+    {/if}
 
-          <div class="grid gap-2 p-2.5 md:grid-cols-2">
-            <div class="gateway-config-field min-w-0 overflow-hidden rounded-[0.35rem] border">
-              <div class="gateway-config-value flex min-w-0 items-center gap-2 px-2.5 py-2">
-                <span
-                  class="gateway-config-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border"
-                  aria-hidden="true"
-                >
-                  <span class="i-lucide-link h-3.5 w-3.5"></span>
-                </span>
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="mb-1 truncate text-[9px] font-medium uppercase leading-none tracking-[0.08em] text-faint"
-                  >
-                    OPENAI_BASE_URL
-                  </p>
-                  <code
-                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
-                    title={endpointUrl}
-                    translate="no"
-                  >
-                    {endpointUrl}
-                  </code>
-                </div>
-                <button
-                  class="gateway-icon-button gateway-config-copy h-6 w-6 flex-none rounded-[0.35rem] border"
-                  type="button"
-                  onclick={() => void copyText(endpointUrl)}
-                  aria-label={copy.copyLocalGatewayBaseUrl}
-                  title={copy.copyLocalGatewayBaseUrl}
-                >
-                  <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
-                </button>
-              </div>
-            </div>
-
-            <div class="gateway-config-field min-w-0 overflow-hidden rounded-[0.35rem] border">
-              <div class="gateway-config-value flex min-w-0 items-center gap-2 px-2.5 py-2">
-                <span
-                  class="gateway-config-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border"
-                  aria-hidden="true"
-                >
-                  <span class="i-lucide-key-round h-3.5 w-3.5"></span>
-                </span>
-                <div class="min-w-0 flex-1">
-                  <p
-                    class="mb-1 truncate text-[9px] font-medium uppercase leading-none tracking-[0.08em] text-faint"
-                  >
-                    OPENAI_API_KEY
-                  </p>
-                  <code
-                    class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
-                    title={gatewayKey}
-                    translate="no"
-                  >
-                    {gatewayKey || copy.localGatewayNoApiKey}
-                  </code>
-                </div>
-                {#if localGatewayApiKey}
-                  <button
-                    class="gateway-icon-button gateway-config-copy h-6 w-6 flex-none rounded-[0.35rem] border"
-                    type="button"
-                    onclick={() => void copyText(localGatewayApiKey)}
-                    aria-label={copy.copyLocalGatewayApiKey}
-                    title={copy.copyLocalGatewayApiKey}
-                  >
-                    <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
-                  </button>
-                {:else}
-                  <button
-                    class="gateway-icon-button gateway-config-copy h-6 w-6 flex-none rounded-[0.35rem] border"
-                    type="button"
-                    disabled
-                    aria-label={copy.localGatewayNoApiKey}
-                    title={copy.localGatewayNoApiKey}
-                  >
-                    <span class="i-lucide-lock-keyhole h-3.5 w-3.5" aria-hidden="true"></span>
-                  </button>
-                {/if}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-2 lg:grid-cols-4 xl:grid-cols-2">
-          <div class="gateway-metric-card rounded-[0.45rem] border p-3">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                {copy.localGatewayHealth}
-              </p>
-              <span class="i-lucide-heart-pulse h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
-              ></span>
-            </div>
-            <p class="truncate text-sm font-semibold text-carbon">{healthText}</p>
-          </div>
-          <div class="gateway-metric-card rounded-[0.45rem] border p-3">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                {copy.localGatewayRequests}
-              </p>
-              <span class="i-lucide-activity h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
-              ></span>
-            </div>
-            <p
-              class="truncate font-mono text-sm font-semibold tabular-nums text-carbon"
-              translate="no"
-            >
-              {formatNumber(totalRequests)}
-            </p>
-          </div>
-          <div class="gateway-metric-card rounded-[0.45rem] border p-3">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                {copy.localGatewaySuccessRate}
-              </p>
-              <span class="i-lucide-badge-check h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
-              ></span>
-            </div>
-            <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
-              {successRate}
-            </p>
-          </div>
-          <div class="gateway-metric-card rounded-[0.45rem] border p-3">
-            <div class="mb-2 flex items-center justify-between gap-2">
-              <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-                {copy.localGatewayAvgLatency}
-              </p>
-              <span class="i-lucide-timer h-3.5 w-3.5 text-muted-strong" aria-hidden="true"></span>
-            </div>
-            <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
-              {avgLatency}
-            </p>
-          </div>
-        </div>
-      </section>
-
-      <section
-        class="gateway-panel rounded-[0.45rem] border"
-        aria-labelledby="local-gateway-logs-heading"
-      >
+    <section
+      class="gateway-overview-grid grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]"
+      aria-label={copy.localGatewayConfigHint}
+    >
+      <div class="gateway-panel gateway-config-panel overflow-hidden rounded-[0.45rem] border">
         <div
-          class="flex flex-wrap items-center justify-between gap-3 border-b border-soft px-3 py-2.5"
+          class="gateway-config-header flex items-center justify-between gap-3 border-b px-3 py-2"
         >
           <div class="flex min-w-0 items-center gap-2">
+            <span
+              class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
+              aria-hidden="true"
+            >
+              <span class="i-lucide-sliders-horizontal h-3.5 w-3.5"></span>
+            </span>
             <div class="min-w-0">
-              <div class="flex min-w-0 items-center gap-2">
-                <h3 id="local-gateway-logs-heading" class="text-[12px] font-semibold text-carbon">
-                  {copy.localGatewayLogs}
-                </h3>
-                <span
-                  class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
-                >
-                  {formatNumber(visibleLogs.length)} / {formatNumber(totalRequests)}
-                </span>
-                {#if errorCount}
-                  <span
-                    class="inline-flex items-center rounded border border-danger/20 bg-danger/10 px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-danger"
-                  >
-                    {formatNumber(errorCount)}
-                    {copy.localGatewayErrors}
-                  </span>
-                {/if}
-              </div>
-              <p class="mt-0.5 truncate text-[10px] leading-4 text-faint">
-                {copy.localGatewayLogsHint}
+              <h3 class="truncate text-[12px] font-semibold leading-4 text-carbon">
+                {copy.localGatewayConfigHint}
+              </h3>
+              <p class="truncate text-[10px] leading-4 text-muted-strong">
+                OpenAI / Claude / Gemini
               </p>
             </div>
           </div>
+          <div class="flex flex-none items-center gap-1.5">
+            <span
+              class="gateway-config-badge inline-flex items-center rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-medium text-muted-strong"
+            >
+              Sub2API
+            </span>
+            <span
+              class="gateway-config-badge inline-flex items-center gap-1 rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-mono font-medium tabular-nums text-muted-strong"
+            >
+              <span class="i-lucide-radio-tower h-3 w-3" aria-hidden="true"></span>
+              {gatewayPort}
+            </span>
+          </div>
+        </div>
 
-          <div class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
-            <div class="relative min-w-[180px] flex-1 sm:flex-none sm:w-56">
+        <div class="grid gap-2 p-2.5 md:grid-cols-2">
+          <div class="gateway-config-field min-w-0 overflow-hidden rounded-[0.35rem] border">
+            <div class="gateway-config-value flex min-w-0 items-center gap-2 px-2.5 py-2">
               <span
-                class="i-lucide-search absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-strong"
+                class="gateway-config-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border"
                 aria-hidden="true"
-              ></span>
-              <input
-                id="local-gateway-log-search"
-                class="gateway-input h-7 w-full rounded-[0.35rem] border pl-7 pr-2 text-xs text-carbon placeholder-muted-strong outline-none"
-                type="search"
-                name="local-gateway-log-search"
-                autocomplete="off"
-                spellcheck={false}
-                aria-label={copy.localGatewaySearchLogs}
-                placeholder={copy.localGatewaySearchLogs}
-                bind:value={logSearch}
-              />
+              >
+                <span class="i-lucide-link h-3.5 w-3.5"></span>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p
+                  class="mb-1 truncate text-[9px] font-medium uppercase leading-none tracking-[0.08em] text-faint"
+                >
+                  OPENAI_BASE_URL
+                </p>
+                <code
+                  class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
+                  title={endpointUrl}
+                  translate="no"
+                >
+                  {endpointUrl}
+                </code>
+              </div>
+              <AppButton
+                variant="icon"
+                size="xs"
+                class="flex-none"
+                onclick={() => void copyText(endpointUrl)}
+                ariaLabel={copy.copyLocalGatewayBaseUrl}
+                title={copy.copyLocalGatewayBaseUrl}
+              >
+                <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
+              </AppButton>
             </div>
-            <button
-              class="gateway-icon-button h-7 w-7 rounded-[0.35rem] border"
-              type="button"
-              onclick={() => void refreshGatewayStatus()}
-              aria-label={copy.localGatewayLogs}
-              title={copy.localGatewayLogs}
-            >
-              <span class="i-lucide-refresh-cw h-3.5 w-3.5" aria-hidden="true"></span>
-            </button>
+          </div>
+
+          <div class="gateway-config-field min-w-0 overflow-hidden rounded-[0.35rem] border">
+            <div class="gateway-config-value flex min-w-0 items-center gap-2 px-2.5 py-2">
+              <span
+                class="gateway-config-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border"
+                aria-hidden="true"
+              >
+                <span class="i-lucide-key-round h-3.5 w-3.5"></span>
+              </span>
+              <div class="min-w-0 flex-1">
+                <p
+                  class="mb-1 truncate text-[9px] font-medium uppercase leading-none tracking-[0.08em] text-faint"
+                >
+                  OPENAI_API_KEY
+                </p>
+                <code
+                  class="gateway-config-code min-w-0 truncate font-mono text-[12px] font-semibold text-carbon select-all"
+                  title={gatewayKey}
+                  translate="no"
+                >
+                  {gatewayKey || copy.localGatewayNoApiKey}
+                </code>
+              </div>
+              {#if localGatewayApiKey}
+                <AppButton
+                  variant="icon"
+                  size="xs"
+                  class="flex-none"
+                  onclick={() => void copyText(localGatewayApiKey)}
+                  ariaLabel={copy.copyLocalGatewayApiKey}
+                  title={copy.copyLocalGatewayApiKey}
+                >
+                  <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
+                </AppButton>
+              {:else}
+                <AppButton
+                  variant="icon"
+                  size="xs"
+                  class="flex-none"
+                  disabled
+                  ariaLabel={copy.localGatewayNoApiKey}
+                  title={copy.localGatewayNoApiKey}
+                >
+                  <span class="i-lucide-lock-keyhole h-3.5 w-3.5" aria-hidden="true"></span>
+                </AppButton>
+              {/if}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2 lg:grid-cols-4 xl:grid-cols-2"
+      >
+        <div class="gateway-metric-card rounded-[0.45rem] border p-3">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+              {copy.localGatewayHealth}
+            </p>
+            <span class="i-lucide-heart-pulse h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
+            ></span>
+          </div>
+          <p class="truncate text-sm font-semibold text-carbon">{healthText}</p>
+        </div>
+        <div class="gateway-metric-card rounded-[0.45rem] border p-3">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+              {copy.localGatewayRequests}
+            </p>
+            <span class="i-lucide-activity h-3.5 w-3.5 text-muted-strong" aria-hidden="true"></span>
+          </div>
+          <p
+            class="truncate font-mono text-sm font-semibold tabular-nums text-carbon"
+            translate="no"
+          >
+            {formatNumber(totalRequests)}
+          </p>
+        </div>
+        <div class="gateway-metric-card rounded-[0.45rem] border p-3">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+              {copy.localGatewaySuccessRate}
+            </p>
+            <span class="i-lucide-badge-check h-3.5 w-3.5 text-muted-strong" aria-hidden="true"
+            ></span>
+          </div>
+          <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
+            {successRate}
+          </p>
+        </div>
+        <div class="gateway-metric-card rounded-[0.45rem] border p-3">
+          <div class="mb-2 flex items-center justify-between gap-2">
+            <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+              {copy.localGatewayAvgLatency}
+            </p>
+            <span class="i-lucide-timer h-3.5 w-3.5 text-muted-strong" aria-hidden="true"></span>
+          </div>
+          <p class="truncate font-mono text-sm font-semibold tabular-nums text-carbon">
+            {avgLatency}
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <section
+      class="gateway-panel gateway-logs-panel rounded-[0.45rem] border"
+      aria-labelledby="local-gateway-logs-heading"
+    >
+      <div
+        class="gateway-logs-header flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5"
+      >
+        <div class="flex min-w-0 items-center gap-2">
+          <div class="min-w-0">
+            <div class="flex min-w-0 items-center gap-2">
+              <h3 id="local-gateway-logs-heading" class="text-[12px] font-semibold text-carbon">
+                {copy.localGatewayLogs}
+              </h3>
+              <span
+                class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+              >
+                {formatNumber(visibleLogs.length)} / {formatNumber(totalRequests)}
+              </span>
+              {#if errorCount}
+                <span
+                  class="inline-flex items-center rounded border border-danger/20 bg-danger/10 px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-danger"
+                >
+                  {formatNumber(errorCount)}
+                  {copy.localGatewayErrors}
+                </span>
+              {/if}
+            </div>
+            <p class="mt-0.5 truncate text-[10px] leading-4 text-faint">
+              {copy.localGatewayLogsHint}
+            </p>
           </div>
         </div>
 
-        <div class="flex flex-wrap gap-1.5 px-3 py-2">
-          {#each statusFilters as option (option)}
-            <button
-              class={`theme-filter-chip gateway-filter-chip rounded-[0.32rem] px-1.5 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
-                statusFilter === option
-                  ? 'theme-filter-chip-active gateway-filter-chip-active'
-                  : 'theme-filter-chip-idle gateway-filter-chip-idle'
-              }`}
-              type="button"
-              aria-pressed={statusFilter === option}
-              aria-label={`${copy.localGatewayStatusFilter}: ${statusFilterLabel(option)}`}
-              onclick={() => (statusFilter = option)}
-            >
-              {statusFilterLabel(option)}
-            </button>
-          {/each}
+        <div class="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+          <AppInput
+            id="local-gateway-log-search"
+            name="local-gateway-log-search"
+            type="search"
+            variant="search"
+            size="xs"
+            icon="i-lucide-search"
+            class="min-w-[180px] flex-1 sm:flex-none sm:w-56"
+            autocomplete="off"
+            spellcheck={false}
+            ariaLabel={copy.localGatewaySearchLogs}
+            placeholder={copy.localGatewaySearchLogs}
+            bind:value={logSearch}
+          />
+          <AppButton
+            variant="icon"
+            size="sm"
+            onclick={() => void refreshGatewayStatus()}
+            ariaLabel={copy.localGatewayLogs}
+            title={copy.localGatewayLogs}
+          >
+            <span class="i-lucide-refresh-cw h-3.5 w-3.5" aria-hidden="true"></span>
+          </AppButton>
         </div>
+      </div>
 
-        <div class="gateway-table-container border-t">
-          {#if visibleLogs.length}
-            <div class="max-h-[400px] overflow-auto">
-              <table class="w-full text-left text-xs" aria-label={copy.localGatewayLogs}>
-                <thead
-                  class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
-                >
-                  <tr>
-                    <th class="px-3 py-2 font-normal whitespace-nowrap"
-                      >{copy.localGatewayLogTime}</th
+      <div class="gateway-log-filters flex flex-wrap gap-1.5 border-b px-3 py-2">
+        {#each statusFilters as option (option)}
+          <AppButton
+            variant="filter"
+            size="xs"
+            selected={statusFilter === option}
+            ariaPressed={statusFilter === option}
+            ariaLabel={`${copy.localGatewayStatusFilter}: ${statusFilterLabel(option)}`}
+            onclick={() => (statusFilter = option)}
+          >
+            {statusFilterLabel(option)}
+          </AppButton>
+        {/each}
+      </div>
+
+      <div class="gateway-table-container">
+        {#if visibleLogs.length}
+          <div class="max-h-[400px] overflow-auto">
+            <table class="w-full text-left text-xs" aria-label={copy.localGatewayLogs}>
+              <thead
+                class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
+              >
+                <tr>
+                  <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTime}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap"
+                    >{copy.localGatewayLogMethod}</th
+                  >
+                  <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]"
+                    >{copy.localGatewayLogPath}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap"
+                    >{copy.localGatewayLogProvider}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap"
+                    >{copy.localGatewayLogModel}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                    >{copy.localGatewayLogTokens}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                    >{copy.localGatewayLogLatency}</th
+                  >
+                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                    >{copy.localGatewayLogStatus}</th
+                  >
+                </tr>
+              </thead>
+              <tbody class="divide-y gateway-divide">
+                {#each visibleLogs as log (log.id)}
+                  <tr class="gateway-table-row transition-colors duration-140">
+                    <td
+                      class="px-3 py-1.5 font-mono text-[11px] text-muted-strong whitespace-nowrap tabular-nums"
+                      >{formatLogTime(log.timestamp)}</td
                     >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap"
-                      >{copy.localGatewayLogMethod}</th
+                    <td class="px-3 py-1.5 whitespace-nowrap">
+                      <span
+                        class={`gateway-method-pill rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none ${methodClass(log.method)}`}
+                        >{log.method}</span
+                      >
+                    </td>
+                    <td
+                      class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
+                      title={log.path}
+                      translate="no">{log.path}</td
                     >
-                    <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]"
-                      >{copy.localGatewayLogPath}</th
+                    <td
+                      class="px-3 py-1.5 text-muted-strong truncate max-w-[120px]"
+                      title={log.provider ?? '—'}>{log.provider ?? '—'}</td
                     >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap"
-                      >{copy.localGatewayLogProvider}</th
+                    <td
+                      class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
+                      title={log.model ?? '—'}
+                      translate="no">{log.model ?? '—'}</td
                     >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap"
-                      >{copy.localGatewayLogModel}</th
+                    <td
+                      class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
+                      >{formatNumber(log.tokens ?? 0)}</td
                     >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                      >{copy.localGatewayLogTokens}</th
-                    >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                      >{copy.localGatewayLogLatency}</th
-                    >
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                      >{copy.localGatewayLogStatus}</th
-                    >
+                    <td class="px-3 py-1.5 text-right whitespace-nowrap">
+                      <span
+                        class={`font-mono text-[11px] tabular-nums ${latencyClass(log.durationMs)}`}
+                        >{formatNumber(log.durationMs)} ms</span
+                      >
+                    </td>
+                    <td class="px-3 py-1.5 text-right whitespace-nowrap">
+                      <span
+                        class={`gateway-status-code rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${statusClass(log.status)}`}
+                        >{log.status}</span
+                      >
+                    </td>
                   </tr>
-                </thead>
-                <tbody class="divide-y gateway-divide">
-                  {#each visibleLogs as log (log.id)}
-                    <tr class="gateway-table-row transition-colors duration-140">
-                      <td
-                        class="px-3 py-1.5 font-mono text-[11px] text-muted-strong whitespace-nowrap tabular-nums"
-                        >{formatLogTime(log.timestamp)}</td
-                      >
-                      <td class="px-3 py-1.5 whitespace-nowrap">
-                        <span
-                          class={`gateway-method-pill rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none ${methodClass(log.method)}`}
-                          >{log.method}</span
-                        >
-                      </td>
-                      <td
-                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
-                        title={log.path}
-                        translate="no">{log.path}</td
-                      >
-                      <td
-                        class="px-3 py-1.5 text-muted-strong truncate max-w-[120px]"
-                        title={log.provider ?? '—'}>{log.provider ?? '—'}</td
-                      >
-                      <td
-                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
-                        title={log.model ?? '—'}
-                        translate="no">{log.model ?? '—'}</td
-                      >
-                      <td
-                        class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
-                        >{formatNumber(log.tokens ?? 0)}</td
-                      >
-                      <td class="px-3 py-1.5 text-right whitespace-nowrap">
-                        <span
-                          class={`font-mono text-[11px] tabular-nums ${latencyClass(log.durationMs)}`}
-                          >{formatNumber(log.durationMs)} ms</span
-                        >
-                      </td>
-                      <td class="px-3 py-1.5 text-right whitespace-nowrap">
-                        <span
-                          class={`gateway-status-code rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${statusClass(log.status)}`}
-                          >{log.status}</span
-                        >
-                      </td>
-                    </tr>
-                  {/each}
-                </tbody>
-              </table>
-            </div>
-          {:else}
-            <div
-              class="gateway-empty-state flex flex-col items-center justify-center px-6 py-10 text-center text-muted-strong"
-            >
-              <span class="i-lucide-inbox mb-2 h-6 w-6 opacity-50" aria-hidden="true"></span>
-              <p class="text-[11px] font-medium">
-                {totalRequests ? copy.localGatewayNoMatchedLogs : copy.localGatewayNoLogs}
-              </p>
-              <p class="mt-1 max-w-[18rem] text-[10px] leading-4 text-faint">
-                {copy.localGatewayLogsHint}
-              </p>
-            </div>
-          {/if}
-        </div>
-      </section>
-    </div>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        {:else}
+          <div
+            class="gateway-empty-state flex flex-col items-center justify-center px-6 py-10 text-center text-muted-strong"
+          >
+            <span class="i-lucide-inbox mb-2 h-6 w-6 opacity-50" aria-hidden="true"></span>
+            <p class="text-[11px] font-medium">
+              {totalRequests ? copy.localGatewayNoMatchedLogs : copy.localGatewayNoLogs}
+            </p>
+            <p class="mt-1 max-w-[18rem] text-[10px] leading-4 text-faint">
+              {copy.localGatewayLogsHint}
+            </p>
+          </div>
+        {/if}
+      </div>
+    </section>
   </div>
 </div>
 
@@ -595,19 +593,26 @@
   }
 
   .gateway-toolbar {
-    border-color: var(--color-arctic-mist);
-    background: color-mix(in srgb, var(--surface-soft) 88%, var(--color-fog) 12%);
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)),
+      color-mix(in srgb, var(--panel-strong) 72%, var(--surface-soft))
+    ) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 16%, transparent);
   }
 
   .gateway-title-icon,
   .gateway-section-icon,
   .gateway-config-icon,
-  .gateway-compact-chip,
   .gateway-config-badge,
   .gateway-config-field,
-  .gateway-metric-card {
-    border-color: var(--color-arctic-mist);
-    background: color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft));
+  .gateway-metric-card,
+  .gateway-metrics-grid {
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
   }
 
   .gateway-title-icon {
@@ -616,17 +621,20 @@
   }
 
   .gateway-panel {
-    background: var(--panel-strong);
-    border-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft));
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
   }
 
   .gateway-config-panel {
-    box-shadow: var(--elevation-1);
+    min-height: 100%;
   }
 
   .gateway-config-header {
-    border-color: var(--color-arctic-mist);
-    background: color-mix(in srgb, var(--surface-soft) 48%, transparent);
+    border-color: color-mix(in srgb, var(--line-strong) 74%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
   }
 
   .gateway-section-icon,
@@ -636,11 +644,14 @@
   }
 
   .gateway-config-field {
-    box-shadow: var(--input-shadow);
+    background: color-mix(in srgb, var(--panel-strong) 76%, var(--surface-soft));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 48%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--edge-dark) 10%, transparent);
   }
 
   .gateway-config-value {
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--surface-soft));
+    background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
     min-height: 3rem;
   }
 
@@ -653,17 +664,16 @@
     line-height: 1.2;
   }
 
-  .gateway-config-copy {
-    background: var(--surface-soft);
-  }
-
-  .gateway-config-copy:disabled {
-    opacity: 0.42;
-  }
-
   .gateway-metric-card {
     min-width: 0;
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 42%, transparent) inset;
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+  }
+
+  .gateway-metrics-grid {
+    background: color-mix(in srgb, var(--surface-soft) 50%, transparent);
   }
 
   .gateway-status-pill {
@@ -687,159 +697,39 @@
   }
 
   .gateway-divide {
-    border-color: var(--color-arctic-mist);
-  }
-
-  .gateway-action-button,
-  .gateway-icon-button,
-  .gateway-compact-chip,
-  .gateway-filter-chip {
-    touch-action: manipulation;
-    -webkit-tap-highlight-color: transparent;
-  }
-
-  .gateway-compact-chip {
-    border: 1px solid var(--color-arctic-mist);
-    border-radius: 0.35rem;
-    background: var(--panel-strong);
-    color: var(--ink-soft-strong);
-    padding: 0.375rem 0.5rem;
-    font-size: 10px;
-    font-weight: 500;
-    line-height: 1;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease;
-  }
-
-  .gateway-compact-chip:hover {
-    border-color: var(--line-strong);
-    background: var(--surface-hover);
-    color: var(--color-carbon);
-  }
-
-  .gateway-action-button {
-    display: inline-flex;
-    min-width: 5rem;
-    align-items: center;
-    justify-content: center;
-    gap: 0.375rem;
-    border: 1px solid var(--color-arctic-mist);
-    border-radius: 0.35rem;
-    padding: 0.375rem 0.625rem;
-    font-size: 11px;
-    font-weight: 600;
-    line-height: 1;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease,
-      opacity 140ms ease;
-  }
-
-  .gateway-action-button:focus-visible,
-  .gateway-icon-button:focus-visible,
-  .gateway-compact-chip:focus-visible,
-  .gateway-filter-chip:focus-visible,
-  .gateway-input:focus-visible {
-    outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--color-carbon) 22%);
-    outline-offset: 2px;
-  }
-
-  .gateway-action-muted {
-    background: var(--panel-strong);
-    color: var(--color-carbon);
-  }
-
-  .gateway-action-muted:hover {
-    background: var(--surface-hover);
-    border-color: var(--line-strong);
-  }
-
-  .gateway-action-primary {
-    border-color: transparent;
-    background: var(--color-carbon);
-    color: var(--color-snow);
-    box-shadow: var(--control-shadow);
-  }
-
-  .gateway-action-primary:hover {
-    opacity: 0.9;
-  }
-
-  .gateway-action-danger {
-    border-color: color-mix(in srgb, var(--danger) 18%, var(--color-arctic-mist));
-    background: color-mix(in srgb, var(--danger) 10%, transparent);
-    color: var(--danger);
-  }
-
-  .gateway-action-danger:hover {
-    background: color-mix(in srgb, var(--danger) 16%, transparent);
-  }
-
-  .gateway-icon-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    color: var(--ink-soft);
-    background: transparent;
-    transition:
-      color 140ms ease,
-      background-color 140ms ease,
-      border-color 140ms ease;
-    border-color: var(--color-arctic-mist);
-  }
-
-  .gateway-icon-button:hover {
-    color: var(--color-carbon);
-    background: var(--surface-hover);
-    border-color: var(--line-strong);
-  }
-
-  .gateway-input {
-    background: var(--panel-strong);
-    border-color: var(--color-arctic-mist);
-    transition:
-      border-color 140ms ease,
-      background-color 140ms ease;
-  }
-
-  .gateway-input:hover {
-    background: var(--surface-soft);
-  }
-
-  .gateway-input:focus {
-    border-color: color-mix(in srgb, var(--color-carbon) 30%, var(--color-arctic-mist));
-  }
-
-  .gateway-filter-chip-idle {
-    border: 1px solid var(--color-arctic-mist);
-    background: var(--surface-soft);
-    color: var(--ink-soft-strong);
-  }
-
-  .gateway-filter-chip-idle:hover {
-    background: var(--surface-hover);
-    color: var(--color-carbon);
-  }
-
-  .gateway-filter-chip-active {
-    border: 1px solid var(--color-carbon);
-    background: var(--color-carbon);
-    color: var(--color-snow);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
   }
 
   .gateway-table-container {
-    border-color: var(--color-arctic-mist);
-    background: var(--panel-strong);
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+  }
+
+  .gateway-logs-header,
+  .gateway-log-filters {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  }
+
+  .gateway-logs-header {
+    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  }
+
+  .gateway-log-filters {
+    background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft));
   }
 
   .gateway-table-head {
-    background: color-mix(in srgb, var(--surface-soft) 86%, var(--panel-strong));
-    border-bottom: 1px solid var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--surface-soft) 92%, var(--panel-strong));
+    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
     backdrop-filter: blur(10px);
+  }
+
+  .gateway-table-row {
+    background: color-mix(in srgb, var(--panel-strong) 98%, transparent);
+  }
+
+  .gateway-table-row:nth-child(even) {
+    background: color-mix(in srgb, var(--surface-soft) 22%, var(--panel-strong));
   }
 
   .gateway-table-row:hover {
@@ -905,63 +795,69 @@
   }
 
   :global(html[data-theme='dark']) .gateway-toolbar {
-    border-color: var(--color-arctic-mist);
-    background: transparent;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)),
+      color-mix(in srgb, var(--panel-strong) 62%, var(--surface-soft))
+    ) !important;
   }
 
   :global(html[data-theme='dark']) .gateway-title-icon,
   :global(html[data-theme='dark']) .gateway-section-icon,
   :global(html[data-theme='dark']) .gateway-config-icon,
-  :global(html[data-theme='dark']) .gateway-compact-chip,
   :global(html[data-theme='dark']) .gateway-config-badge,
   :global(html[data-theme='dark']) .gateway-config-field,
   :global(html[data-theme='dark']) .gateway-metric-card,
+  :global(html[data-theme='dark']) .gateway-metrics-grid,
   :global(html[data-theme='dark']) .gateway-status-pill,
-  :global(html[data-theme='dark']) .gateway-action-muted,
-  :global(html[data-theme='dark']) .gateway-input,
   :global(html[data-theme='dark']) .gateway-panel,
   :global(html[data-theme='dark']) .gateway-table-container {
-    background: var(--panel-strong);
-    border-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
   }
 
   :global(html[data-theme='dark']) .gateway-config-header {
-    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
-    border-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
   }
 
   :global(html[data-theme='dark']) .gateway-config-value {
-    background: color-mix(in srgb, var(--surface-soft) 34%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-metric-card,
+  :global(html[data-theme='dark']) .gateway-config-field {
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-logs-header,
+  :global(html[data-theme='dark']) .gateway-log-filters {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 84%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-logs-header {
+    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-log-filters {
+    background: color-mix(in srgb, var(--surface-soft) 38%, var(--panel-strong));
   }
 
   :global(html[data-theme='dark']) .gateway-table-head {
-    background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
-    border-bottom-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--surface-soft) 76%, var(--panel-strong));
+    border-bottom-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
   }
 
-  :global(html[data-theme='dark']) .gateway-filter-chip-active {
-    background: var(--color-carbon) !important;
-    border-color: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
+  :global(html[data-theme='dark']) .gateway-table-row {
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
   }
 
-  :global(html[data-theme='dark']) .gateway-filter-chip-idle {
-    background: var(--surface-soft) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .gateway-filter-chip-idle:hover {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
+  :global(html[data-theme='dark']) .gateway-table-row:nth-child(even) {
+    background: color-mix(in srgb, var(--surface-soft) 28%, var(--panel-strong));
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .gateway-action-button,
-    .gateway-icon-button,
-    .gateway-compact-chip,
-    .gateway-filter-chip,
-    .gateway-input,
     .gateway-table-row {
       transition-duration: 0ms;
     }

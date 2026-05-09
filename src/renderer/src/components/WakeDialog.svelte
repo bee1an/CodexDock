@@ -8,6 +8,8 @@
   } from '../../../shared/codex'
   import { defaultWakeModel } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
   import { formatWakeScheduleLastTriggeredAt, nextWakeScheduleLabel } from './wake-schedule'
@@ -15,8 +17,6 @@
   export let copy: LocalizedCopy
   export let language: AppLanguage
   export let accountLabelText = ''
-  export let compactGhostButton = ''
-  export let primaryActionButton = ''
   export let activeTab: 'session' | 'schedule' = 'session'
 
   export let sessionPrompt = 'ping'
@@ -208,42 +208,36 @@
         class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-black/5 bg-transparent p-0.5"
         data-wake-motion
       >
-        <button
-          class={`wake-tab-button inline-flex items-center gap-1.5 rounded-[0.35rem] px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
-            activeTab === 'session'
-              ? 'bg-[var(--panel-strong)] text-carbon'
-              : 'bg-transparent text-black/58 hover:bg-[var(--surface-hover)] hover:text-carbon'
-          }`}
-          type="button"
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={activeTab === 'session'}
           onclick={() => {
             if (!dialogBusy()) {
               activeTab = 'session'
             }
           }}
           disabled={dialogBusy()}
-          aria-pressed={activeTab === 'session'}
+          ariaPressed={activeTab === 'session'}
         >
           <span class="i-lucide-zap h-3.5 w-3.5"></span>
           <span>{copy.wakeQuota}</span>
-        </button>
-        <button
-          class={`wake-tab-button inline-flex items-center gap-1.5 rounded-[0.35rem] px-3 py-1.5 text-xs font-medium transition-colors duration-150 ${
-            activeTab === 'schedule'
-              ? 'bg-[var(--panel-strong)] text-carbon'
-              : 'bg-transparent text-black/58 hover:bg-[var(--surface-hover)] hover:text-carbon'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={activeTab === 'schedule'}
           onclick={() => {
             if (!dialogBusy()) {
               activeTab = 'schedule'
             }
           }}
           disabled={dialogBusy()}
-          aria-pressed={activeTab === 'schedule'}
+          ariaPressed={activeTab === 'schedule'}
         >
           <span class="i-lucide-calendar-clock h-3.5 w-3.5"></span>
           <span>{copy.wakeSchedule}</span>
-        </button>
+        </AppButton>
       </div>
 
       {#if activeTab === 'session'}
@@ -266,21 +260,20 @@
                 <span class="text-xs font-medium text-muted-strong">
                   {copy.wakeQuotaPromptLabel}
                 </span>
-                <textarea
-                  class="theme-select wake-dialog-field min-h-28 rounded-[0.4rem] border border-black/8 bg-transparent px-3.5 py-3 text-sm text-carbon outline-none transition hover:bg-[var(--surface-hover)] focus-visible:border-black/20 focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-black/5"
+                <AppInput
+                  multiline
+                  class="min-h-28"
                   bind:value={sessionPrompt}
                   placeholder={copy.wakeQuotaPromptPlaceholder}
                   disabled={dialogBusy()}
-                ></textarea>
+                />
               </label>
 
               <label class="grid gap-1.5">
                 <span class="text-xs font-medium text-muted-strong">
                   {copy.wakeQuotaModelLabel}
                 </span>
-                <input
-                  class="theme-select wake-dialog-field rounded-[0.4rem] border border-black/8 bg-transparent px-3.5 py-3 text-sm text-carbon outline-none transition hover:bg-[var(--surface-hover)] focus-visible:border-black/20 focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-black/5"
-                  type="text"
+                <AppInput
                   bind:value={sessionModel}
                   placeholder={copy.wakeQuotaModelPlaceholder}
                   disabled={dialogBusy()}
@@ -336,17 +329,12 @@
           </div>
 
           <div class="flex justify-end gap-2" data-wake-motion>
-            <button
-              class={compactGhostButton}
-              type="button"
-              onclick={requestClose}
-              disabled={dialogBusy()}
-            >
+            <AppButton variant="secondary" size="sm" onclick={requestClose} disabled={dialogBusy()}>
               {copy.cancel}
-            </button>
-            <button
-              class={primaryActionButton}
-              type="button"
+            </AppButton>
+            <AppButton
+              variant="primary"
+              size="sm"
               onclick={onSubmitSession}
               disabled={dialogBusy()}
             >
@@ -354,7 +342,7 @@
                 <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
               {/if}
               <span>{copy.wakeQuotaConfirm}</span>
-            </button>
+            </AppButton>
           </div>
         </div>
       {:else}
@@ -383,16 +371,16 @@
                   <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
                     {copy.wakeScheduleTimes}
                   </span>
-                  <button
-                    class="wake-icon-button"
-                    type="button"
+                  <AppButton
+                    variant="icon"
+                    size="md"
                     onclick={addTime}
                     disabled={dialogBusy()}
-                    aria-label={copy.wakeScheduleAddTime}
+                    ariaLabel={copy.wakeScheduleAddTime}
                     title={copy.wakeScheduleAddTime}
                   >
                     <span class="i-lucide-plus h-4 w-4"></span>
-                  </button>
+                  </AppButton>
                 </div>
 
                 <div class="grid gap-1.5">
@@ -400,25 +388,25 @@
                     <div
                       class="wake-time-row grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2"
                     >
-                      <input
-                        class="theme-select wake-dialog-field h-9 min-w-0 rounded-[0.4rem] border border-black/8 bg-transparent px-3 text-sm tabular-nums text-carbon outline-none transition hover:bg-[var(--surface-hover)] focus-visible:border-black/20 focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-black/5"
-                        type="text"
+                      <AppInput
+                        class="min-w-0"
+                        inputClass="tabular-nums"
                         value={timeValue}
                         placeholder={copy.wakeScheduleTimePlaceholder}
                         disabled={dialogBusy()}
                         oninput={(event) =>
                           updateTime(timeIndex, (event.currentTarget as HTMLInputElement).value)}
                       />
-                      <button
-                        class="wake-icon-button"
-                        type="button"
+                      <AppButton
+                        variant="icon"
+                        size="md"
                         onclick={() => removeTime(timeIndex)}
                         disabled={dialogBusy()}
-                        aria-label={copy.wakeScheduleRemoveTime}
+                        ariaLabel={copy.wakeScheduleRemoveTime}
                         title={copy.wakeScheduleRemoveTime}
                       >
                         <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
-                      </button>
+                      </AppButton>
                     </div>
                   {/each}
                 </div>
@@ -429,20 +417,19 @@
                   <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
                     {copy.wakeQuotaPromptLabel}
                   </span>
-                  <textarea
-                    class="theme-select wake-dialog-field min-h-24 rounded-[0.4rem] border border-black/8 bg-transparent px-3 py-2.5 text-sm text-carbon outline-none transition hover:bg-[var(--surface-hover)] focus-visible:border-black/20 focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-black/5"
+                  <AppInput
+                    multiline
+                    class="min-h-24"
                     bind:value={schedulePrompt}
                     placeholder={copy.wakeQuotaPromptPlaceholder}
                     disabled={dialogBusy()}
-                  ></textarea>
+                  />
                 </label>
                 <label class="grid content-start gap-1.5">
                   <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
                     {copy.wakeQuotaModelLabel}
                   </span>
-                  <input
-                    class="theme-select wake-dialog-field h-9 rounded-[0.4rem] border border-black/8 bg-transparent px-3 text-sm text-carbon outline-none transition hover:bg-[var(--surface-hover)] focus-visible:border-black/20 focus-visible:bg-transparent focus-visible:ring-2 focus-visible:ring-black/5"
-                    type="text"
+                  <AppInput
                     bind:value={scheduleModel}
                     placeholder={copy.wakeQuotaModelPlaceholder}
                     disabled={dialogBusy()}
@@ -501,27 +488,27 @@
           </div>
 
           <div class="flex items-center justify-between gap-3" data-wake-motion>
-            <button
-              class="theme-select wake-compact-button rounded-[0.35rem] border border-black/10 px-2.5 py-1.5 text-xs font-medium"
-              type="button"
+            <AppButton
+              variant="danger"
+              size="sm"
               onclick={onDeleteSchedule}
               disabled={dialogBusy() || !schedule}
             >
               {copy.wakeScheduleDelete}
-            </button>
+            </AppButton>
 
             <div class="flex justify-end gap-2">
-              <button
-                class={compactGhostButton}
-                type="button"
+              <AppButton
+                variant="secondary"
+                size="sm"
                 onclick={requestClose}
                 disabled={dialogBusy()}
               >
                 {copy.cancel}
-              </button>
-              <button
-                class={primaryActionButton}
-                type="button"
+              </AppButton>
+              <AppButton
+                variant="primary"
+                size="sm"
                 onclick={onSaveSchedule}
                 disabled={dialogBusy()}
               >
@@ -529,7 +516,7 @@
                   <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
                 {/if}
                 <span>{copy.wakeScheduleSave}</span>
-              </button>
+              </AppButton>
             </div>
           </div>
         </div>
@@ -573,48 +560,8 @@
     background: transparent;
   }
 
-  .wake-tab-button[aria-pressed='true'] {
-    border: 1px solid var(--color-arctic-mist);
-    box-shadow: none;
-  }
-
-  .wake-dialog-panel :global(.wake-dialog-field),
-  .wake-dialog-panel :global(.wake-compact-button),
-  .wake-dialog-panel :global(.wake-icon-button),
   .wake-dialog-panel :global(.theme-code-surface) {
     box-shadow: none !important;
-  }
-
-  .wake-icon-button.wake-icon-button {
-    display: inline-flex !important;
-    width: 2.25rem !important;
-    height: 2.25rem !important;
-    flex: 0 0 2.25rem !important;
-    align-items: center !important;
-    justify-content: center !important;
-    padding: 0 !important;
-    border: 1px solid var(--line-strong) !important;
-    border-radius: 0.35rem !important;
-    background: color-mix(in srgb, var(--panel-strong) 82%, var(--color-snow)) !important;
-    color: var(--color-carbon) !important;
-    opacity: 1 !important;
-    box-shadow: none !important;
-  }
-
-  .wake-icon-button.wake-icon-button:hover:not(:disabled) {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  .wake-icon-button.wake-icon-button :global([class*='i-lucide-']) {
-    display: inline-block !important;
-    background-color: currentColor !important;
-    color: inherit !important;
-    opacity: 1 !important;
-  }
-
-  .wake-dialog-panel :global(.wake-dialog-field) {
-    background: transparent !important;
   }
 
   .wake-dialog-panel :global(.theme-code-surface) {
@@ -627,22 +574,17 @@
   }
 
   :global(html[data-theme='dark']) .wake-dialog-backdrop {
-    background: color-mix(in srgb, black 48%, transparent) !important;
+    background: color-mix(in srgb, black 72%, transparent) !important;
+    backdrop-filter: blur(5px);
   }
 
   :global(html[data-theme='dark']) .wake-dialog-panel {
-    box-shadow: 0 12px 30px -28px rgb(0 0 0 / 0.76) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-dialog-field {
-    border-color: var(--color-arctic-mist) !important;
-    background: transparent !important;
-    box-shadow: none !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-dialog-field::placeholder {
-    color: var(--ink-faint) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 92%, white 8%) !important;
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--color-fog) 16%) !important;
+    box-shadow:
+      0 28px 90px rgb(0 0 0 / 0.88),
+      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 62%, transparent),
+      inset 0 1px 0 rgb(255 255 255 / 0.06) !important;
   }
 
   :global(html[data-theme='dark']) .wake-status-running {
@@ -663,21 +605,6 @@
   :global(html[data-theme='dark']) .wake-status-error {
     background: rgb(239 68 68 / 0.16) !important;
     color: rgb(252 165 165) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-tab-button {
-    color: var(--ink-soft-strong) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-tab-button:hover:not(:disabled) {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-tab-button[aria-pressed='true'] {
-    border-color: var(--line-strong) !important;
-    background: color-mix(in srgb, var(--panel-strong) 88%, var(--color-snow) 12%) !important;
-    color: var(--color-carbon) !important;
   }
 
   :global(html[data-theme='dark']) .wake-dialog-panel :global(.theme-code-surface) {

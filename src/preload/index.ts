@@ -12,6 +12,7 @@ import type {
   CopyCodexSkillInput,
   CopyCodexSkillResult,
   CreateCustomProviderInput,
+  CreatePromptInput,
   CustomProviderDetail,
   CodexSessionDetail,
   CodexSessionProjectsResult,
@@ -20,8 +21,14 @@ import type {
   CodexSkillsResult,
   ListCodexSessionProjectsInput,
   ListCodexSessionsInput,
+  PromptCategoryList,
+  PromptDetail,
+  PromptImportResult,
+  PromptSearchInput,
+  PromptSummary,
   ReadCodexSessionDetailInput,
   UpdateCustomProviderInput,
+  UpdatePromptInput,
   LoginEvent,
   LoginMethod,
   PortOccupant,
@@ -102,6 +109,33 @@ const codexApp = {
     ipcRenderer.invoke('codex:read-skill-detail', instanceId, skillDirName),
   copyCodexSkill: (input: CopyCodexSkillInput): Promise<CopyCodexSkillResult> =>
     ipcRenderer.invoke('codex:copy-skill', input),
+  // Prompt management
+  listPrompts: (input?: PromptSearchInput): Promise<PromptSummary[]> =>
+    ipcRenderer.invoke('codex:prompt-list', input),
+  getPromptDetail: (promptId: string): Promise<PromptDetail> =>
+    ipcRenderer.invoke('codex:prompt-detail', promptId),
+  createPrompt: (input: CreatePromptInput): Promise<PromptDetail> =>
+    ipcRenderer.invoke('codex:prompt-create', input),
+  updatePrompt: (promptId: string, input: UpdatePromptInput): Promise<PromptDetail> =>
+    ipcRenderer.invoke('codex:prompt-update', promptId, input),
+  removePrompt: (promptId: string): Promise<void> =>
+    ipcRenderer.invoke('codex:prompt-remove', promptId),
+  copyPromptContent: (promptId: string): Promise<string> =>
+    ipcRenderer.invoke('codex:prompt-copy', promptId),
+  listPromptCategories: (): Promise<PromptCategoryList> =>
+    ipcRenderer.invoke('codex:prompt-category-list'),
+  createPromptCategory: (name: string): Promise<PromptCategoryList> =>
+    ipcRenderer.invoke('codex:prompt-category-create', name),
+  renamePromptCategory: (oldName: string, newName: string): Promise<PromptCategoryList> =>
+    ipcRenderer.invoke('codex:prompt-category-rename', oldName, newName),
+  removePromptCategory: (name: string): Promise<PromptCategoryList> =>
+    ipcRenderer.invoke('codex:prompt-category-remove', name),
+  importPromptFile: (filePath: string): Promise<PromptImportResult> =>
+    ipcRenderer.invoke('codex:prompt-import-file', filePath),
+  importPromptDir: (dirPath: string): Promise<PromptImportResult> =>
+    ipcRenderer.invoke('codex:prompt-import-dir', dirPath),
+  exportPromptDir: (targetDir: string): Promise<{ exported: number }> =>
+    ipcRenderer.invoke('codex:prompt-export-dir', targetDir),
   getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
   startLocalGateway: () => ipcRenderer.invoke('codex:start-local-gateway'),
   stopLocalGateway: () => ipcRenderer.invoke('codex:stop-local-gateway'),

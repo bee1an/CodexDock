@@ -6,11 +6,11 @@
     CreateCodexInstanceInput,
     UpdateCodexInstanceInput
   } from '../../../shared/codex'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
   import type { LocalizedCopy } from './app-view'
 
   export let panelClass: string
-  export let primaryActionButton: string
-  export let compactGhostButton: string
   export let copy: LocalizedCopy
   export let instances: CodexInstanceSummary[] = []
   export let defaults: CodexInstanceDefaults
@@ -116,14 +116,12 @@
 
     <div class="theme-soft-panel grid gap-3 rounded-2xl border border-black/8 p-4">
       <div class="grid gap-3 md:grid-cols-2">
-        <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+        <AppInput
           bind:value={newInstanceName}
           placeholder={copy.instanceNamePlaceholder}
           disabled={busy}
         />
-        <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+        <AppInput
           bind:value={newInstanceDir}
           placeholder={copy.instanceDirPlaceholder}
           disabled={busy}
@@ -131,8 +129,7 @@
       </div>
 
       <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_220px_auto]">
-        <input
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+        <AppInput
           bind:value={newInstanceArgs}
           placeholder={copy.instanceArgsPlaceholder}
           disabled={busy}
@@ -147,9 +144,9 @@
             <option value={account.id}>{account.email ?? account.name ?? account.id}</option>
           {/each}
         </select>
-        <button class={primaryActionButton} onclick={() => void submitCreate()} disabled={busy}>
+        <AppButton variant="primary" size="md" onclick={() => void submitCreate()} disabled={busy}>
           {copy.createInstance}
-        </button>
+        </AppButton>
       </div>
 
       <div class="text-xs text-faint">
@@ -177,8 +174,7 @@
 
           <div class="grid gap-3 md:grid-cols-2">
             {#if !instance.isDefault}
-              <input
-                class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              <AppInput
                 bind:value={drafts[instance.id].name}
                 placeholder={copy.instanceNamePlaceholder}
                 disabled={busy}
@@ -197,33 +193,39 @@
             </select>
           </div>
 
-          <input
-            class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          <AppInput
             bind:value={drafts[instance.id].extraArgs}
             placeholder={copy.instanceArgsPlaceholder}
             disabled={busy}
           />
 
           <div class="flex flex-wrap items-center gap-2">
-            <button class={compactGhostButton} onclick={() => void save(instance)} disabled={busy}>
+            <AppButton
+              variant="secondary"
+              size="sm"
+              onclick={() => void save(instance)}
+              disabled={busy}
+            >
               {copy.saveInstance}
-            </button>
-            <button
-              class={compactGhostButton}
+            </AppButton>
+            <AppButton
+              variant="secondary"
+              size="sm"
               onclick={() =>
                 void (instance.running ? stopInstance(instance.id) : startInstance(instance.id))}
               disabled={busy}
             >
               {instance.running ? copy.stopInstance : copy.startInstance}
-            </button>
+            </AppButton>
             {#if !instance.isDefault}
-              <button
-                class={compactGhostButton}
+              <AppButton
+                variant="danger"
+                size="sm"
                 onclick={() => void confirmRemove(instance)}
                 disabled={busy}
               >
                 {copy.deleteInstance}
-              </button>
+              </AppButton>
             {/if}
           </div>
         </article>

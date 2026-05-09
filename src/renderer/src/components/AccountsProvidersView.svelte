@@ -4,10 +4,11 @@
   import type { CustomProviderSummary } from '../../../shared/codex'
   import { providerLabel, type LocalizedCopy } from './app-view'
   import type { ProviderDraft } from './accounts-panel-provider'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
 
   export let copy: LocalizedCopy
-  export let iconRowButton: string
   export let providers: CustomProviderSummary[] = []
   export let sortableProviders: CustomProviderSummary[] = []
   export let flipDurationMs = 160
@@ -31,7 +32,7 @@
 </script>
 
 {#if providers.length}
-  <div class="min-h-0 flex-1 overflow-y-auto pr-1">
+  <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
     <div
       class="grid gap-2"
       use:dragHandleZone={{
@@ -58,7 +59,7 @@
           aria-label={providerLabel(provider, copy)}
         >
           <button
-            class={`${iconRowButton} h-8 w-8 self-center text-black/42 ${sortableProviders.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
+            class={`provider-drag-button self-center ${sortableProviders.length > 1 ? 'cursor-grab active:cursor-grabbing' : ''}`}
             type="button"
             use:dragHandle
             aria-label={`${copy.dragSortHandle} · ${providerLabel(provider, copy)}`}
@@ -74,26 +75,22 @@
                 <div
                   class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]"
                 >
-                  <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  <AppInput
                     bind:value={providerDrafts[provider.id].name}
                     placeholder={copy.providerNamePlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
-                  <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  <AppInput
                     bind:value={providerDrafts[provider.id].baseUrl}
                     placeholder={copy.providerBaseUrlPlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
-                  <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  <AppInput
                     bind:value={providerDrafts[provider.id].model}
                     placeholder={copy.providerModelPlaceholder}
                     disabled={loginActionBusy || providerMutationBusy}
                   />
-                  <input
-                    class="theme-provider-input rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+                  <AppInput
                     type="password"
                     bind:value={providerDrafts[provider.id].apiKey}
                     placeholder={copy.providerApiKeyPlaceholder}
@@ -158,30 +155,33 @@
                 />
                 <span>{copy.providerFastMode}</span>
               </label>
-              <button
-                class={iconRowButton}
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={() => void saveProvider(provider)}
                 disabled={loginActionBusy || providerMutationBusy}
-                aria-label={`${copy.saveProvider} · ${providerLabel(provider, copy)}`}
+                ariaLabel={`${copy.saveProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.saveProvider}
               >
                 <span class="i-lucide-check h-4 w-4"></span>
-              </button>
-              <button
-                class={iconRowButton}
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={cancelEditingProvider}
                 disabled={loginActionBusy || providerMutationBusy}
-                aria-label={`${copy.cancel} · ${providerLabel(provider, copy)}`}
+                ariaLabel={`${copy.cancel} · ${providerLabel(provider, copy)}`}
                 title={copy.cancel}
               >
                 <span class="i-lucide-x h-4 w-4"></span>
-              </button>
+              </AppButton>
             {:else}
-              <button
-                class={iconRowButton}
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={() => void openProviderInCodex(provider.id)}
                 disabled={loginActionBusy || providerActionBusy(provider.id)}
-                aria-label={`${copy.openCustomProvider} · ${providerLabel(provider, copy)}`}
+                ariaLabel={`${copy.openCustomProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.openCustomProvider}
               >
                 {#if openingProviderId === provider.id}
@@ -189,25 +189,27 @@
                 {:else}
                   <span class="i-lucide-plug-zap h-4 w-4"></span>
                 {/if}
-              </button>
-              <button
-                class={iconRowButton}
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={() => void startEditingProvider(provider)}
                 disabled={loginActionBusy || providerMutationBusy}
-                aria-label={`${copy.editProvider} · ${providerLabel(provider, copy)}`}
+                ariaLabel={`${copy.editProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.editProvider}
               >
                 <span class="i-lucide-pencil h-4 w-4"></span>
-              </button>
-              <button
-                class={iconRowButton}
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={() => void confirmRemoveProvider(provider)}
                 disabled={loginActionBusy || providerMutationBusy}
-                aria-label={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
+                ariaLabel={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.deleteProvider}
               >
                 <span class="i-lucide-trash-2 h-4 w-4"></span>
-              </button>
+              </AppButton>
             {/if}
           </div>
         </article>
@@ -216,13 +218,51 @@
   </div>
 {:else}
   <div
-    class="theme-tag-empty flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.4rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-8 text-center"
+    class="theme-tag-empty mx-4 mb-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.4rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-8 text-center"
   >
     <p class="text-sm text-muted-strong">{copy.noProviders}</p>
   </div>
 {/if}
 
 <style>
+  .provider-drag-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2rem;
+    min-width: 2rem;
+    height: 2rem;
+    min-height: 2rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.38rem;
+    background: transparent;
+    color: var(--ink-faint);
+    padding: 0;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      opacity 140ms ease;
+  }
+
+  .provider-drag-button:hover:not(:disabled),
+  .provider-drag-button:focus-visible {
+    border-color: var(--line-strong);
+    background: var(--surface-hover);
+    color: var(--color-carbon);
+  }
+
+  .provider-drag-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
+  }
+
+  :global(html[data-theme='dark']) .provider-drag-button {
+    border-color: var(--color-arctic-mist);
+    color: var(--ink-soft);
+  }
+
   :global(html[data-theme='dark']) .theme-tag-empty {
     background: var(--panel-strong) !important;
     border-color: var(--color-arctic-mist) !important;

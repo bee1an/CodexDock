@@ -448,3 +448,94 @@ export function parseInstanceOptions(argv: string[]): {
 
   return { input, positionals }
 }
+
+export interface PromptCliOptions {
+  title?: string
+  content?: string
+  file?: string
+  categories: string[]
+  clearCategories: boolean
+  query?: string
+  dir?: string
+  positionals: string[]
+}
+
+export function parsePromptOptions(argv: string[]): PromptCliOptions {
+  const options: PromptCliOptions = {
+    categories: [],
+    clearCategories: false,
+    positionals: []
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+
+    if (arg === '--title') {
+      if (!value) {
+        throw new CliError('Missing value for --title', EXIT_USAGE)
+      }
+      options.title = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--content') {
+      if (!value) {
+        throw new CliError('Missing value for --content', EXIT_USAGE)
+      }
+      options.content = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--file') {
+      if (!value) {
+        throw new CliError('Missing value for --file', EXIT_USAGE)
+      }
+      options.file = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--category') {
+      if (!value) {
+        throw new CliError('Missing value for --category', EXIT_USAGE)
+      }
+      options.categories.push(value)
+      index += 1
+      continue
+    }
+
+    if (arg === '--clear-categories') {
+      options.clearCategories = true
+      continue
+    }
+
+    if (arg === '--query') {
+      if (!value) {
+        throw new CliError('Missing value for --query', EXIT_USAGE)
+      }
+      options.query = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--dir') {
+      if (!value) {
+        throw new CliError('Missing value for --dir', EXIT_USAGE)
+      }
+      options.dir = value
+      index += 1
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    options.positionals.push(arg)
+  }
+
+  return options
+}

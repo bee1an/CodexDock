@@ -987,3 +987,45 @@ export function statusBarAccounts(
 
   return accounts.slice(0, 1)
 }
+
+// --- Prompt 模块类型 ---
+
+export interface PromptSummary {
+  id: string
+  title: string
+  categories: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface PromptDetail extends PromptSummary {
+  content: string
+}
+
+export interface CreatePromptInput {
+  title: string
+  content: string
+  categories?: string[]
+}
+
+export interface UpdatePromptInput {
+  title?: string
+  content?: string
+  categories?: string[]
+  clearCategories?: boolean
+}
+
+export interface PromptSearchInput {
+  query?: string
+  category?: string
+}
+
+export interface PromptImportResult {
+  imported: number
+  skipped: number
+  errors: string[]
+}
+
+export interface PromptCategoryList {
+  categories: string[]
+}

@@ -10,7 +10,9 @@
     CopyCodexSkillResult
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
+  import AppInput from './AppInput.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
 
   export let copy: LocalizedCopy
@@ -209,11 +211,11 @@
 </script>
 
 <div
-  class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-1"
+  class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
   use:reveal={{ delay: 0.02 }}
 >
   <!-- Header -->
-  <section class="grid gap-2 px-1 py-1">
+  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.skillsTitle}</p>
@@ -224,38 +226,37 @@
           <p class="text-[11px] text-faint">{copy.sessionsScannedAt(formatScannedAt(scannedAt))}</p>
         {/if}
       </div>
-      <button
-        class="skills-toolbar-button"
-        type="button"
-        onclick={() => void loadSkills()}
-        disabled={loading}
-      >
+      <AppButton variant="toolbar" size="sm" onclick={() => void loadSkills()} disabled={loading}>
         <span
           class={`${loading ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
         ></span>
         <span>{loading ? copy.refreshing : copy.skillsRefresh}</span>
-      </button>
+      </AppButton>
     </div>
 
     <div class="flex min-h-8 flex-wrap items-center gap-2 pt-1">
       <div
         class="skills-filter-shell inline-flex min-w-0 max-w-full items-center gap-0 overflow-x-auto rounded-[0.4rem] p-0.5"
       >
-        <button
-          class={`skills-tab ${selectedInstanceId === 'all' ? 'is-active' : ''}`}
-          type="button"
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={selectedInstanceId === 'all'}
+          ariaPressed={selectedInstanceId === 'all'}
           onclick={() => {
             selectedInstanceId = 'all'
           }}
         >
           {copy.skillsAllInstances}
-        </button>
+        </AppButton>
         {#each instances as instance (instance.id)}
           {@const instanceSkillCount = skillCountByInstance[instance.id] ?? 0}
           {#if instanceSkillCount > 0 || instance.isDefault}
-            <button
-              class={`skills-tab ${selectedInstanceId === instance.id ? 'is-active' : ''}`}
-              type="button"
+            <AppButton
+              variant="filter"
+              size="sm"
+              selected={selectedInstanceId === instance.id}
+              ariaPressed={selectedInstanceId === instance.id}
               onclick={() => {
                 selectedInstanceId = instance.id
               }}
@@ -264,21 +265,21 @@
               {#if instanceSkillCount > 0}
                 <span class="skills-tab-count">{instanceSkillCount}</span>
               {/if}
-            </button>
+            </AppButton>
           {/if}
         {/each}
       </div>
 
       <div class="flex-1"></div>
 
-      <label class="skills-search inline-flex items-center rounded-[0.35rem] px-2 py-1.5">
-        <span class="i-lucide-search h-3.5 w-3.5 text-faint"></span>
-        <input
-          class="ml-1.5 w-44 bg-transparent text-xs text-carbon outline-none placeholder:text-faint"
-          placeholder={copy.skillsSearchPlaceholder}
-          bind:value={searchQuery}
-        />
-      </label>
+      <AppInput
+        variant="search"
+        size="sm"
+        icon="i-lucide-search"
+        class="w-44"
+        placeholder={copy.skillsSearchPlaceholder}
+        bind:value={searchQuery}
+      />
     </div>
 
     {#if error}
@@ -351,13 +352,13 @@
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <span class="i-lucide-puzzle h-3.5 w-3.5 flex-none text-faint"></span>
-                    <button
-                      class="skills-title-button truncate text-sm font-semibold"
-                      type="button"
+                    <AppButton
+                      variant="link"
+                      class="min-w-0 truncate text-sm font-semibold"
                       onclick={() => void openDetail(skill)}
                     >
                       {skill.name}
-                    </button>
+                    </AppButton>
                   </div>
                   {#if skill.description}
                     <p class="skills-card-description mt-0.5 truncate pl-5.5 text-xs">
@@ -370,22 +371,22 @@
                 </div>
 
                 <div class="skills-card-actions">
-                  <button
-                    class="skills-icon-button"
-                    type="button"
-                    aria-label={copy.skillsDetail}
+                  <AppButton
+                    variant="icon"
+                    size="xs"
+                    ariaLabel={copy.skillsDetail}
                     onclick={() => void openDetail(skill)}
                   >
                     <span class="i-lucide-eye h-3.5 w-3.5"></span>
-                  </button>
-                  <button
-                    class="skills-icon-button"
-                    type="button"
-                    aria-label={copy.skillsCopyToInstance}
+                  </AppButton>
+                  <AppButton
+                    variant="icon"
+                    size="xs"
+                    ariaLabel={copy.skillsCopyToInstance}
                     onclick={() => openCopyDialog(skill)}
                   >
                     <span class="i-lucide-copy h-3.5 w-3.5"></span>
-                  </button>
+                  </AppButton>
                 </div>
               </article>
             {/each}
@@ -438,9 +439,9 @@
         </div>
 
         <div class="flex justify-end gap-2 pt-2">
-          <button
-            class="skills-secondary-button"
-            type="button"
+          <AppButton
+            variant="secondary"
+            size="sm"
             onclick={() => {
               const skill = detailSkill
               closeDetail()
@@ -451,10 +452,10 @@
           >
             <span class="i-lucide-copy-plus h-3.5 w-3.5"></span>
             <span>{copy.skillsCopyToInstance}</span>
-          </button>
-          <button class="skills-secondary-button" type="button" onclick={closeDetail}>
+          </AppButton>
+          <AppButton variant="secondary" size="sm" onclick={closeDetail}>
             {copy.closeDialog}
-          </button>
+          </AppButton>
         </div>
       </div>
     {/if}
@@ -552,12 +553,12 @@
         {/if}
 
         <div class="skills-copy-actions flex justify-end gap-2 pt-1">
-          <button class="skills-secondary-button" type="button" onclick={closeCopyDialog}>
+          <AppButton variant="secondary" size="sm" onclick={closeCopyDialog}>
             {copy.skillsCopyCancel}
-          </button>
-          <button
-            class="skills-confirm-button"
-            type="button"
+          </AppButton>
+          <AppButton
+            variant="primary"
+            size="sm"
             onclick={() => void executeCopy()}
             disabled={copyTargetIds.length === 0 || copyBusy}
           >
@@ -567,7 +568,7 @@
               <span class="i-lucide-copy h-3.5 w-3.5"></span>
             {/if}
             <span>{copy.skillsCopyConfirm}</span>
-          </button>
+          </AppButton>
         </div>
       </div>
     </div>
@@ -584,37 +585,6 @@
     display: none;
   }
 
-  .skills-tab {
-    appearance: none;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    gap: 0.3rem;
-    border: 0;
-    border-radius: 0.35rem;
-    background: transparent;
-    color: var(--ink-faint);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.72rem;
-    font-weight: 650;
-    line-height: 1;
-    padding: 0.34rem 0.52rem;
-    transition:
-      background-color 140ms ease,
-      color 140ms ease;
-  }
-
-  .skills-tab:hover {
-    background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
-    color: var(--ink-soft-strong);
-  }
-
-  .skills-tab.is-active {
-    background: color-mix(in srgb, var(--color-carbon) 5%, transparent);
-    color: var(--color-carbon);
-  }
-
   .skills-tab-count {
     border-radius: 999px;
     background: color-mix(in srgb, var(--color-carbon) 7%, transparent);
@@ -623,64 +593,6 @@
     font-weight: 700;
     line-height: 1;
     padding: 0.15rem 0.35rem;
-  }
-
-  .skills-search {
-    background: transparent;
-    color: var(--ink-faint);
-    transition:
-      background-color 140ms ease,
-      box-shadow 140ms ease;
-  }
-
-  .skills-search:hover {
-    background: color-mix(in srgb, var(--surface-hover) 34%, transparent);
-  }
-
-  .skills-search:focus-within {
-    background: color-mix(in srgb, var(--surface-hover) 48%, transparent);
-    box-shadow: inset 0 -1px 0 color-mix(in srgb, var(--line-strong) 82%, transparent);
-  }
-
-  .skills-search input {
-    border: 0;
-    box-shadow: none;
-  }
-
-  .skills-search input:focus {
-    outline: none;
-    box-shadow: none;
-  }
-
-  .skills-toolbar-button {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    border: 0;
-    border-radius: 0.35rem;
-    background: transparent;
-    color: var(--ink-faint);
-    cursor: pointer;
-    font: inherit;
-    font-size: 0.75rem;
-    font-weight: 650;
-    padding: 0.35rem 0.45rem;
-    transition:
-      background-color 140ms ease,
-      color 140ms ease,
-      opacity 140ms ease;
-  }
-
-  .skills-toolbar-button:hover,
-  .skills-toolbar-button:focus-visible {
-    background: color-mix(in srgb, var(--surface-hover) 42%, transparent);
-    color: var(--ink-soft-strong);
-  }
-
-  .skills-toolbar-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.58;
   }
 
   .skills-card {
@@ -703,25 +615,6 @@
     background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
   }
 
-  .skills-title-button {
-    appearance: none;
-    min-width: 0;
-    border: 0;
-    background: transparent;
-    color: var(--color-carbon);
-    cursor: pointer;
-    font: inherit;
-    padding: 0;
-    text-align: left;
-  }
-
-  .skills-title-button:hover,
-  .skills-title-button:focus-visible {
-    color: var(--color-carbon);
-    text-decoration: underline;
-    text-underline-offset: 2px;
-  }
-
   .skills-card-description {
     color: var(--ink-soft-strong);
   }
@@ -738,32 +631,6 @@
   .skills-card:hover .skills-card-actions,
   .skills-card:focus-within .skills-card-actions {
     opacity: 1;
-  }
-
-  .skills-icon-button {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.65rem;
-    height: 1.65rem;
-    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    border-radius: 0.38rem;
-    background: transparent;
-    color: var(--ink-faint);
-    cursor: pointer;
-    padding: 0;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease;
-  }
-
-  .skills-icon-button:hover,
-  .skills-icon-button:focus-visible {
-    border-color: var(--line-strong);
-    background: var(--surface-hover);
-    color: var(--color-carbon);
   }
 
   .skills-detail-meta {
@@ -865,60 +732,6 @@
     border-radius: 0.45rem;
     padding: 0.62rem 0.75rem;
     font-size: 0.72rem;
-  }
-
-  .skills-secondary-button,
-  .skills-confirm-button {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    border-radius: 0.45rem;
-    cursor: pointer;
-    font: inherit;
-    font-weight: 650;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease,
-      opacity 140ms ease;
-  }
-
-  .skills-secondary-button {
-    min-height: 2.1rem;
-    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
-    background: transparent;
-    color: var(--ink-soft-strong);
-    font-size: 0.8125rem;
-    padding: 0.42rem 0.68rem;
-  }
-
-  .skills-secondary-button:hover,
-  .skills-secondary-button:focus-visible {
-    border-color: var(--line-strong);
-    background: var(--surface-hover);
-    color: var(--color-carbon);
-  }
-
-  .skills-confirm-button {
-    min-height: 2.2rem;
-    border: 1px solid color-mix(in srgb, var(--color-carbon) 72%, transparent);
-    background: var(--color-carbon);
-    color: var(--color-snow);
-    font-size: 0.8125rem;
-    padding: 0.48rem 0.85rem;
-  }
-
-  .skills-confirm-button:hover,
-  .skills-confirm-button:focus-visible {
-    border-color: var(--color-carbon);
-    background: color-mix(in srgb, var(--color-carbon) 88%, var(--surface-soft));
-  }
-
-  .skills-confirm-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
   }
 
   :global(.skills-dialog-panel) {

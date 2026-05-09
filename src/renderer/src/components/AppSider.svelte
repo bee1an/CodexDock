@@ -10,6 +10,7 @@
     LoginMethod
   } from '../../../shared/codex'
   import { accountEmail, nextTheme, themeTitle, type LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
   import FloatingSelect from './FloatingSelect.svelte'
 
   type ThemeTransitionOrigin = {
@@ -27,7 +28,6 @@
   export let appMeta: AppMeta
   export let language: AppLanguage
   export let theme: AppTheme
-  export let iconToolbarButton: string
   export let loginStarting = false
   export let loginActionBusy = false
   export let refreshingAllUsage = false
@@ -235,67 +235,80 @@
       role="toolbar"
       aria-label={toolbarLabel}
     >
-      <button
-        class={`${iconToolbarButton} theme-sider-collapse-button`}
-        type="button"
-        on:click={collapseToolbar}
-        aria-label={collapseLabel}
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-collapse-button"
+        onclick={collapseToolbar}
+        ariaLabel={collapseLabel}
         title={collapseLabel}
       >
         <span class="i-lucide-chevron-down h-4.5 w-4.5"></span>
-      </button>
+      </AppButton>
 
       <div class="theme-sider-divider h-6 w-px bg-black/8" aria-hidden="true"></div>
 
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={() => startLogin('browser')}
-        aria-label={copy.callbackLogin}
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={() => startLogin('browser')}
+        ariaLabel={copy.callbackLogin}
         title={copy.callbackLogin}
       >
         <span
           class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
         ></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={() => startLogin('device')}
-        aria-label={copy.deviceLogin}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={() => startLogin('device')}
+        ariaLabel={copy.deviceLogin}
         title={copy.deviceLogin}
       >
         <span class="i-lucide-key-round h-4.5 w-4.5"></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={importCurrent}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={importCurrent}
         disabled={loginActionBusy}
-        aria-label={copy.importCurrent}
+        ariaLabel={copy.importCurrent}
         title={copy.importCurrent}
       >
         <span class="i-lucide-monitor-down h-4.5 w-4.5"></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={importAccountsFile}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={importAccountsFile}
         disabled={loginActionBusy}
-        aria-label={copy.importAccountsFile}
+        ariaLabel={copy.importAccountsFile}
         title={copy.importAccountsFile}
       >
         <span class="i-lucide-file-up h-4.5 w-4.5"></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={exportAccountsFile}
-        aria-label={copy.exportAccountsFile}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={exportAccountsFile}
+        ariaLabel={copy.exportAccountsFile}
         title={copy.exportAccountsFile}
       >
         <span class="i-lucide-file-down h-4.5 w-4.5"></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button relative`}
-        on:click={refreshAllRateLimits}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button relative"
+        onclick={refreshAllRateLimits}
         disabled={loginActionBusy || refreshingAllUsage}
-        aria-label={copy.refreshAllQuota}
+        ariaLabel={copy.refreshAllQuota}
         title={copy.refreshAllQuota}
       >
         <span class="t-icon-swap h-4.5 w-4.5" data-state={refreshingAllUsage ? 'b' : 'a'}>
@@ -305,12 +318,14 @@
         <span class="t-badge" data-open={refreshingAllUsage ? 'true' : 'false'} aria-hidden="true">
           <span class="t-badge-dot h-2 w-2 rounded-full bg-success"></span>
         </span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={activateBestAccount}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={activateBestAccount}
         disabled={loginActionBusy || !bestAccount || bestAccount.id === activeAccountId}
-        aria-label={copy.switchBest}
+        ariaLabel={copy.switchBest}
         title={bestAccount
           ? bestAccount.id === activeAccountId
             ? copy.alreadyBest
@@ -318,26 +333,30 @@
           : copy.noBestAccount}
       >
         <span class="i-lucide-sparkles h-4.5 w-4.5"></span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={toggleProviderComposer}
-        aria-label={copy.createProvider}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={toggleProviderComposer}
+        ariaLabel={copy.createProvider}
         title={copy.createProvider}
       >
         <span class="t-icon-swap h-4.5 w-4.5" data-state={showProviderComposer ? 'b' : 'a'}>
           <span class="t-icon i-lucide-plug-zap h-4.5 w-4.5" data-icon="a"></span>
           <span class="t-icon i-lucide-panel-top-close h-4.5 w-4.5" data-icon="b"></span>
         </span>
-      </button>
-      <button
-        class={`${iconToolbarButton} theme-sider-tool-button`}
-        on:click={toggleSettings}
-        aria-label={copy.settings}
+      </AppButton>
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-tool-button"
+        onclick={toggleSettings}
+        ariaLabel={copy.settings}
         title={copy.settings}
       >
         <span class="i-lucide-cog h-4.5 w-4.5"></span>
-      </button>
+      </AppButton>
 
       <div class="theme-sider-divider h-6 w-px bg-black/8" aria-hidden="true"></div>
 
@@ -355,10 +374,12 @@
         />
       </div>
 
-      <button
-        class={`${iconToolbarButton} theme-sider-utility-button`}
-        on:click={(event) => updateTheme(nextTheme(theme), themeOriginFromClick(event))}
-        aria-label={copy.switchTheme(themeTitle(theme, copy))}
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-utility-button"
+        onclick={(event) => updateTheme(nextTheme(theme), themeOriginFromClick(event))}
+        ariaLabel={copy.switchTheme(themeTitle(theme, copy))}
         title={copy.switchTheme(themeTitle(theme, copy))}
       >
         <span class="t-icon-swap h-4.5 w-4.5" data-state={theme === 'dark' ? 'b' : 'a'}>
@@ -368,31 +389,38 @@
           ></span>
           <span class="t-icon i-lucide-moon-star h-4.5 w-4.5" data-icon="b"></span>
         </span>
-      </button>
+      </AppButton>
 
-      <button
-        class={`${iconToolbarButton} theme-sider-utility-button`}
-        on:click={() => openExternalLink(appMeta.githubUrl ?? undefined)}
+      <AppButton
+        variant="icon"
+        size="md"
+        class="theme-sider-utility-button"
+        onclick={() => openExternalLink(appMeta.githubUrl ?? undefined)}
         disabled={!appMeta.githubUrl}
-        aria-label="GitHub"
+        ariaLabel="GitHub"
         title={appMeta.githubUrl ? copy.openGithub : copy.githubPending}
       >
         <span class="i-lucide-github h-4.5 w-4.5"></span>
-      </button>
+      </AppButton>
     </div>
   {:else}
-    <button
-      class={`${iconToolbarButton} theme-app-sider-collapsed rounded-[1rem] border border-black/8 bg-[var(--panel-strong)] ${toolbarIconMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
-      type="button"
+    <div
+      class="theme-app-sider-collapsed-frame"
       style={`--toolbar-x: ${collapsedDisplayOffset.x}px; --toolbar-y: ${collapsedDisplayOffset.y}px; transform: translate(var(--toolbar-x), var(--toolbar-y));`}
       transition:collapsedToolbarTransition
-      on:pointerdown={handleCollapsedPointerDown}
-      on:click={handleCollapsedClick}
-      aria-label={expandLabel}
-      title={expandLabel}
     >
-      <span class="i-lucide-panel-bottom-open h-4.5 w-4.5"></span>
-    </button>
+      <AppButton
+        variant="icon"
+        size="md"
+        class={`theme-app-sider-collapsed rounded-[1rem] border border-black/8 bg-[var(--panel-strong)] ${toolbarIconMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        onpointerdown={handleCollapsedPointerDown}
+        onclick={handleCollapsedClick}
+        ariaLabel={expandLabel}
+        title={expandLabel}
+      >
+        <span class="i-lucide-panel-bottom-open h-4.5 w-4.5"></span>
+      </AppButton>
+    </div>
   {/if}
 </div>
 
@@ -408,9 +436,13 @@
   }
 
   .theme-app-sider-rail,
-  .theme-app-sider-collapsed {
+  .theme-app-sider-collapsed-frame {
     grid-area: 1 / 1;
     color: var(--color-carbon);
+  }
+
+  .theme-app-sider-rail,
+  .theme-app-sider-collapsed {
     box-shadow: var(--elevation-2);
   }
 

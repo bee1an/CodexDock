@@ -7,6 +7,7 @@
     themeTitle,
     type LocalizedCopy
   } from './app-view'
+  import AppButton from './AppButton.svelte'
 
   type ThemeTransitionOrigin = {
     x?: number
@@ -19,8 +20,6 @@
   export let language: AppLanguage
   export let theme: AppTheme
   export let copy: LocalizedCopy
-  export let compactGhostButton: string
-  export let iconToolbarButton: string
   export let updateLanguage: (language: AppLanguage) => void
   export let updateTheme: (theme: AppTheme, origin?: ThemeTransitionOrigin) => void
   export let openExternalLink: (url?: string) => void
@@ -104,9 +103,9 @@
       {/if}
 
       {#if updateActionLabel() && updateAction()}
-        <button class={compactGhostButton} on:click={() => updateAction()?.()} type="button">
+        <AppButton variant="secondary" size="sm" onclick={() => updateAction()?.()}>
           {updateActionLabel()}
-        </button>
+        </AppButton>
       {/if}
     </div>
 
@@ -131,24 +130,26 @@
         ></span>
       </div>
 
-      <button
-        class={iconToolbarButton}
-        on:click={(event) => updateTheme(nextTheme(theme), themeOriginFromClick(event))}
-        aria-label={copy.switchTheme(themeTitle(theme, copy))}
+      <AppButton
+        variant="icon"
+        size="md"
+        onclick={(event) => updateTheme(nextTheme(theme), themeOriginFromClick(event))}
+        ariaLabel={copy.switchTheme(themeTitle(theme, copy))}
         title={copy.switchTheme(themeTitle(theme, copy))}
       >
         <span class={`${themeIconClass(theme)} h-4.5 w-4.5`}></span>
-      </button>
+      </AppButton>
 
-      <button
-        class={iconToolbarButton}
-        on:click={() => openExternalLink(appMeta.githubUrl ?? undefined)}
+      <AppButton
+        variant="icon"
+        size="md"
+        onclick={() => openExternalLink(appMeta.githubUrl ?? undefined)}
         disabled={!appMeta.githubUrl}
-        aria-label="GitHub"
+        ariaLabel="GitHub"
         title={appMeta.githubUrl ? copy.openGithub : copy.githubPending}
       >
         <span class="i-lucide-github h-4.5 w-4.5"></span>
-      </button>
+      </AppButton>
     </div>
   </div>
 </section>

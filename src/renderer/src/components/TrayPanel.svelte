@@ -13,13 +13,13 @@
     progressWidth,
     type LocalizedCopy
   } from './app-view'
+  import AppButton from './AppButton.svelte'
 
   export let brandMark: string
   export let snapshot: AppSnapshot
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let pageError = ''
   export let copy: LocalizedCopy
-  export let compactGhostButton: string
   export let pollingOptions: readonly number[]
   export let statusAccounts: AccountSummary[] = []
   export let openMainPanel: () => void | Promise<void>
@@ -44,14 +44,17 @@
       </div>
     </div>
     <div class="flex flex-none items-center gap-2">
-      <button
-        class={compactGhostButton}
-        on:click={openCodex}
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={openCodex}
         disabled={isLocalMockAccount(snapshot.currentSession)}
       >
         {copy.openCodex}
-      </button>
-      <button class={compactGhostButton} on:click={openMainPanel}>{copy.openMainPanel}</button>
+      </AppButton>
+      <AppButton variant="secondary" size="sm" onclick={openMainPanel}>
+        {copy.openMainPanel}
+      </AppButton>
     </div>
   </div>
 

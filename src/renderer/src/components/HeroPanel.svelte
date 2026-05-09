@@ -6,11 +6,12 @@
     LoginEvent
   } from '../../../shared/codex'
   import { type LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
 
   export let heroClass: string
-  export let compactGhostButton: string
   export let copy: LocalizedCopy
   export let loginEvent: LoginEvent | null = null
   export let showSettings = false
@@ -217,9 +218,9 @@
           </h2>
         </div>
 
-        <button class={compactGhostButton} type="button" onclick={onClose}>
+        <AppButton variant="secondary" size="sm" onclick={onClose}>
           {copy.closeDialog}
-        </button>
+        </AppButton>
       </div>
 
       {#if showSettings}
@@ -250,14 +251,14 @@
               <span>{copy.autoCheckUpdates}</span>
             </label>
 
-            <button
-              class={compactGhostButton}
-              type="button"
+            <AppButton
+              variant="secondary"
+              size="sm"
               onclick={runUpdateAction}
               disabled={updateActionDisabled()}
             >
               {updateActionLabel()}
-            </button>
+            </AppButton>
           </div>
 
           {#if showLocalMockToggle}
@@ -308,9 +309,9 @@
           {#if showCodexDesktopExecutablePath}
             <div class="flex flex-wrap items-center gap-3">
               <span class="text-xs text-muted-strong">{copy.codexDesktopExecutablePath}</span>
-              <button
-                class={compactGhostButton}
-                type="button"
+              <AppButton
+                variant="secondary"
+                size="sm"
                 onclick={() => {
                   showCodexDesktopExecutableEditor = !showCodexDesktopExecutableEditor
                 }}
@@ -318,7 +319,7 @@
                 {showCodexDesktopExecutableEditor
                   ? copy.hideCodexDesktopExecutablePath
                   : copy.showCodexDesktopExecutablePath}
-              </button>
+              </AppButton>
             </div>
 
             {#if showCodexDesktopExecutableEditor}
@@ -328,9 +329,9 @@
                 <span class="w-[168px] shrink-0 text-xs font-medium text-carbon">
                   {copy.codexDesktopExecutablePath}
                 </span>
-                <input
-                  class="theme-select h-9 min-w-[320px] flex-1 rounded-xl border border-black/8 bg-white px-3 text-sm text-carbon outline-none transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-                  type="text"
+                <AppInput
+                  class="min-w-[320px] flex-1"
+                  size="md"
                   bind:value={codexDesktopExecutablePathDraft}
                   placeholder={copy.codexDesktopExecutablePlaceholder}
                   onblur={() =>
@@ -355,23 +356,17 @@
           <p class="text-sm font-medium text-carbon">{copy.createProvider}</p>
 
           <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
-            <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-              type="text"
+            <AppInput
               bind:value={newProviderName}
               placeholder={copy.providerNamePlaceholder}
               disabled={loginActionBusy || providerMutationBusy}
             />
-            <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-              type="text"
+            <AppInput
               bind:value={newProviderBaseUrl}
               placeholder={copy.providerBaseUrlPlaceholder}
               disabled={loginActionBusy || providerMutationBusy}
             />
-            <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-              type="text"
+            <AppInput
               bind:value={newProviderModel}
               placeholder={copy.providerModelPlaceholder}
               disabled={loginActionBusy || providerMutationBusy}
@@ -379,8 +374,7 @@
           </div>
 
           <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-            <input
-              class="theme-provider-input rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+            <AppInput
               type="password"
               bind:value={newProviderApiKey}
               placeholder={copy.providerApiKeyPlaceholder}
@@ -400,9 +394,9 @@
               />
               <span>{copy.providerFastMode}</span>
             </label>
-            <button
-              class={compactGhostButton}
-              type="button"
+            <AppButton
+              variant="secondary"
+              size="sm"
               onclick={() => void submitProvider()}
               disabled={loginActionBusy ||
                 providerMutationBusy ||
@@ -413,7 +407,7 @@
                 class={`${providerMutationBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
               ></span>
               <span>{copy.createProvider}</span>
-            </button>
+            </AppButton>
           </div>
         </div>
       {/if}
@@ -432,13 +426,16 @@
                 {loginEvent.authUrl}
               </code>
               <div class="flex flex-wrap items-center gap-2">
-                <button class={compactGhostButton} onclick={copyAuthUrl}>{copy.copyLink}</button>
-                <button
-                  class={compactGhostButton}
+                <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
+                  {copy.copyLink}
+                </AppButton>
+                <AppButton
+                  variant="secondary"
+                  size="sm"
                   onclick={() => openExternalLink(loginEvent?.authUrl)}
                 >
                   {copy.openBrowser}
-                </button>
+                </AppButton>
               </div>
             </div>
           {/if}
@@ -466,18 +463,21 @@
                 </div>
               {/if}
               <div class="flex flex-wrap items-center gap-2">
-                <button class={compactGhostButton} onclick={copyAuthUrl}>{copy.copyLink}</button>
+                <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
+                  {copy.copyLink}
+                </AppButton>
                 {#if loginEvent.userCode}
-                  <button class={compactGhostButton} onclick={copyDeviceCode}
-                    >{copy.copyCode}</button
-                  >
+                  <AppButton variant="secondary" size="sm" onclick={copyDeviceCode}>
+                    {copy.copyCode}
+                  </AppButton>
                 {/if}
-                <button
-                  class={compactGhostButton}
+                <AppButton
+                  variant="secondary"
+                  size="sm"
                   onclick={() => openExternalLink(loginEvent?.verificationUrl)}
                 >
                   {copy.openBrowser}
-                </button>
+                </AppButton>
               </div>
             </div>
           {/if}

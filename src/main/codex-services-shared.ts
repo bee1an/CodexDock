@@ -47,7 +47,14 @@ import {
   type UpdateCodexInstanceInput,
   type UpdateCustomProviderInput,
   type WakeAccountRateLimitsInput,
-  type WakeAccountRateLimitsResult
+  type WakeAccountRateLimitsResult,
+  type CreatePromptInput,
+  type PromptCategoryList,
+  type PromptDetail,
+  type PromptImportResult,
+  type PromptSearchInput,
+  type PromptSummary,
+  type UpdatePromptInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { decodeJwtPayload } from '../shared/openai-auth'
@@ -389,6 +396,21 @@ export interface CodexServices {
     list(): Promise<CodexSkillsResult>
     detail(instanceId: string, skillDirName: string): Promise<CodexSkillDetail>
     copy(input: CopyCodexSkillInput): Promise<CopyCodexSkillResult>
+  }
+  prompt: {
+    list(input?: PromptSearchInput): Promise<PromptSummary[]>
+    detail(promptId: string): Promise<PromptDetail>
+    create(input: CreatePromptInput): Promise<PromptDetail>
+    update(promptId: string, input: UpdatePromptInput): Promise<PromptDetail>
+    remove(promptId: string): Promise<void>
+    copy(promptId: string): Promise<string>
+    listCategories(): Promise<PromptCategoryList>
+    createCategory(name: string): Promise<PromptCategoryList>
+    renameCategory(oldName: string, newName: string): Promise<PromptCategoryList>
+    removeCategory(name: string): Promise<PromptCategoryList>
+    importFile(filePath: string): Promise<PromptImportResult>
+    importDir(dirPath: string): Promise<PromptImportResult>
+    exportDir(targetDir: string): Promise<{ exported: number }>
   }
 }
 

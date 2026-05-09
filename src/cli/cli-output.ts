@@ -10,6 +10,9 @@ import type {
   CustomProviderSummary,
   DoctorReport,
   HealthCheckResult,
+  PromptCategoryList,
+  PromptDetail,
+  PromptSummary,
   ProviderCheckReport,
   TokenCostDetail
 } from '../shared/codex'
@@ -59,6 +62,17 @@ Usage:
   cdock doctor [--json]
   cdock settings get [key] [--json]
   cdock settings set <key> <value> [--json]
+  cdock prompt list [--query <text>] [--category <name>] [--json]
+  cdock prompt show <prompt-id> [--json]
+  cdock prompt create --title <title> (--content <text>|--file <path>) [--category <name>...] [--json]
+  cdock prompt update <prompt-id> [--title <title>] [--content <text>|--file <path>] [--category <name>...] [--clear-categories] [--json]
+  cdock prompt remove <prompt-id> [--json]
+  cdock prompt category list [--json]
+  cdock prompt category create <name> [--json]
+  cdock prompt category rename <old-name> <new-name> [--json]
+  cdock prompt category remove <name> [--json]
+  cdock prompt import (--file <md>|--dir <dir>) [--json]
+  cdock prompt export --dir <dir> [--json]
 
 Global options:
   --json        Output { ok, data, error }
@@ -365,4 +379,51 @@ export function formatSettingsValue(key: keyof AppSettings, settings: AppSetting
   }
 
   return String(value ?? '')
+}
+
+export function printPrompts(prompts: PromptSummary[], quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!prompts.length) {
+    console.log('No prompts')
+    return
+  }
+
+  for (const prompt of prompts) {
+    const cats = prompt.categories.length ? `  [${prompt.categories.join(', ')}]` : ''
+    console.log(`${prompt.id}  ${prompt.title}${cats}`)
+  }
+}
+
+export function printPromptDetail(detail: PromptDetail, quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  console.log(`ID: ${detail.id}`)
+  console.log(`Title: ${detail.title}`)
+  if (detail.categories.length) {
+    console.log(`Categories: ${detail.categories.join(', ')}`)
+  }
+  console.log(`Created: ${detail.createdAt}`)
+  console.log(`Updated: ${detail.updatedAt}`)
+  console.log('---')
+  console.log(detail.content)
+}
+
+export function printPromptCategories(result: PromptCategoryList, quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!result.categories.length) {
+    console.log('No categories')
+    return
+  }
+
+  for (const category of result.categories) {
+    console.log(category)
+  }
 }

@@ -26,6 +26,8 @@
   import { normalizeStatsDisplaySettings } from '../../../shared/codex'
   import { buildInstanceConsumptionEntries } from './cost-stats-data'
   import type { LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
+  import AppPopover from './AppPopover.svelte'
   import Checkbox from './Checkbox.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
 
@@ -49,7 +51,6 @@
   export let tokenCostErrorByInstanceId: Record<string, string> = {}
   export let runningTokenCostSummary: TokenCostSummary | null = null
   export let runningTokenCostInstanceIds: string[] = []
-  export let compactGhostButton: string
   export let statsDisplay: StatsDisplaySettings
   export let updateStatsDisplay: (statsDisplay: StatsDisplaySettings) => Promise<void>
   export let readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
@@ -86,6 +87,8 @@
   let instanceChartHeight = 280
   let statsDisplayDraft = normalizeStatsDisplaySettings(statsDisplay)
   let showStatsDisplayPopover = false
+  let statsDisplayButton: HTMLButtonElement | null = null
+  let statsDisplayAnchorRect: DOMRect | null = null
 
   const summaryHasData = (summary: TokenCostSummary | null): boolean =>
     Boolean(summary && (summary.sessionTokens > 0 || summary.last30DaysTokens > 0))
@@ -250,6 +253,15 @@
       return fallback
     }
     return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+  }
+
+  const toggleStatsDisplayPopover = (): void => {
+    if (showStatsDisplayPopover) {
+      showStatsDisplayPopover = false
+      return
+    }
+    statsDisplayAnchorRect = statsDisplayButton?.getBoundingClientRect() ?? null
+    showStatsDisplayPopover = true
   }
 
   const withAlpha = (color: string, alpha: number): string => {
@@ -828,11 +840,11 @@
 </script>
 
 <div
-  class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-1"
+  class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
   use:reveal={{ delay: 0.02 }}
 >
   <section
-    class="stats-stage rounded-[0.45rem] border px-4 py-4 sm:px-5 sm:py-5"
+    class="stats-stage theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4 sm:px-5 sm:py-5"
     use:cascadeIn={{
       selector: '[data-motion-item]'
     }}
@@ -851,25 +863,29 @@
       </div>
 
       <div class="relative flex items-center gap-2" data-motion-item>
-        <button
-          class={`${compactGhostButton} stats-config-button h-11 w-11 rounded-[0.45rem] p-0`}
-          type="button"
-          aria-label={copy.displayConfig}
-          aria-expanded={showStatsDisplayPopover}
-          onclick={() => {
-            showStatsDisplayPopover = !showStatsDisplayPopover
-          }}
+        <AppButton
+          variant="icon"
+          size="sm"
+          bind:element={statsDisplayButton}
+          ariaLabel={copy.displayConfig}
+          ariaExpanded={showStatsDisplayPopover}
+          ariaHaspopup="dialog"
+          onclick={toggleStatsDisplayPopover}
         >
           <span class="i-lucide-sliders-horizontal h-4 w-4"></span>
-        </button>
+        </AppButton>
 
-        {#if showStatsDisplayPopover}
-          <div
-            class="stats-config-popover absolute right-0 top-[calc(100%+0.5rem)] z-20 w-[min(20rem,calc(100vw-2rem))] rounded-[0.45rem] border px-4 py-4"
-            role="dialog"
-            aria-label={copy.displayConfig}
-            use:reveal={{ y: -4, duration: 0.12 }}
-          >
+        <AppPopover
+          open={showStatsDisplayPopover}
+          anchorRect={statsDisplayAnchorRect}
+          align="end"
+          ignoreNode={statsDisplayButton}
+          class="stats-config-popover w-[min(20rem,calc(100vw-2rem))] rounded-[0.45rem] px-4 py-4"
+          onclose={() => {
+            showStatsDisplayPopover = false
+          }}
+        >
+          <div role="dialog" aria-label={copy.displayConfig} use:reveal={{ y: -4, duration: 0.12 }}>
             <div class="mb-3 grid gap-1">
               <p class="text-sm font-semibold tracking-tight text-carbon">{copy.displayConfig}</p>
               <p class="text-xs leading-5 text-muted-strong">{copy.displayConfigDescription}</p>
@@ -888,11 +904,11 @@
               {/each}
             </div>
           </div>
-        {/if}
+        </AppPopover>
 
-        <button
-          class={`${compactGhostButton} stats-refresh-button h-11 rounded-[0.45rem] px-4`}
-          type="button"
+        <AppButton
+          variant="secondary"
+          size="sm"
           onclick={() => loadDetail(true)}
           disabled={loadingDetail}
         >
@@ -900,7 +916,7 @@
             class={`${loadingDetail ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-4 w-4`}
           ></span>
           <span>{loadingDetail ? copy.refreshing : copy.refresh}</span>
-        </button>
+        </AppButton>
       </div>
     </div>
 
@@ -1134,8 +1150,6 @@
 
 <style>
   .stats-stage {
-    background: transparent;
-    border-color: transparent;
     box-shadow: none;
   }
 
@@ -1149,17 +1163,6 @@
     background: var(--surface-soft);
     border-color: var(--color-arctic-mist);
     box-shadow: none;
-  }
-
-  .stats-refresh-button,
-  .stats-config-button {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--panel-strong) !important;
-  }
-
-  .stats-refresh-button:hover,
-  .stats-config-button:hover {
-    background: var(--surface-soft) !important;
   }
 
   .stats-metric-block {
@@ -1233,8 +1236,8 @@
   }
 
   :global(html[data-theme='dark']) .stats-stage {
-    background: transparent !important;
-    border-color: transparent !important;
+    background: var(--surface-soft) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
     box-shadow: none !important;
   }
 
@@ -1249,11 +1252,6 @@
   :global(html[data-theme='dark']) .stats-chart-shell {
     background: var(--surface-hover) !important;
     border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-refresh-button,
-  :global(html[data-theme='dark']) .stats-config-button {
-    background: var(--surface-soft) !important;
   }
 
   :global(html[data-theme='dark']) .stats-config-popover {

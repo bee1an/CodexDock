@@ -17,7 +17,9 @@
     ReadCodexSessionDetailInput
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
+  import AppInput from './AppInput.svelte'
   import FloatingSelect, { type FloatingSelectOption } from './FloatingSelect.svelte'
   import {
     type CopyTargetProviderOption,
@@ -48,7 +50,6 @@
   export let language: 'zh-CN' | 'en'
   export let instances: CodexInstanceSummary[] = []
   export let providers: CustomProviderSummary[] = []
-  export let compactGhostButton = ''
   export let listCodexSessionProjects: () => Promise<CodexSessionProjectsResult>
   export let listCodexSessions: (input?: ListCodexSessionsInput) => Promise<CodexSessionsResult>
   export let readCodexSessionDetail: (
@@ -558,7 +559,7 @@
   })
 </script>
 
-<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto pb-4 pr-1">
+<div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
   <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-black/8 px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
@@ -570,9 +571,9 @@
           <p class="text-[11px] text-faint">{copy.sessionsScannedAt(formatDateTime(scannedAt))}</p>
         {/if}
       </div>
-      <button class={compactGhostButton} type="button" onclick={() => void loadProjects()}>
+      <AppButton variant="secondary" size="sm" onclick={() => void loadProjects()}>
         {loading ? copy.refreshing : copy.sessionsRefresh}
-      </button>
+      </AppButton>
     </div>
 
     <div class="grid gap-3 md:grid-cols-[220px_180px]">
@@ -641,16 +642,16 @@
           </p>
         </div>
         <div class="flex flex-wrap gap-2">
-          <button
-            class={compactGhostButton}
-            type="button"
+          <AppButton
+            variant="secondary"
+            size="sm"
             onclick={() => openCopySessionDialog(selectedSummary)}
           >
             {copy.sessionsCopyToProvider}
-          </button>
-          <button class={compactGhostButton} type="button" onclick={closeDetail}>
+          </AppButton>
+          <AppButton variant="secondary" size="sm" onclick={closeDetail}>
             {copy.sessionsBackToList}
-          </button>
+          </AppButton>
         </div>
       </div>
 
@@ -832,8 +833,7 @@
           </div>
 
           {#if !instanceCollapsed}
-            <input
-              class="theme-select rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+            <AppInput
               value={searchByInstanceId[instance.id] ?? ''}
               placeholder={copy.sessionsInstanceSearchPlaceholder}
               disabled={loading}
@@ -1013,24 +1013,24 @@
                                   {#if projectSessionCount(project) > visibleLimit}
                                     <div class="flex justify-center pt-1">
                                       {#if currentVisibleLimit < projectSessionCount(project)}
-                                        <button
-                                          class={compactGhostButton}
-                                          type="button"
+                                        <AppButton
+                                          variant="secondary"
+                                          size="sm"
                                           disabled={sessionLoadingByProjectKey[project.key]}
                                           onclick={() => void showMoreProjectSessions(project)}
                                         >
                                           {copy.sessionsShowMore(
                                             projectSessionCount(project) - currentVisibleLimit
                                           )}
-                                        </button>
+                                        </AppButton>
                                       {:else}
-                                        <button
-                                          class={compactGhostButton}
-                                          type="button"
+                                        <AppButton
+                                          variant="secondary"
+                                          size="sm"
                                           onclick={() => collapseProjectSessions(project)}
                                         >
                                           {copy.sessionsCollapse}
-                                        </button>
+                                        </AppButton>
                                       {/if}
                                     </div>
                                   {/if}

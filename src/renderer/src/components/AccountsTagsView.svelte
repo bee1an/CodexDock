@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { AccountSummary, AccountTag } from '../../../shared/codex'
   import { accountEmail, type LocalizedCopy } from './app-view'
+  import AppButton from './AppButton.svelte'
+  import AppInput from './AppInput.svelte'
 
-  export let compactGhostButton: string
-  export let iconRowButton: string
   export let copy: LocalizedCopy
   export let tags: AccountTag[] = []
   export let accounts: AccountSummary[] = []
@@ -25,7 +25,7 @@
 </script>
 
 <div
-  class="theme-soft-panel theme-tag-manager-panel flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-[1rem] border border-black/8 bg-white p-4"
+  class="theme-soft-panel theme-tag-manager-panel mx-4 mb-4 flex min-h-0 flex-1 flex-col gap-4 overflow-hidden rounded-[0.55rem] border border-black/8 bg-white p-4"
 >
   <div class="flex flex-wrap items-end justify-between gap-3">
     <p class="text-sm text-muted-strong">
@@ -36,9 +36,8 @@
   </div>
 
   <div class="flex flex-wrap items-center gap-2">
-    <input
-      class="theme-tag-input min-w-[220px] flex-1 rounded-[0.35rem] border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-      type="text"
+    <AppInput
+      class="min-w-[220px] flex-1"
       bind:value={newTagName}
       placeholder={copy.newTagPlaceholder}
       onkeydown={(event) => {
@@ -48,15 +47,16 @@
       }}
       disabled={loginActionBusy || tagMutationBusy}
     />
-    <button
-      class={`theme-tag-create-button ${compactGhostButton} min-w-[120px] px-3 py-2.5`}
-      type="button"
+    <AppButton
+      variant="secondary"
+      size="sm"
+      class="min-w-[120px]"
       onclick={() => void submitNewTag()}
       disabled={loginActionBusy || tagMutationBusy || !newTagName.trim()}
     >
       <span class="i-lucide-plus h-4 w-4"></span>
       <span>{copy.createTag}</span>
-    </button>
+    </AppButton>
   </div>
 
   {#if tags.length}
@@ -68,9 +68,8 @@
           <div class={`grid gap-2 ${taggedAccountCount(tag.id) ? 'pb-2' : ''}`}>
             {#if editingTagId === tag.id}
               <div class="flex flex-wrap items-center gap-2">
-                <input
-                  class="theme-tag-input min-w-[180px] flex-1 rounded-lg border border-black/10 bg-black/[0.02] px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-                  type="text"
+                <AppInput
+                  class="min-w-[180px] flex-1"
                   bind:value={editingTagName}
                   onkeydown={(event) => {
                     if (event.key === 'Enter') {
@@ -79,22 +78,22 @@
                   }}
                   disabled={loginActionBusy || tagMutationBusy}
                 />
-                <button
-                  class={`${compactGhostButton} px-3 py-2`}
-                  type="button"
+                <AppButton
+                  variant="secondary"
+                  size="sm"
                   onclick={() => void saveEditedTag(tag)}
                   disabled={loginActionBusy || tagMutationBusy || !editingTagName.trim()}
                 >
                   {copy.save}
-                </button>
-                <button
-                  class={`${compactGhostButton} px-3 py-2`}
-                  type="button"
+                </AppButton>
+                <AppButton
+                  variant="secondary"
+                  size="sm"
                   onclick={cancelEditingTag}
                   disabled={loginActionBusy || tagMutationBusy}
                 >
                   {copy.cancel}
-                </button>
+                </AppButton>
               </div>
             {:else}
               <div class="flex items-center gap-3">
@@ -107,26 +106,26 @@
                   {tag.name}
                 </span>
                 <div class="flex items-center gap-1">
-                  <button
-                    class={iconRowButton}
-                    type="button"
+                  <AppButton
+                    variant="icon"
+                    size="xs"
                     onclick={() => beginEditingTag(tag)}
                     disabled={loginActionBusy || tagMutationBusy}
-                    aria-label={`${copy.editTag} · ${tag.name}`}
+                    ariaLabel={`${copy.editTag} · ${tag.name}`}
                     title={copy.renameTag}
                   >
                     <span class="i-lucide-pencil h-4 w-4"></span>
-                  </button>
-                  <button
-                    class={iconRowButton}
-                    type="button"
+                  </AppButton>
+                  <AppButton
+                    variant="icon"
+                    size="xs"
                     onclick={() => void confirmDeleteTag(tag)}
                     disabled={loginActionBusy || tagMutationBusy}
-                    aria-label={`${copy.deleteTag} · ${tag.name}`}
+                    ariaLabel={`${copy.deleteTag} · ${tag.name}`}
                     title={copy.deleteTag}
                   >
                     <span class="i-lucide-trash-2 h-4 w-4"></span>
-                  </button>
+                  </AppButton>
                 </div>
               </div>
             {/if}
@@ -162,7 +161,6 @@
   }
 
   :global(html[data-theme='dark']) .theme-tag-manager-card,
-  :global(html[data-theme='dark']) .theme-tag-input,
   :global(html[data-theme='dark']) .theme-tag-empty {
     background: var(--panel-strong) !important;
     border-color: var(--color-arctic-mist) !important;
@@ -172,16 +170,6 @@
   :global(html[data-theme='dark']) .theme-tag-count-pill {
     background: var(--surface-soft) !important;
     color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-create-button {
-    background: var(--surface-soft) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-create-button:hover {
-    background: var(--surface-hover) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-linked {

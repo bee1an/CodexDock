@@ -44,6 +44,7 @@ import {
   readCodexSessionDetail
 } from './codex-sessions'
 import { createCodexSkillService } from './codex-skills'
+import { createCodexPromptService } from './codex-prompts'
 import { CodexLocalGatewayService } from './local-gateway'
 
 export type { CodexServices, CreateCodexServicesOptions } from './codex-services-shared'
@@ -98,6 +99,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   })
   const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
   const skillService = createCodexSkillService()
+  const promptService = createCodexPromptService(options.userDataPath)
 
   const localGatewayService = new CodexLocalGatewayService({
     store,
@@ -596,6 +598,21 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       detail: async (instanceId, skillDirName) =>
         skillService.detail(await listCodexInstances(), instanceId, skillDirName),
       copy: async (input) => skillService.copy(await listCodexInstances(), input)
+    },
+    prompt: {
+      list: (input) => promptService.list(input),
+      detail: (promptId) => promptService.detail(promptId),
+      create: (input) => promptService.create(input),
+      update: (promptId, input) => promptService.update(promptId, input),
+      remove: (promptId) => promptService.remove(promptId),
+      copy: (promptId) => promptService.copy(promptId),
+      listCategories: () => promptService.listCategories(),
+      createCategory: (name) => promptService.createCategory(name),
+      renameCategory: (oldName, newName) => promptService.renameCategory(oldName, newName),
+      removeCategory: (name) => promptService.removeCategory(name),
+      importFile: (filePath) => promptService.importFile(filePath),
+      importDir: (dirPath) => promptService.importDir(dirPath),
+      exportDir: (targetDir) => promptService.exportDir(targetDir)
     }
   }
 }

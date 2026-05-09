@@ -52,6 +52,7 @@
     portal,
     stopFloatingPointerPropagation
   } from './floating'
+  import AppButton from './AppButton.svelte'
   import Checkbox from './Checkbox.svelte'
   import {
     formatWakeScheduleLastTriggeredAt,
@@ -61,7 +62,6 @@
 
   const flipDurationMs = 160
 
-  export let iconRowButton: string
   export let copy: LocalizedCopy
   export let language: AppLanguage
   export let accounts: AccountSummary[] = []
@@ -586,46 +586,40 @@
             {copy.filterByTag}
           </p>
           <div class="flex flex-wrap gap-1.5">
-            <button
-              class={`theme-filter-chip rounded-[0.32rem] px-1.5 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
-                activeTagFilter === 'all'
-                  ? 'theme-filter-chip-active bg-black text-white'
-                  : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
-              }`}
-              type="button"
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected={activeTagFilter === 'all'}
+              ariaPressed={activeTagFilter === 'all'}
               onclick={() => {
                 activeTagFilter = 'all'
               }}
             >
               {filterChipLabel(accounts, 'all', tags, copy)}
-            </button>
-            <button
-              class={`theme-filter-chip rounded-[0.32rem] px-1.5 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
-                activeTagFilter === untaggedFilterId
-                  ? 'theme-filter-chip-active bg-black text-white'
-                  : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
-              }`}
-              type="button"
+            </AppButton>
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected={activeTagFilter === untaggedFilterId}
+              ariaPressed={activeTagFilter === untaggedFilterId}
               onclick={() => {
                 activeTagFilter = untaggedFilterId
               }}
             >
               {filterChipLabel(accounts, untaggedFilterId, tags, copy)}
-            </button>
+            </AppButton>
             {#each tags as tag (tag.id)}
-              <button
-                class={`theme-filter-chip rounded-[0.32rem] px-1.5 py-0.75 text-[10px] font-medium leading-none transition-colors duration-140 ${
-                  activeTagFilter === tag.id
-                    ? 'theme-filter-chip-active bg-black text-white'
-                    : 'theme-filter-chip-idle border border-black/10 bg-black/[0.03] text-black/72 hover:bg-black/[0.06]'
-                }`}
-                type="button"
+              <AppButton
+                variant="filter"
+                size="xs"
+                selected={activeTagFilter === tag.id}
+                ariaPressed={activeTagFilter === tag.id}
                 onclick={() => {
                   activeTagFilter = tag.id
                 }}
               >
                 {filterChipLabel(accounts, tag.id, tags, copy)}
-              </button>
+              </AppButton>
             {/each}
           </div>
         </div>
@@ -659,47 +653,51 @@
 
           <div class="flex flex-wrap items-center justify-end gap-1.5">
             {#if visibleAccounts.length && !allVisibleSelected}
-              <button
-                class="theme-selection-group-button inline-flex min-w-[108px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-none transition-colors duration-140"
-                type="button"
+              <AppButton
+                variant="secondary"
+                size="xs"
+                class="min-w-[108px]"
                 onclick={selectAllVisibleAccounts}
                 disabled={loginActionBusy || !visibleAccounts.length}
               >
                 <span class="i-lucide-check-check h-3.5 w-3.5"></span>
                 <span>{copy.selectAllVisibleAccounts}</span>
-              </button>
+              </AppButton>
             {/if}
 
             {#if selectedVisibleCount}
-              <button
-                class="theme-selection-group-button inline-flex min-w-[96px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-none transition-colors duration-140"
-                type="button"
+              <AppButton
+                variant="secondary"
+                size="xs"
+                class="min-w-[96px]"
                 onclick={clearSelectedAccounts}
                 disabled={loginActionBusy}
               >
                 <span class="i-lucide-eraser h-3.5 w-3.5"></span>
                 <span>{copy.clearSelectedAccounts}</span>
-              </button>
+              </AppButton>
 
-              <button
-                class="theme-selection-export inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-white px-2.5 py-1.5 text-[11px] font-medium leading-none text-carbon transition-colors duration-140 hover:bg-black/[0.04]"
-                type="button"
+              <AppButton
+                variant="secondary"
+                size="xs"
+                class="min-w-[104px]"
                 onclick={() => void exportCurrentSelection()}
                 disabled={loginActionBusy}
               >
                 <span class="i-lucide-download h-3.5 w-3.5"></span>
                 <span>{copy.exportSelectedAccounts}</span>
-              </button>
+              </AppButton>
 
-              <button
-                class="theme-selection-delete inline-flex min-w-[104px] items-center justify-center gap-1.5 rounded-[0.35rem] border border-red-500/14 bg-red-500/[0.08] px-2.5 py-1.5 text-[11px] font-medium leading-none text-danger transition-colors duration-140 hover:bg-red-500/[0.12]"
-                type="button"
+              <AppButton
+                variant="danger"
+                size="xs"
+                class="min-w-[104px]"
                 onclick={() => void removeCurrentSelection()}
                 disabled={loginActionBusy}
               >
                 <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
                 <span>{copy.deleteSelectedAccounts}</span>
-              </button>
+              </AppButton>
             {/if}
           </div>
         </div>
@@ -773,7 +771,7 @@
               />
             </label>
             <button
-              class={`${iconRowButton} h-7 w-7 self-center text-black/42 ${activeTagFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              class={`account-drag-button self-center ${activeTagFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
               type="button"
               use:dragHandle
               aria-label={`${copy.dragSortHandle} · ${accountEmail(account, copy)}`}
@@ -1047,11 +1045,12 @@
           </div>
 
           <div class="flex items-center self-center justify-end gap-1">
-            <button
-              class={iconRowButton}
+            <AppButton
+              variant="icon"
+              size="xs"
               onclick={() => openAccountInCodex(accountId)}
               disabled={accountLaunchDisabled(actionAccount)}
-              aria-label={`${copy.openCodex} · ${accountEmail(account, copy)}`}
+              ariaLabel={`${copy.openCodex} · ${accountEmail(account, copy)}`}
               title={copy.openCodex}
             >
               {#if openingAccountId === accountId}
@@ -1059,12 +1058,13 @@
               {:else}
                 <span class="i-lucide-square-arrow-out-up-right h-4 w-4"></span>
               {/if}
-            </button>
-            <button
-              class={iconRowButton}
+            </AppButton>
+            <AppButton
+              variant="icon"
+              size="xs"
               onclick={() => openAccountInIsolatedCodex(accountId)}
               disabled={accountLaunchDisabled(actionAccount)}
-              aria-label={`${copy.openCodexIsolated} · ${accountEmail(account, copy)}`}
+              ariaLabel={`${copy.openCodexIsolated} · ${accountEmail(account, copy)}`}
               title={copy.openCodexIsolated}
             >
               {#if openingIsolatedAccountId === accountId}
@@ -1072,26 +1072,27 @@
               {:else}
                 <span class="i-lucide-copy-plus h-4 w-4"></span>
               {/if}
-            </button>
-            <button
-              class={iconRowButton}
+            </AppButton>
+            <AppButton
+              variant="icon"
+              size="xs"
               onclick={() => refreshAccountUsage(actionAccount)}
               disabled={accountRefreshDisabled(actionAccount)}
-              aria-label={`${copy.refreshQuota} · ${accountEmail(account, copy)}`}
+              ariaLabel={`${copy.refreshQuota} · ${accountEmail(account, copy)}`}
               title={copy.refreshQuota}
             >
               <span class="i-lucide-refresh-cw h-4 w-4"></span>
-            </button>
+            </AppButton>
             <div class="relative" use:stopFloatingPointerPropagation data-floating-root="">
-              <button
-                class={iconRowButton}
-                type="button"
+              <AppButton
+                variant="icon"
+                size="xs"
                 onclick={(event) => toggleAccountActionMenu(event, accountId)}
-                aria-label={`${accountMoreActionsLabel()} · ${accountEmail(account, copy)}`}
+                ariaLabel={`${accountMoreActionsLabel()} · ${accountEmail(account, copy)}`}
                 title={accountMoreActionsLabel()}
               >
                 <span class="i-lucide-ellipsis h-4 w-4"></span>
-              </button>
+              </AppButton>
 
               {#if accountActionMenuAccountId === accountId}
                 <div
@@ -1296,44 +1297,37 @@
     color: var(--color-carbon);
   }
 
-  .theme-selection-group-button:disabled,
-  .theme-selection-export:disabled,
-  .theme-selection-delete:disabled {
-    opacity: 1 !important;
-    cursor: not-allowed;
-  }
-
-  .theme-selection-group {
-    background: rgba(24, 24, 27, 0.04);
-    border-color: rgba(24, 24, 27, 0.08);
-  }
-
-  .theme-selection-group-button {
+  .account-drag-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.38rem;
     background: transparent;
+    color: var(--ink-faint);
+    padding: 0;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease,
+      opacity 140ms ease;
+  }
+
+  .account-drag-button:hover:not(:disabled),
+  .account-drag-button:focus-visible {
+    border-color: var(--line-strong);
+    background: var(--surface-hover);
     color: var(--color-carbon);
   }
 
-  .theme-selection-group-button:hover:not(:disabled) {
-    background: rgba(24, 24, 27, 0.04);
-  }
-
-  .theme-selection-group-button:disabled,
-  .theme-selection-export:disabled {
-    color: var(--ink-faint) !important;
-  }
-
-  .theme-selection-group-button:disabled {
-    background: transparent !important;
-  }
-
-  .theme-selection-export:disabled {
-    background: rgba(24, 24, 27, 0.03) !important;
-    border-color: rgba(24, 24, 27, 0.1) !important;
-  }
-
-  .theme-selection-delete:disabled {
-    color: color-mix(in srgb, var(--danger) 72%, transparent) !important;
-    background: rgba(239, 68, 68, 0.1) !important;
+  .account-drag-button:disabled {
+    cursor: not-allowed;
+    opacity: 0.48;
   }
 
   :global(html[data-theme='dark']) .theme-account-divider {
@@ -1383,11 +1377,6 @@
     color: var(--color-carbon) !important;
   }
 
-  :global(html[data-theme='dark']) .theme-filter-chip-active {
-    background: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
-  }
-
   :global(html[data-theme='dark']) .theme-workbench-toolbar {
     background: color-mix(in srgb, var(--surface-soft) 90%, var(--color-fog) 10%) !important;
     border-color: var(--color-arctic-mist) !important;
@@ -1412,17 +1401,6 @@
     color: var(--color-carbon) !important;
   }
 
-  :global(html[data-theme='dark']) .theme-filter-chip-idle {
-    background: var(--surface-soft) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-filter-chip-idle:hover {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
-  }
-
   :global(html[data-theme='dark']) .theme-selection-toolbar-idle {
     color: var(--color-carbon) !important;
     border-top-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
@@ -1433,55 +1411,17 @@
     border-top-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
   }
 
-  :global(html[data-theme='dark']) .theme-selection-group,
-  :global(html[data-theme='dark']) .theme-selection-export {
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, transparent) !important;
-  }
-
   :global(html[data-theme='dark']) .theme-selection-divider {
     background: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-group-button,
-  :global(html[data-theme='dark']) .theme-selection-export {
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-group-button:hover:not(:disabled) {
-    background: color-mix(in srgb, var(--surface-hover) 86%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-group-button[disabled] {
-    background: transparent !important;
-    color: var(--ink-faint) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-group-button:hover,
-  :global(html[data-theme='dark']) .theme-selection-export:hover {
-    background: var(--surface-hover) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-export[disabled] {
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft) 16%) !important;
-    color: var(--ink-faint) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, transparent) !important;
   }
 
   .theme-reset-time-neutral {
     color: var(--ink-soft-strong);
   }
 
-  :global(html[data-theme='dark']) .theme-selection-delete {
-    border-color: rgb(239 68 68 / 0.18) !important;
-    background: rgb(239 68 68 / 0.1) !important;
-    color: rgb(252 165 165) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-delete[disabled] {
-    border-color: rgb(239 68 68 / 0.12) !important;
-    background: rgb(239 68 68 / 0.08) !important;
-    color: rgb(252 165 165 / 0.76) !important;
+  :global(html[data-theme='dark']) .account-drag-button {
+    border-color: var(--color-arctic-mist);
+    color: var(--ink-soft);
   }
 
   :global(html[data-theme='dark']) .theme-account-card-selected {

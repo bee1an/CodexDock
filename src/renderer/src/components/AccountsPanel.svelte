@@ -32,12 +32,14 @@
   import AccountsListView from './AccountsListView.svelte'
   import AccountsProvidersView from './AccountsProvidersView.svelte'
   import AccountsTagsView from './AccountsTagsView.svelte'
+  import AppButton from './AppButton.svelte'
   import Checkbox from './Checkbox.svelte'
   import CostStatsView from './CostStatsView.svelte'
   import LocalGatewayView from './LocalGatewayView.svelte'
   import MotionNumber from './MotionNumber.svelte'
   import SessionsView from './SessionsView.svelte'
   import SkillsView from './SkillsView.svelte'
+  import PromptsView from './PromptsView.svelte'
   import { taggedAccountCount as taggedAccountCountForAccounts } from './accounts-panel-account'
   import {
     buildProviderUpdateInput,
@@ -50,9 +52,6 @@
   const flipDurationMs = 160
 
   export let panelClass: string
-  export let primaryActionButton: string
-  export let compactGhostButton: string
-  export let iconRowButton: string
   export let copy: LocalizedCopy
   export let workspaceVersion = '--'
   export let workspaceStatusText = ''
@@ -127,8 +126,15 @@
   export let startLogin: (method: 'browser' | 'device') => void
   export let importCurrent: () => void
 
-  let currentView: 'accounts' | 'providers' | 'gateway' | 'tags' | 'stats' | 'sessions' | 'skills' =
-    'accounts'
+  let currentView:
+    | 'accounts'
+    | 'providers'
+    | 'gateway'
+    | 'tags'
+    | 'stats'
+    | 'sessions'
+    | 'skills'
+    | 'prompts' = 'accounts'
   let activeTagFilter = 'all'
   let newTagName = ''
   let editingTagId: string | null = null
@@ -360,117 +366,115 @@
       {/if}
 
       {#if updateActionLabel}
-        <button class={`${compactGhostButton} relative`} type="button" onclick={runUpdateAction}>
+        <AppButton variant="secondary" size="sm" class="relative" onclick={runUpdateAction}>
           {updateActionLabel}
           <span class="t-badge" data-open="true" aria-hidden="true">
             <span class="t-badge-dot h-2 w-2 rounded-full bg-success"></span>
           </span>
-        </button>
+        </AppButton>
       {/if}
 
       <div
         class="theme-toolbar inline-flex items-center gap-0 rounded-[0.45rem] border border-black/8 bg-black/[0.03] p-0.5"
       >
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'accounts'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'accounts'}
+          ariaPressed={currentView === 'accounts'}
           onclick={() => {
             currentView = 'accounts'
           }}
-          aria-label={copy.accountCount(accounts.length)}
+          ariaLabel={copy.accountCount(accounts.length)}
         >
           <span class="i-lucide-layout-list h-3.5 w-3.5"></span>
           <MotionNumber value={accounts.length} label={copy.accountCount(accounts.length)} />
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'providers'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'providers'}
+          ariaPressed={currentView === 'providers'}
           onclick={() => {
             currentView = 'providers'
           }}
-          aria-label={copy.providerCount(providers.length)}
+          ariaLabel={copy.providerCount(providers.length)}
         >
           <span class="i-lucide-plug-zap h-3.5 w-3.5"></span>
           <MotionNumber value={providers.length} label={copy.providerCount(providers.length)} />
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'gateway'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'gateway'}
+          ariaPressed={currentView === 'gateway'}
           onclick={() => {
             currentView = 'gateway'
           }}
         >
           <span class="i-lucide-radio-tower h-3.5 w-3.5"></span>
           <span>{copy.localGateway}</span>
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'tags'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'tags'}
+          ariaPressed={currentView === 'tags'}
           onclick={() => {
             currentView = 'tags'
           }}
         >
           <span class="i-lucide-tags h-3.5 w-3.5"></span>
           <span>{copy.tagManager}</span>
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'stats'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'stats'}
+          ariaPressed={currentView === 'stats'}
           onclick={() => {
             currentView = 'stats'
           }}
         >
           <span class="i-lucide-chart-no-axes-combined h-3.5 w-3.5"></span>
           <span>{copy.tokenStats}</span>
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'sessions'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'sessions'}
+          ariaPressed={currentView === 'sessions'}
           onclick={() => {
             currentView = 'sessions'
           }}
         >
           <span class="i-lucide-messages-square h-3.5 w-3.5"></span>
           <span>{copy.sessions}</span>
-        </button>
-        <button
-          class={`theme-view-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] px-2.5 py-1.5 text-xs font-medium transition-colors duration-140 ${
-            currentView === 'skills'
-              ? 'theme-view-toggle-active bg-black/[0.06] text-carbon'
-              : 'theme-view-toggle-idle bg-transparent text-black/60 hover:bg-black/[0.04]'
-          }`}
-          type="button"
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'skills'}
+          ariaPressed={currentView === 'skills'}
           onclick={() => {
             currentView = 'skills'
           }}
         >
           <span class="i-lucide-puzzle h-3.5 w-3.5"></span>
           <span>{copy.skills}</span>
-        </button>
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'prompts'}
+          ariaPressed={currentView === 'prompts'}
+          onclick={() => {
+            currentView = 'prompts'
+          }}
+        >
+          <span class="i-lucide-file-text h-3.5 w-3.5"></span>
+          <span>{copy.prompts}</span>
+        </AppButton>
       </div>
     </div>
   </div>
@@ -486,7 +490,6 @@
       {runningTokenCostSummary}
       {runningTokenCostInstanceIds}
       {statsDisplay}
-      {compactGhostButton}
       {readTokenCost}
       {updateStatsDisplay}
     />
@@ -496,7 +499,6 @@
       {language}
       instances={codexInstances}
       {providers}
-      {compactGhostButton}
       {listCodexSessionProjects}
       {listCodexSessions}
       {readCodexSessionDetail}
@@ -510,10 +512,22 @@
       {readCodexSkillDetail}
       {copyCodexSkill}
     />
+  {:else if currentView === 'prompts'}
+    <PromptsView
+      {copy}
+      listPrompts={(input) => window.codexApp.listPrompts(input)}
+      getPromptDetail={(id) => window.codexApp.getPromptDetail(id)}
+      createPrompt={(input) => window.codexApp.createPrompt(input)}
+      updatePrompt={(id, input) => window.codexApp.updatePrompt(id, input)}
+      removePrompt={(id) => window.codexApp.removePrompt(id)}
+      copyPromptContent={(id) => window.codexApp.copyPromptContent(id)}
+      listPromptCategories={() => window.codexApp.listPromptCategories()}
+      createPromptCategory={(name) => window.codexApp.createPromptCategory(name)}
+      renamePromptCategory={(old, name) => window.codexApp.renamePromptCategory(old, name)}
+      removePromptCategory={(name) => window.codexApp.removePromptCategory(name)}
+    />
   {:else if currentView === 'tags'}
     <AccountsTagsView
-      {compactGhostButton}
-      {iconRowButton}
       {copy}
       {tags}
       {accounts}
@@ -534,7 +548,6 @@
       bind:activeTagFilter
       bind:selectedAccountIds
       bind:accountWorkbenchExpanded
-      {iconRowButton}
       {copy}
       {language}
       {accounts}
@@ -572,7 +585,6 @@
   {:else if currentView === 'providers'}
     <AccountsProvidersView
       {copy}
-      {iconRowButton}
       {providers}
       {sortableProviders}
       {flipDurationMs}
@@ -604,8 +616,9 @@
 
         <div class="mt-5 grid gap-4">
           <div class="flex flex-wrap items-center justify-center gap-2.5">
-            <button
-              class={primaryActionButton}
+            <AppButton
+              variant="primary"
+              size="lg"
               onclick={() => startLogin('browser')}
               disabled={loginActionBusy}
             >
@@ -613,21 +626,22 @@
                 class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-4.5 w-4.5`}
               ></span>
               <span>{copy.callbackLogin}</span>
-            </button>
+            </AppButton>
 
-            <button class={`${compactGhostButton} px-4 py-3`} onclick={() => startLogin('device')}>
+            <AppButton variant="secondary" size="lg" onclick={() => startLogin('device')}>
               <span class="i-lucide-key-round h-4.5 w-4.5"></span>
               <span>{copy.deviceLogin}</span>
-            </button>
+            </AppButton>
 
-            <button
-              class={`${compactGhostButton} px-4 py-3`}
+            <AppButton
+              variant="secondary"
+              size="lg"
               onclick={importCurrent}
               disabled={loginActionBusy}
             >
               <span class="i-lucide-monitor-down h-4.5 w-4.5"></span>
               <span>{copy.importCurrent}</span>
-            </button>
+            </AppButton>
           </div>
         </div>
       </div>

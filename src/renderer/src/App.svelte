@@ -2,6 +2,7 @@
   import { onMount } from 'svelte'
   import brandMark from './assets/brand-mark.png'
   import AccountsPanel from './components/AccountsPanel.svelte'
+  import AppButton from './components/AppButton.svelte'
   import AppSider from './components/AppSider.svelte'
   import { cascadeIn, reveal } from './components/gsap-motion'
   import HeroPanel from './components/HeroPanel.svelte'
@@ -184,14 +185,6 @@
 
   const heroClass = 'theme-surface rounded-[1.1rem] border border-black/8 bg-white p-5 sm:p-6'
   const panelClass = 'theme-workspace bg-snow p-0'
-  const primaryActionButton =
-    'theme-primary-button inline-flex items-center justify-center gap-2 rounded-[0.4rem] bg-black px-4 py-3 text-sm font-semibold text-white transition-[background-color,opacity] duration-160 hover:bg-black/88 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
-  const compactGhostButton =
-    'theme-ghost-button inline-flex items-center justify-center rounded-[0.35rem] border border-black/8 bg-white px-3 py-2 text-sm font-medium text-carbon transition-[background-color,border-color,opacity] duration-160 hover:border-black/12 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
-  const iconToolbarButton =
-    'theme-icon-button inline-flex h-8 w-8 appearance-none items-center justify-center border border-transparent rounded-[0.38rem] bg-transparent p-0 text-carbon outline-none shadow-none transition-[background-color,border-color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-48'
-  const iconRowButton =
-    'theme-row-button inline-flex h-7 w-7 appearance-none items-center justify-center border border-transparent rounded-[0.35rem] bg-transparent p-0 text-black/58 outline-none shadow-none transition-[background-color,border-color,color,opacity] duration-160 hover:border-black/8 hover:bg-black/[0.035] hover:text-carbon focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-40'
 
   const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
   const exportFormatOptionOrder = [...accountTransferFormats]
@@ -1441,7 +1434,6 @@
         {usageByAccountId}
         {pageError}
         copy={copyForLanguage()}
-        {compactGhostButton}
         {pollingOptions}
         statusAccounts={statusBarAccounts(
           snapshot.settings,
@@ -1464,9 +1456,6 @@
           >
             <AccountsPanel
               {panelClass}
-              {primaryActionButton}
-              {compactGhostButton}
-              {iconRowButton}
               copy={copyForLanguage()}
               workspaceVersion={appMeta.version}
               workspaceStatusText={loginEvent?.message ?? ''}
@@ -1575,13 +1564,14 @@
                       loginPortOccupant.pid
                     )}
                   </span>
-                  <button
-                    class={compactGhostButton}
-                    on:click={killLoginPortOccupant}
+                  <AppButton
+                    variant="secondary"
+                    size="sm"
+                    onclick={killLoginPortOccupant}
                     disabled={killingLoginPortOccupant}
                   >
                     {copyForLanguage().killPortOccupant}
-                  </button>
+                  </AppButton>
                 </div>
               {/if}
             </div>
@@ -1597,7 +1587,6 @@
             {appMeta}
             language={snapshot.settings.language}
             theme={snapshot.settings.theme}
-            {iconToolbarButton}
             {loginStarting}
             loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
             {refreshingAllUsage}
@@ -1653,7 +1642,7 @@
 
 {#if renderExportFormatDialog}
   <div
-    class="fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6"
+    class="theme-dialog-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6"
     role="presentation"
     tabindex="-1"
     on:click={(event) => {
@@ -1668,7 +1657,7 @@
     }}
   >
     <div
-      class={`theme-surface t-modal ${exportDialogMotionState === 'open' ? 'is-open' : exportDialogMotionState === 'closing' ? 'is-closing' : ''} w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 sm:p-6`}
+      class={`theme-surface theme-dialog-surface t-modal ${exportDialogMotionState === 'open' ? 'is-open' : exportDialogMotionState === 'closing' ? 'is-closing' : ''} w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 sm:p-6`}
       use:cascadeIn={{
         selector: '[data-motion-item]'
       }}
@@ -1721,20 +1710,22 @@
       {/if}
 
       <div class="mt-6 flex flex-wrap justify-end gap-3" data-motion-item>
-        <button
-          class={compactGhostButton}
-          on:click={closeExportFormatDialog}
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={closeExportFormatDialog}
           disabled={exportDialogBusy}
         >
           {copyForLanguage().exportFormatCancel}
-        </button>
-        <button
-          class={primaryActionButton}
-          on:click={submitExportFormatDialog}
+        </AppButton>
+        <AppButton
+          variant="primary"
+          size="sm"
+          onclick={submitExportFormatDialog}
           disabled={exportDialogBusy}
         >
           {copyForLanguage().exportFormatConfirm}
-        </button>
+        </AppButton>
       </div>
     </div>
   </div>
@@ -1745,8 +1736,6 @@
     copy={copyForLanguage()}
     language={snapshot.settings.language}
     accountLabelText={accountLabel(wakeDialogAccount, copyForLanguage())}
-    {compactGhostButton}
-    {primaryActionButton}
     bind:activeTab={wakeDialogTab}
     bind:sessionPrompt={wakePromptDraft}
     bind:sessionModel={wakeModelDraft}
@@ -1773,7 +1762,6 @@
 <div use:reveal={{ delay: 0.02 }}>
   <HeroPanel
     {heroClass}
-    {compactGhostButton}
     copy={copyForLanguage()}
     {loginEvent}
     onClose={() => closeExpandablePanels()}
@@ -1867,14 +1855,38 @@
 
   :global(.theme-surface[role='dialog']),
   :global(.wake-dialog-panel) {
-    border-radius: 0.6rem !important;
-    border-color: color-mix(in srgb, var(--line-strong) 82%, transparent) !important;
-    background: var(--color-fog) !important;
-    box-shadow: var(--elevation-2) !important;
+    border-radius: 0.75rem !important;
+    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft)) !important;
+    box-shadow:
+      var(--elevation-2),
+      0 0 0 1px color-mix(in srgb, var(--line-strong) 44%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 62%, transparent) !important;
   }
 
   :global(.wake-dialog-backdrop) {
     background: color-mix(in srgb, black 34%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark'] .theme-dialog-backdrop) {
+    background: color-mix(in srgb, black 70%, transparent) !important;
+    backdrop-filter: blur(6px) saturate(0.82);
+  }
+
+  :global(html[data-theme='dark'] .theme-surface.theme-dialog-surface[role='dialog']) {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 66%, white 34%) !important;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft)),
+      color-mix(in srgb, var(--panel-strong) 74%, var(--color-fog))
+    ) !important;
+    box-shadow:
+      0 34px 120px rgba(0, 0, 0, 0.92),
+      0 18px 54px rgba(0, 0, 0, 0.68),
+      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 72%, transparent),
+      0 0 0 8px rgba(255, 255, 255, 0.035),
+      inset 0 1px 0 rgba(255, 255, 255, 0.12),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.055) !important;
   }
 
   :global(.theme-toolbar),

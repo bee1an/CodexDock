@@ -14,6 +14,7 @@ import {
   parseFlags,
   parseFileOption,
   parseInstanceOptions,
+  parsePromptOptions,
   parseProviderOptions,
   parseSettingsValue
 } from './cli-parsing'
@@ -26,6 +27,9 @@ import {
   printHelp,
   printIfNeeded,
   printInstances,
+  printPromptCategories,
+  printPromptDetail,
+  printPrompts,
   printProviderCheck,
   printProviders,
   printSettings,
@@ -677,6 +681,141 @@ async function execute(
         }
         default:
           throw new CliError('Unknown settings command', EXIT_USAGE)
+      }
+    }
+    case 'prompt': {
+      switch (subcommand) {
+        case 'list': {
+          const opts = parsePromptOptions(rest)
+          const prompts = await runtime.services.prompt.list({
+            query: opts.query,
+            category: opts.categories[0]
+          })
+          printPrompts(prompts, silent)
+          return { code: EXIT_OK, payload: toCliResult(prompts) }
+        }
+        case 'show': {
+          const promptId = rest[0]
+          if (!promptId) {
+            throw new CliError('Missing prompt-id', EXIT_USAGE)
+          }
+          const detail = await runtime.services.prompt.detail(promptId)
+          printPromptDetail(detail, silent)
+          return { code: EXIT_OK, payload: toCliResult(detail) }
+        }
+        case 'create': {
+          const opts = parsePromptOptions(rest)
+          if (!opts.title) {
+            throw new CliError('Missing --title', EXIT_USAGE)
+          }
+          let content = opts.content ?? ''
+          if (opts.file) {
+            content = await fs.readFile(opts.file, 'utf8')
+          }
+          if (!content && !opts.file) {
+            throw new CliError('Missing --content or --file', EXIT_USAGE)
+          }
+          const created = await runtime.services.prompt.create({
+            title: opts.title,
+            content,
+            categories: opts.categories.length ? opts.categories : undefined
+          })
+          printIfNeeded(`Created prompt: ${created.id}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(created) }
+        }
+        case 'update': {
+          const opts = parsePromptOptions(rest)
+          const promptId = opts.positionals[0]
+          if (!promptId) {
+            throw new CliError('Missing prompt-id', EXIT_USAGE)
+          }
+          let content = opts.content
+          if (opts.file) {
+            content = await fs.readFile(opts.file, 'utf8')
+          }
+          const updated = await runtime.services.prompt.update(promptId, {
+            title: opts.title,
+            content,
+            categories: opts.categories.length ? opts.categories : undefined,
+            clearCategories: opts.clearCategories
+          })
+          printIfNeeded(`Updated prompt: ${updated.id}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(updated) }
+        }
+        case 'remove': {
+          const promptId = rest[0]
+          if (!promptId) {
+            throw new CliError('Missing prompt-id', EXIT_USAGE)
+          }
+          await runtime.services.prompt.remove(promptId)
+          printIfNeeded(`Removed prompt: ${promptId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(null) }
+        }
+        case 'category': {
+          const categoryCmd = rest[0]
+          switch (categoryCmd) {
+            case 'list': {
+              const result = await runtime.services.prompt.listCategories()
+              printPromptCategories(result, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'create': {
+              const name = rest.slice(1).join(' ').trim()
+              if (!name) {
+                throw new CliError('Missing category name', EXIT_USAGE)
+              }
+              const result = await runtime.services.prompt.createCategory(name)
+              printIfNeeded(`Created category: ${name}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'rename': {
+              const oldName = rest[1]
+              const newName = rest.slice(2).join(' ').trim()
+              if (!oldName || !newName) {
+                throw new CliError('Usage: cdock prompt category rename <old> <new>', EXIT_USAGE)
+              }
+              const result = await runtime.services.prompt.renameCategory(oldName, newName)
+              printIfNeeded(`Renamed category: ${oldName} -> ${newName}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'remove': {
+              const name = rest.slice(1).join(' ').trim()
+              if (!name) {
+                throw new CliError('Missing category name', EXIT_USAGE)
+              }
+              const result = await runtime.services.prompt.removeCategory(name)
+              printIfNeeded(`Removed category: ${name}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            default:
+              throw new CliError('Unknown prompt category command', EXIT_USAGE)
+          }
+        }
+        case 'import': {
+          const opts = parsePromptOptions(rest)
+          if (opts.dir) {
+            const result = await runtime.services.prompt.importDir(opts.dir)
+            printIfNeeded(`Imported ${result.imported}, skipped ${result.skipped}`, silent)
+            return { code: EXIT_OK, payload: toCliResult(result) }
+          }
+          if (opts.file) {
+            const result = await runtime.services.prompt.importFile(opts.file)
+            printIfNeeded(`Imported ${result.imported}, skipped ${result.skipped}`, silent)
+            return { code: EXIT_OK, payload: toCliResult(result) }
+          }
+          throw new CliError('Usage: cdock prompt import (--file <md>|--dir <dir>)', EXIT_USAGE)
+        }
+        case 'export': {
+          const opts = parsePromptOptions(rest)
+          if (!opts.dir) {
+            throw new CliError('Usage: cdock prompt export --dir <dir>', EXIT_USAGE)
+          }
+          const result = await runtime.services.prompt.exportDir(opts.dir)
+          printIfNeeded(`Exported ${result.exported} prompts`, silent)
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        default:
+          throw new CliError('Unknown prompt command', EXIT_USAGE)
       }
     }
     default:

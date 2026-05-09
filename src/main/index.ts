@@ -910,6 +910,40 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:copy-skill', (_, input: CopyCodexSkillInput) =>
     codexServices.skill.copy(input)
   )
+
+  // Prompt management
+  ipcMain.handle('codex:prompt-list', (_, input?) => codexServices.prompt.list(input))
+  ipcMain.handle('codex:prompt-detail', (_, promptId: string) =>
+    codexServices.prompt.detail(promptId)
+  )
+  ipcMain.handle('codex:prompt-create', (_, input) => codexServices.prompt.create(input))
+  ipcMain.handle('codex:prompt-update', (_, promptId: string, input) =>
+    codexServices.prompt.update(promptId, input)
+  )
+  ipcMain.handle('codex:prompt-remove', (_, promptId: string) =>
+    codexServices.prompt.remove(promptId)
+  )
+  ipcMain.handle('codex:prompt-copy', (_, promptId: string) => codexServices.prompt.copy(promptId))
+  ipcMain.handle('codex:prompt-category-list', () => codexServices.prompt.listCategories())
+  ipcMain.handle('codex:prompt-category-create', (_, name: string) =>
+    codexServices.prompt.createCategory(name)
+  )
+  ipcMain.handle('codex:prompt-category-rename', (_, oldName: string, newName: string) =>
+    codexServices.prompt.renameCategory(oldName, newName)
+  )
+  ipcMain.handle('codex:prompt-category-remove', (_, name: string) =>
+    codexServices.prompt.removeCategory(name)
+  )
+  ipcMain.handle('codex:prompt-import-file', (_, filePath: string) =>
+    codexServices.prompt.importFile(filePath)
+  )
+  ipcMain.handle('codex:prompt-import-dir', (_, dirPath: string) =>
+    codexServices.prompt.importDir(dirPath)
+  )
+  ipcMain.handle('codex:prompt-export-dir', (_, targetDir: string) =>
+    codexServices.prompt.exportDir(targetDir)
+  )
+
   ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())
   ipcMain.handle('codex:start-local-gateway', async () => {
     await codexServices.gateway.start()
