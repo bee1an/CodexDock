@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.5 - 2026-05-10
+
+This patch release adds image references to Prompts and hardens prompt data migration and dialog behavior.
+
+- Added reference-image attachments for image-category Prompts, including desktop preview grids, upload and remove flows, and persisted attachment metadata.
+- Improved Prompt import and export across the desktop app and CLI so attachment files are preserved alongside markdown backups.
+- Fixed legacy Prompt migration from local mock app data so divergent existing prompts do not create duplicate copies on every startup.
+- Hardened Prompt attachment writes with main-process MIME type, base64, and size validation before files are saved.
+- Fixed dialog backdrop handling so modals stay open when a pointer drag starts inside the dialog and ends on the backdrop.
+
 ## 0.4.4 - 2026-05-09
 
 This release adds prompt management and unifies core desktop controls across the app.
