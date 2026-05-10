@@ -990,6 +990,19 @@ export function statusBarAccounts(
 
 // --- Prompt 模块类型 ---
 
+export const BUILT_IN_PROMPT_CATEGORIES = ['image'] as const
+export type BuiltInPromptCategory = (typeof BUILT_IN_PROMPT_CATEGORIES)[number]
+
+export function isBuiltInPromptCategory(name: string): name is BuiltInPromptCategory {
+  return (BUILT_IN_PROMPT_CATEGORIES as readonly string[]).includes(name)
+}
+
+export interface PromptAttachment {
+  fileName: string
+  mimeType: string
+  size: number
+}
+
 export interface PromptSummary {
   id: string
   title: string
@@ -1000,6 +1013,7 @@ export interface PromptSummary {
 
 export interface PromptDetail extends PromptSummary {
   content: string
+  attachments: PromptAttachment[]
 }
 
 export interface CreatePromptInput {
@@ -1028,4 +1042,17 @@ export interface PromptImportResult {
 
 export interface PromptCategoryList {
   categories: string[]
+}
+
+export interface PromptAttachmentPayload {
+  fileName: string
+  mimeType?: string
+  dataBase64: string
+}
+
+export interface PromptAttachmentData {
+  fileName: string
+  mimeType: string
+  size: number
+  dataBase64: string
 }

@@ -22,6 +22,8 @@ import type {
   ListCodexSessionProjectsInput,
   ListCodexSessionsInput,
   PromptCategoryList,
+  PromptAttachmentData,
+  PromptAttachmentPayload,
   PromptDetail,
   PromptImportResult,
   PromptSearchInput,
@@ -136,6 +138,18 @@ const codexApp = {
     ipcRenderer.invoke('codex:prompt-import-dir', dirPath),
   exportPromptDir: (targetDir: string): Promise<{ exported: number }> =>
     ipcRenderer.invoke('codex:prompt-export-dir', targetDir),
+  addPromptAttachment: (
+    promptId: string,
+    payload: PromptAttachmentPayload
+  ): Promise<PromptDetail> =>
+    ipcRenderer.invoke('codex:prompt-attachment-add', promptId, payload),
+  removePromptAttachment: (promptId: string, fileName: string): Promise<PromptDetail> =>
+    ipcRenderer.invoke('codex:prompt-attachment-remove', promptId, fileName),
+  readPromptAttachment: (
+    promptId: string,
+    fileName: string
+  ): Promise<PromptAttachmentData> =>
+    ipcRenderer.invoke('codex:prompt-attachment-read', promptId, fileName),
   getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
   startLocalGateway: () => ipcRenderer.invoke('codex:start-local-gateway'),
   stopLocalGateway: () => ipcRenderer.invoke('codex:stop-local-gateway'),

@@ -159,6 +159,7 @@
   let exportDialogMotionState: TransitionMotionState = 'closed'
   let exportDialogCloseTimer: number | null = null
   let exportDialogOpenFrame: number | null = null
+  let exportDialogBackdropPointerStarted = false
   let exportDialogBusy = false
   let exportDialogError = ''
   let exportDialogAccountIds: string[] | null = null
@@ -368,6 +369,26 @@
       finishExportFormatDialogClose,
       modalCloseDurationMs()
     )
+  }
+
+  const handleExportDialogBackdropPointerDown = (event: PointerEvent): void => {
+    exportDialogBackdropPointerStarted = event.target === event.currentTarget
+  }
+
+  const clearExportDialogBackdropPointerIntentSoon = (): void => {
+    window.setTimeout(() => {
+      exportDialogBackdropPointerStarted = false
+    }, 0)
+  }
+
+  const handleExportDialogBackdropClick = (event: MouseEvent): void => {
+    const shouldClose = event.target === event.currentTarget && exportDialogBackdropPointerStarted
+
+    exportDialogBackdropPointerStarted = false
+
+    if (shouldClose) {
+      closeExportFormatDialog()
+    }
   }
 
   const toolbarDialogOpen = (): boolean =>
@@ -1645,11 +1666,12 @@
     class="theme-dialog-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6"
     role="presentation"
     tabindex="-1"
-    on:click={(event) => {
-      if (event.target === event.currentTarget) {
-        closeExportFormatDialog()
-      }
+    on:pointerdown={handleExportDialogBackdropPointerDown}
+    on:pointerup={clearExportDialogBackdropPointerIntentSoon}
+    on:pointercancel={() => {
+      exportDialogBackdropPointerStarted = false
     }}
+    on:click={handleExportDialogBackdropClick}
     on:keydown={(event) => {
       if (event.key === 'Escape') {
         closeExportFormatDialog()

@@ -1,19 +1,27 @@
 <script lang="ts">
-  import { onMount } from 'svelte'
+  import { onDestroy, onMount } from 'svelte'
 
-  import type {
-    CreatePromptInput,
-    PromptCategoryList,
-    PromptDetail,
-    PromptSearchInput,
-    PromptSummary,
-    UpdatePromptInput
+  import {
+    isBuiltInPromptCategory,
+    type CreatePromptInput,
+    type PromptAttachment,
+    type PromptAttachmentData,
+    type PromptAttachmentPayload,
+    type PromptCategoryList,
+    type PromptDetail,
+    type PromptSearchInput,
+    type PromptSummary,
+    type UpdatePromptInput
   } from '../../../shared/codex'
   import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import type { LocalizedCopy } from './app-view'
   import { cascadeIn, reveal } from './gsap-motion'
+
+  const IMAGE_CATEGORY = 'image'
+  const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+  const ACCEPTED_MIME_PREFIX = 'image/'
 
   export let copy: LocalizedCopy
   export let listPrompts: (input?: PromptSearchInput) => Promise<PromptSummary[]>
@@ -26,6 +34,15 @@
   export let createPromptCategory: (name: string) => Promise<PromptCategoryList>
   export let renamePromptCategory: (oldName: string, newName: string) => Promise<PromptCategoryList>
   export let removePromptCategory: (name: string) => Promise<PromptCategoryList>
+  export let addPromptAttachment: (
+    promptId: string,
+    payload: PromptAttachmentPayload
+  ) => Promise<PromptDetail>
+  export let removePromptAttachment: (promptId: string, fileName: string) => Promise<PromptDetail>
+  export let readPromptAttachment: (
+    promptId: string,
+    fileName: string
+  ) => Promise<PromptAttachmentData>
 
   type ViewMode = 'list' | 'detail' | 'edit'
 
@@ -41,6 +58,10 @@
   let editTitle = ''
   let editContent = ''
   let editCategories: string[] = []
+  let editAttachments: PromptAttachment[] = []
+  let attachmentPreviews: Record<string, string> = {}
+  let attachmentBusy = false
+  let lightbox: { url: string; name: string } | null = null
   let saving = false
   let copiedId = ''
   let showCategoryManager = false
@@ -81,8 +102,10 @@
 
   async function openDetail(prompt: PromptSummary): Promise<void> {
     try {
-      viewingPrompt = await getPromptDetail(prompt.id)
+      const detail = await getPromptDetail(prompt.id)
+      viewingPrompt = detail
       viewMode = 'detail'
+      void loadAttachmentPreviews(detail.id, detail.attachments)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load prompt'
     }
@@ -92,7 +115,9 @@
     editingPrompt = null
     editTitle = ''
     editContent = ''
-    editCategories = []
+    editCategories = selectedCategory ? [selectedCategory] : []
+    editAttachments = []
+    clearAttachmentPreviews()
     viewMode = 'edit'
   }
 
@@ -103,7 +128,9 @@
       editTitle = detail.title
       editContent = detail.content
       editCategories = [...detail.categories]
+      editAttachments = [...detail.attachments]
       viewMode = 'edit'
+      void loadAttachmentPreviews(detail.id, detail.attachments)
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to load prompt'
     }
@@ -199,10 +226,134 @@
       : [...editCategories, cat]
   }
 
+  function clearAttachmentPreviews(): void {
+    for (const url of Object.values(attachmentPreviews)) {
+      if (url.startsWith('blob:')) URL.revokeObjectURL(url)
+    }
+    attachmentPreviews = {}
+  }
+
+  function toDataUrl(data: PromptAttachmentData): string {
+    return `data:${data.mimeType};base64,${data.dataBase64}`
+  }
+
+  async function loadAttachmentPreviews(
+    promptId: string,
+    attachments: PromptAttachment[]
+  ): Promise<void> {
+    clearAttachmentPreviews()
+    const next: Record<string, string> = {}
+    for (const att of attachments) {
+      try {
+        const data = await readPromptAttachment(promptId, att.fileName)
+        next[att.fileName] = toDataUrl(data)
+      } catch {
+        // skip unreadable attachment
+      }
+    }
+    attachmentPreviews = next
+  }
+
+  async function fileToBase64(file: File): Promise<string> {
+    const buffer = await file.arrayBuffer()
+    let binary = ''
+    const bytes = new Uint8Array(buffer)
+    const chunk = 0x8000
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode(...bytes.subarray(i, i + chunk))
+    }
+    return btoa(binary)
+  }
+
+  async function handleImageFiles(files: FileList | File[] | null): Promise<void> {
+    if (!files || !editingPrompt) return
+    const list = Array.from(files)
+    if (!list.length) return
+    attachmentBusy = true
+    try {
+      for (const file of list) {
+        if (!file.type.startsWith(ACCEPTED_MIME_PREFIX)) {
+          error = copy.promptsImagesInvalidType(file.name)
+          continue
+        }
+        if (file.size > MAX_ATTACHMENT_BYTES) {
+          error = copy.promptsImagesTooLarge(file.name)
+          continue
+        }
+        try {
+          const dataBase64 = await fileToBase64(file)
+          const detail = await addPromptAttachment(editingPrompt.id, {
+            fileName: file.name,
+            mimeType: file.type || undefined,
+            dataBase64
+          })
+          editingPrompt = detail
+          editAttachments = [...detail.attachments]
+          const added = detail.attachments[detail.attachments.length - 1]
+          if (added) {
+            attachmentPreviews = {
+              ...attachmentPreviews,
+              [added.fileName]: `data:${added.mimeType};base64,${dataBase64}`
+            }
+          }
+        } catch (e) {
+          error = e instanceof Error ? e.message : copy.promptsImagesUploadFailed
+        }
+      }
+    } finally {
+      attachmentBusy = false
+    }
+  }
+
+  async function removeAttachment(fileName: string): Promise<void> {
+    if (!editingPrompt) return
+    attachmentBusy = true
+    try {
+      const detail = await removePromptAttachment(editingPrompt.id, fileName)
+      editingPrompt = detail
+      editAttachments = [...detail.attachments]
+      const previewUrl = attachmentPreviews[fileName]
+      if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
+      const { [fileName]: _removed, ...rest } = attachmentPreviews
+      attachmentPreviews = rest
+    } catch (e) {
+      error = e instanceof Error ? e.message : 'Failed to remove image'
+    } finally {
+      attachmentBusy = false
+    }
+  }
+
+  function onImageInputChange(event: Event): void {
+    const input = event.currentTarget as HTMLInputElement
+    void handleImageFiles(input.files).finally(() => {
+      input.value = ''
+    })
+  }
+
+  function openLightbox(fileName: string): void {
+    const url = attachmentPreviews[fileName]
+    if (!url) return
+    lightbox = { url, name: fileName }
+  }
+
+  function closeLightbox(): void {
+    lightbox = null
+  }
+
+  function handleLightboxBackdropClick(event: MouseEvent): void {
+    if (event.target === event.currentTarget) closeLightbox()
+  }
+
+  function handleLightboxKey(event: KeyboardEvent): void {
+    if (event.key === 'Escape') closeLightbox()
+  }
+
   function backToList(): void {
     viewMode = 'list'
     viewingPrompt = null
     editingPrompt = null
+    editAttachments = []
+    clearAttachmentPreviews()
   }
 
   function formattedDate(value: string): string {
@@ -218,6 +369,12 @@
 
   onMount(() => {
     void refresh()
+    window.addEventListener('keydown', handleLightboxKey)
+  })
+
+  onDestroy(() => {
+    clearAttachmentPreviews()
+    window.removeEventListener('keydown', handleLightboxKey)
   })
 </script>
 
@@ -497,27 +654,37 @@
                   {cat}
                 </span>
                 <span class="min-w-0 flex-1 truncate text-sm font-medium text-carbon">{cat}</span>
-                <AppButton
-                  variant="icon"
-                  size="xs"
-                  onclick={() => {
-                    renamingCategory = cat
-                    renameCategoryValue = cat
-                  }}
-                  ariaLabel={copy.promptsCategoryRename}
-                  title={copy.promptsCategoryRename}
-                >
-                  <span class="i-lucide-pencil h-4 w-4"></span>
-                </AppButton>
-                <AppButton
-                  variant="icon"
-                  size="xs"
-                  onclick={() => void doRemoveCategory(cat)}
-                  ariaLabel={copy.promptsCategoryRemove}
-                  title={copy.promptsCategoryRemove}
-                >
-                  <span class="i-lucide-trash-2 h-4 w-4"></span>
-                </AppButton>
+                {#if isBuiltInPromptCategory(cat)}
+                  <span
+                    class="text-[11px] text-faint"
+                    title={copy.promptsImageBuiltInHint}
+                    aria-label={copy.promptsImageBuiltInHint}
+                  >
+                    <span class="i-lucide-lock h-3.5 w-3.5"></span>
+                  </span>
+                {:else}
+                  <AppButton
+                    variant="icon"
+                    size="xs"
+                    onclick={() => {
+                      renamingCategory = cat
+                      renameCategoryValue = cat
+                    }}
+                    ariaLabel={copy.promptsCategoryRename}
+                    title={copy.promptsCategoryRename}
+                  >
+                    <span class="i-lucide-pencil h-4 w-4"></span>
+                  </AppButton>
+                  <AppButton
+                    variant="icon"
+                    size="xs"
+                    onclick={() => void doRemoveCategory(cat)}
+                    ariaLabel={copy.promptsCategoryRemove}
+                    title={copy.promptsCategoryRemove}
+                  >
+                    <span class="i-lucide-trash-2 h-4 w-4"></span>
+                  </AppButton>
+                {/if}
               {/if}
             </div>
           {/each}
@@ -534,7 +701,12 @@
 {/if}
 
 {#if viewMode === 'detail' && viewingPrompt}
-  <AppDialog title={copy.promptsTitle} panelClass="prompts-dialog-panel" onclose={backToList}>
+  <AppDialog
+    title={copy.promptsTitle}
+    maxWidthClass="max-w-4xl"
+    panelClass="prompts-dialog-panel"
+    onclose={backToList}
+  >
     <div class="flex flex-col gap-4">
       <div class="grid gap-2">
         <p class="text-[11px] text-faint">
@@ -553,7 +725,45 @@
       </div>
 
       <pre
-        class="theme-code-surface max-h-[52vh] overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{viewingPrompt.content}</pre>
+        class="theme-code-surface max-h-[62vh] min-h-[40vh] overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{viewingPrompt.content}</pre>
+
+      {#if viewingPrompt.attachments.length}
+        <div class="grid gap-2">
+          <span class="text-xs font-medium text-muted-strong">{copy.promptsImagesLabel}</span>
+          <div class="prompts-attachment-grid">
+            {#each viewingPrompt.attachments as att (att.fileName)}
+              <figure class="prompts-attachment-card">
+                <button
+                  type="button"
+                  class="prompts-attachment-thumb-button"
+                  onclick={() => openLightbox(att.fileName)}
+                  disabled={!attachmentPreviews[att.fileName]}
+                  title={att.fileName}
+                  aria-label={att.fileName}
+                >
+                  {#if attachmentPreviews[att.fileName]}
+                    <img
+                      src={attachmentPreviews[att.fileName]}
+                      alt={att.fileName}
+                      class="prompts-attachment-thumb"
+                      loading="lazy"
+                    />
+                  {:else}
+                    <div
+                      class="prompts-attachment-thumb flex items-center justify-center text-faint"
+                    >
+                      <span class="i-lucide-image h-6 w-6"></span>
+                    </div>
+                  {/if}
+                </button>
+                <figcaption class="prompts-attachment-caption" title={att.fileName}>
+                  {att.fileName}
+                </figcaption>
+              </figure>
+            {/each}
+          </div>
+        </div>
+      {/if}
 
       <div class="flex flex-wrap justify-end gap-2 pt-1">
         <AppButton variant="secondary" size="sm" onclick={() => void startEdit(viewingPrompt)}>
@@ -578,6 +788,7 @@
 {#if viewMode === 'edit'}
   <AppDialog
     title={editingPrompt ? copy.promptsEdit : copy.promptsCreate}
+    maxWidthClass="max-w-4xl"
     panelClass="prompts-dialog-panel"
     onclose={backToList}
   >
@@ -617,12 +828,105 @@
         <AppInput
           variant="code"
           multiline
-          class="min-h-[260px]"
-          inputClass="font-mono text-[13px] leading-relaxed"
+          class="min-h-[58vh]"
+          inputClass="max-h-[72vh] font-mono text-[13px] leading-relaxed"
           placeholder={copy.promptsContentPlaceholder}
           bind:value={editContent}
         />
       </label>
+
+      {#if editCategories.includes(IMAGE_CATEGORY)}
+        <div class="grid gap-2">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-xs font-medium text-muted-strong">{copy.promptsImagesLabel}</span>
+            <span class="text-[11px] text-faint">{copy.promptsImagesHint}</span>
+          </div>
+
+          {#if !editingPrompt}
+            <div
+              class="theme-tag-empty rounded-[0.4rem] border border-dashed border-black/10 bg-white px-4 py-6 text-center"
+            >
+              <p class="text-sm text-faint">{copy.promptsImagesCreateFirst}</p>
+            </div>
+          {:else}
+            <div class="flex flex-wrap items-center gap-2">
+              <label class="inline-flex">
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  class="sr-only"
+                  disabled={attachmentBusy}
+                  onchange={onImageInputChange}
+                />
+                <span
+                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-[0.4rem] border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-carbon transition hover:bg-black/5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                  aria-disabled={attachmentBusy}
+                >
+                  {#if attachmentBusy}
+                    <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+                  {:else}
+                    <span class="i-lucide-image-plus h-3.5 w-3.5"></span>
+                  {/if}
+                  <span>{copy.promptsImagesUpload}</span>
+                </span>
+              </label>
+            </div>
+
+            {#if editAttachments.length}
+              <div class="prompts-attachment-grid">
+                {#each editAttachments as att (att.fileName)}
+                  <figure class="prompts-attachment-card">
+                    <button
+                      type="button"
+                      class="prompts-attachment-thumb-button"
+                      onclick={() => openLightbox(att.fileName)}
+                      disabled={!attachmentPreviews[att.fileName]}
+                      title={att.fileName}
+                      aria-label={att.fileName}
+                    >
+                      {#if attachmentPreviews[att.fileName]}
+                        <img
+                          src={attachmentPreviews[att.fileName]}
+                          alt={att.fileName}
+                          class="prompts-attachment-thumb"
+                          loading="lazy"
+                        />
+                      {:else}
+                        <div
+                          class="prompts-attachment-thumb flex items-center justify-center text-faint"
+                        >
+                          <span class="i-lucide-image h-6 w-6"></span>
+                        </div>
+                      {/if}
+                    </button>
+                    <AppButton
+                      variant="icon"
+                      size="xs"
+                      class="prompts-attachment-remove"
+                      onclick={() => void removeAttachment(att.fileName)}
+                      disabled={attachmentBusy}
+                      ariaLabel={copy.promptsImagesRemove}
+                      title={copy.promptsImagesRemove}
+                    >
+                      <span class="i-lucide-x h-4 w-4"></span>
+                    </AppButton>
+                    <figcaption class="prompts-attachment-caption" title={att.fileName}>
+                      {att.fileName}
+                    </figcaption>
+                  </figure>
+                {/each}
+              </div>
+            {:else}
+              <div
+                class="theme-tag-empty rounded-[0.4rem] border border-dashed border-black/10 bg-white px-4 py-6 text-center"
+              >
+                <p class="text-sm text-faint">{copy.promptsImagesEmpty}</p>
+              </div>
+            {/if}
+          {/if}
+        </div>
+      {/if}
 
       <div class="flex justify-end gap-2 pt-1">
         <AppButton variant="secondary" size="sm" onclick={backToList} disabled={saving}>
@@ -639,6 +943,43 @@
       </div>
     </form>
   </AppDialog>
+{/if}
+
+{#if lightbox}
+  <div
+    class="prompts-lightbox"
+    role="dialog"
+    aria-modal="true"
+    aria-label={lightbox.name}
+    tabindex="-1"
+    onclick={handleLightboxBackdropClick}
+    onkeydown={handleLightboxKey}
+  >
+    <img src={lightbox.url} alt={lightbox.name} class="prompts-lightbox-image" />
+    <button
+      type="button"
+      class="prompts-lightbox-close"
+      onclick={closeLightbox}
+      aria-label={copy.closeDialog}
+      title={copy.closeDialog}
+    >
+      <svg
+        xmlns="http://www.w3.org/2000/svg"
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="2"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+        aria-hidden="true"
+      >
+        <path d="M18 6 6 18" />
+        <path d="m6 6 12 12" />
+      </svg>
+    </button>
+  </div>
 {/if}
 
 <style>
@@ -704,6 +1045,128 @@
     border-radius: 0.45rem;
     background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
     padding: 0.55rem 0.65rem;
+  }
+
+  .prompts-attachment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .prompts-attachment-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
+    padding: 0.4rem;
+  }
+
+  .prompts-attachment-thumb {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    border-radius: 0.35rem;
+    object-fit: cover;
+    background: color-mix(in srgb, var(--color-arctic-mist) 22%, white 78%);
+  }
+
+  .prompts-attachment-thumb-button {
+    display: block;
+    width: 100%;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    cursor: zoom-in;
+    border-radius: 0.35rem;
+    transition:
+      transform 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .prompts-attachment-thumb-button:hover:not(:disabled),
+  .prompts-attachment-thumb-button:focus-visible:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 6px 18px -8px rgba(0, 0, 0, 0.35);
+  }
+
+  .prompts-attachment-thumb-button:disabled {
+    cursor: default;
+  }
+
+  .prompts-lightbox {
+    position: fixed;
+    inset: 0;
+    z-index: 120;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 3rem;
+    background: rgba(12, 16, 24, 0.82);
+    backdrop-filter: blur(6px);
+    cursor: zoom-out;
+  }
+
+  .prompts-lightbox-image {
+    max-width: 96vw;
+    max-height: 92vh;
+    border-radius: 0.5rem;
+    box-shadow: 0 28px 72px -20px rgba(0, 0, 0, 0.6);
+    cursor: default;
+  }
+
+  .prompts-lightbox-close {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    width: 2.25rem;
+    height: 2.25rem;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.18);
+    color: white;
+    cursor: pointer;
+    transition: background-color 140ms ease;
+  }
+
+  .prompts-lightbox-close:hover,
+  .prompts-lightbox-close:focus-visible {
+    background: rgba(255, 255, 255, 0.32);
+  }
+
+  .prompts-lightbox-close svg {
+    display: block;
+  }
+
+  .prompts-attachment-caption {
+    font-size: 0.68rem;
+    color: var(--ink-soft-strong);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  :global(.prompts-attachment-card .prompts-attachment-remove) {
+    position: absolute;
+    top: 0.3rem;
+    right: 0.3rem;
+    background: color-mix(in srgb, white 82%, transparent);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  }
+
+  :global(html[data-theme='dark']) .prompts-attachment-card {
+    background: var(--panel-strong) !important;
+    border-color: var(--color-arctic-mist) !important;
+  }
+
+  :global(html[data-theme='dark']) .prompts-attachment-thumb {
+    background: color-mix(in srgb, var(--color-arctic-mist) 32%, black 68%);
   }
 
   :global(html[data-theme='dark']) .theme-tag-empty,

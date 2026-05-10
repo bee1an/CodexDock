@@ -511,6 +511,8 @@ app.whenReady().then(async () => {
   const createRuntimeServices = (): CodexServices =>
     createCodexServices({
       userDataPath: configuredAppConfigPath(),
+      promptDataPath: productionAppConfigPath,
+      legacyPromptDataPaths: [localMockAppConfigPath],
       defaultWorkspacePath,
       defaultCodexHome: configuredCodexHomePath(),
       platform,
@@ -942,6 +944,15 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('codex:prompt-export-dir', (_, targetDir: string) =>
     codexServices.prompt.exportDir(targetDir)
+  )
+  ipcMain.handle('codex:prompt-attachment-add', (_, promptId: string, payload) =>
+    codexServices.prompt.addAttachment(promptId, payload)
+  )
+  ipcMain.handle('codex:prompt-attachment-remove', (_, promptId: string, fileName: string) =>
+    codexServices.prompt.removeAttachment(promptId, fileName)
+  )
+  ipcMain.handle('codex:prompt-attachment-read', (_, promptId: string, fileName: string) =>
+    codexServices.prompt.readAttachment(promptId, fileName)
   )
 
   ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())

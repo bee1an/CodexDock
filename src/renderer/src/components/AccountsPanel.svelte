@@ -525,6 +525,10 @@
       createPromptCategory={(name) => window.codexApp.createPromptCategory(name)}
       renamePromptCategory={(old, name) => window.codexApp.renamePromptCategory(old, name)}
       removePromptCategory={(name) => window.codexApp.removePromptCategory(name)}
+      addPromptAttachment={(id, payload) => window.codexApp.addPromptAttachment(id, payload)}
+      removePromptAttachment={(id, fileName) =>
+        window.codexApp.removePromptAttachment(id, fileName)}
+      readPromptAttachment={(id, fileName) => window.codexApp.readPromptAttachment(id, fileName)}
     />
   {:else if currentView === 'tags'}
     <AccountsTagsView

@@ -8,7 +8,8 @@ const codexDockConfigEntries = new Set([
   'codex-instances.json',
   'codex-providers.json',
   'codex-instance-homes',
-  'cost-usage'
+  'cost-usage',
+  'prompts'
 ])
 
 export interface LegacyElectronUserDataMigrationResult {

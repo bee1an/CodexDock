@@ -12,6 +12,7 @@ import type {
   CopyCodexSkillInput,
   CopyCodexSkillResult,
   CreateCustomProviderInput,
+  CreatePromptInput,
   CustomProviderDetail,
   CodexSessionDetail,
   CodexSessionProjectsResult,
@@ -20,6 +21,13 @@ import type {
   CodexSkillsResult,
   ListCodexSessionProjectsInput,
   ListCodexSessionsInput,
+  PromptAttachmentData,
+  PromptAttachmentPayload,
+  PromptCategoryList,
+  PromptDetail,
+  PromptImportResult,
+  PromptSearchInput,
+  PromptSummary,
   ReadCodexSessionDetailInput,
   LoginAttempt,
   LoginEvent,
@@ -29,6 +37,7 @@ import type {
   TokenCostReadOptions,
   LocalGatewayStatus,
   UpdateAccountWakeScheduleInput,
+  UpdatePromptInput,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
   UpdateCustomProviderInput
@@ -89,6 +98,25 @@ interface CodexDesktopApi {
   listCodexSkills: () => Promise<CodexSkillsResult>
   readCodexSkillDetail: (instanceId: string, skillDirName: string) => Promise<CodexSkillDetail>
   copyCodexSkill: (input: CopyCodexSkillInput) => Promise<CopyCodexSkillResult>
+  listPrompts: (input?: PromptSearchInput) => Promise<PromptSummary[]>
+  getPromptDetail: (promptId: string) => Promise<PromptDetail>
+  createPrompt: (input: CreatePromptInput) => Promise<PromptDetail>
+  updatePrompt: (promptId: string, input: UpdatePromptInput) => Promise<PromptDetail>
+  removePrompt: (promptId: string) => Promise<void>
+  copyPromptContent: (promptId: string) => Promise<string>
+  listPromptCategories: () => Promise<PromptCategoryList>
+  createPromptCategory: (name: string) => Promise<PromptCategoryList>
+  renamePromptCategory: (oldName: string, newName: string) => Promise<PromptCategoryList>
+  removePromptCategory: (name: string) => Promise<PromptCategoryList>
+  importPromptFile: (filePath: string) => Promise<PromptImportResult>
+  importPromptDir: (dirPath: string) => Promise<PromptImportResult>
+  exportPromptDir: (targetDir: string) => Promise<{ exported: number }>
+  addPromptAttachment: (
+    promptId: string,
+    payload: PromptAttachmentPayload
+  ) => Promise<PromptDetail>
+  removePromptAttachment: (promptId: string, fileName: string) => Promise<PromptDetail>
+  readPromptAttachment: (promptId: string, fileName: string) => Promise<PromptAttachmentData>
   getLocalGatewayStatus: () => Promise<LocalGatewayStatus>
   startLocalGateway: () => Promise<AppSnapshot>
   stopLocalGateway: () => Promise<AppSnapshot>

@@ -3,6 +3,7 @@ import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
 
 const rendererComponentTests = [
+  'src/renderer/src/components/__test__/AppDialog.test.ts',
   'src/renderer/src/components/__test__/AccountsListView.test.ts',
   'src/renderer/src/components/__test__/AccountsPanel.test.ts',
   'src/renderer/src/components/__test__/AccountsProvidersView.test.ts',

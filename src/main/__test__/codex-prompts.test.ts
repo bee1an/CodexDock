@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -138,7 +138,7 @@ describe('createCodexPromptService', () => {
       await service.createCategory('dev')
       await service.createCategory('ops')
       const { categories } = await service.listCategories()
-      expect(categories).toEqual(['dev', 'ops'])
+      expect(categories).toEqual(['image', 'dev', 'ops'])
     })
 
     it('renames category in registry and prompts', async () => {
@@ -231,5 +231,155 @@ describe('createCodexPromptService', () => {
     expect(detail.title).toBe('plain')
     expect(detail.content).toBe('Just plain text')
     expect(detail.categories).toEqual([])
+  })
+
+  it('migrates prompts from legacy app data directories', async () => {
+    const dir = await createTempDir()
+    const legacyDir = await createTempDir()
+    await mkdir(join(legacyDir, 'prompts'), { recursive: true })
+    await writeFile(
+      join(legacyDir, 'prompts', '.categories.json'),
+      `${JSON.stringify(['legacy'])}\n`,
+      'utf8'
+    )
+    await writeFile(
+      join(legacyDir, 'prompts', 'legacy-prompt.md'),
+      '---\ntitle: Legacy Prompt\ncategories:\n  - legacy\n---\n\nLegacy body',
+      'utf8'
+    )
+
+    const service = createCodexPromptService(dir, { legacyUserDataPaths: [legacyDir] })
+
+    await expect(service.detail('legacy-prompt')).resolves.toMatchObject({
+      title: 'Legacy Prompt',
+      content: 'Legacy body',
+      categories: ['legacy']
+    })
+    await expect(readFile(join(dir, 'prompts', 'legacy-prompt.md'), 'utf8')).resolves.toContain(
+      'Legacy body'
+    )
+    await expect(service.listCategories()).resolves.toEqual({
+      categories: ['image', 'legacy']
+    })
+  })
+
+  it('does not re-duplicate legacy prompts on repeated service creation', async () => {
+    const dir = await createTempDir()
+    const legacyDir = await createTempDir()
+    await mkdir(join(legacyDir, 'prompts'), { recursive: true })
+    await writeFile(
+      join(legacyDir, 'prompts', 'legacy-prompt.md'),
+      '---\ntitle: Legacy\n---\n\nOriginal body',
+      'utf8'
+    )
+
+    const first = createCodexPromptService(dir, { legacyUserDataPaths: [legacyDir] })
+    await first.listCategories()
+
+    // user edits the migrated file locally — simulates realistic divergence
+    await writeFile(
+      join(dir, 'prompts', 'legacy-prompt.md'),
+      '---\ntitle: Overwritten\n---\n\nUser edit',
+      'utf8'
+    )
+
+    // previously: each subsequent start recopied the legacy file as -2.md, -3.md, ...
+    for (let i = 0; i < 3; i += 1) {
+      const service = createCodexPromptService(dir, { legacyUserDataPaths: [legacyDir] })
+      await service.listCategories()
+    }
+
+    const entries = (await readdir(join(dir, 'prompts'))).filter((name) => name.endsWith('.md'))
+    expect(entries).toEqual(['legacy-prompt.md'])
+    const finalBody = await readFile(join(dir, 'prompts', 'legacy-prompt.md'), 'utf8')
+    expect(finalBody).toContain('User edit')
+  })
+
+  it('exports attachments alongside markdown', async () => {
+    const dir = await createTempDir()
+    const exportDir = join(await createTempDir(), 'export')
+    const service = createCodexPromptService(dir)
+
+    const created = await service.create({ title: 'With Image', content: 'body' })
+    const pngBase64 = Buffer.from([
+      0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00
+    ]).toString('base64')
+    await service.addAttachment(created.id, {
+      fileName: 'pic.png',
+      mimeType: 'image/png',
+      dataBase64: pngBase64
+    })
+
+    await service.exportDir(exportDir)
+
+    const exportedMd = await readFile(join(exportDir, `${created.id}.md`), 'utf8')
+    expect(exportedMd).toContain('fileName: pic.png')
+
+    const copiedAttachment = await readFile(join(exportDir, '.attachments', created.id, 'pic.png'))
+    expect(copiedAttachment.length).toBe(11)
+
+    const importRoot = await createTempDir()
+    const importService = createCodexPromptService(importRoot)
+    await expect(importService.importDir(exportDir)).resolves.toMatchObject({ imported: 1 })
+    const imported = await importService.detail(created.id)
+    expect(imported.attachments).toEqual([
+      {
+        fileName: 'pic.png',
+        mimeType: 'image/png',
+        size: 11
+      }
+    ])
+    await expect(importService.readAttachment(created.id, 'pic.png')).resolves.toMatchObject({
+      fileName: 'pic.png',
+      mimeType: 'image/png',
+      size: 11
+    })
+  })
+
+  describe('addAttachment validation', () => {
+    const smallPngBase64 = Buffer.from([0x89, 0x50, 0x4e, 0x47]).toString('base64')
+
+    it('rejects unsupported mime types', async () => {
+      const dir = await createTempDir()
+      const service = createCodexPromptService(dir)
+      const created = await service.create({ title: 'X', content: 'x' })
+
+      await expect(
+        service.addAttachment(created.id, {
+          fileName: 'evil.exe',
+          mimeType: 'application/x-msdownload',
+          dataBase64: smallPngBase64
+        })
+      ).rejects.toThrow(/not allowed/u)
+    })
+
+    it('rejects payloads exceeding the size cap', async () => {
+      const dir = await createTempDir()
+      const service = createCodexPromptService(dir)
+      const created = await service.create({ title: 'X', content: 'x' })
+
+      const oversized = Buffer.alloc(10 * 1024 * 1024 + 1, 0).toString('base64')
+      await expect(
+        service.addAttachment(created.id, {
+          fileName: 'huge.png',
+          mimeType: 'image/png',
+          dataBase64: oversized
+        })
+      ).rejects.toThrow(/exceeds maximum size/u)
+    })
+
+    it('rejects malformed base64', async () => {
+      const dir = await createTempDir()
+      const service = createCodexPromptService(dir)
+      const created = await service.create({ title: 'X', content: 'x' })
+
+      await expect(
+        service.addAttachment(created.id, {
+          fileName: 'pic.png',
+          mimeType: 'image/png',
+          dataBase64: 'not_base64!!!'
+        })
+      ).rejects.toThrow(/base64/u)
+    })
   })
 })

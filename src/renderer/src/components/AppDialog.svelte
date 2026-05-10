@@ -9,14 +9,21 @@
   export let panelClass = ''
   export let closeOnBackdrop = true
   export let closeOnEscape = true
+  export let onclose: (() => void) | undefined = undefined
 
   const dispatch = createEventDispatcher<{ close: void }>()
+
+  function emitClose(): void {
+    dispatch('close')
+    onclose?.()
+  }
 
   type ModalMotionState = 'closed' | 'open' | 'closing'
 
   let modalMotionState: ModalMotionState = 'closed'
   let closeTimer: number | null = null
   let openFrame: number | null = null
+  let backdropPointerStarted = false
 
   $: modalMotionClass =
     modalMotionState === 'open' ? 'is-open' : modalMotionState === 'closing' ? 'is-closing' : ''
@@ -57,8 +64,29 @@
     modalMotionState = 'closing'
     closeTimer = window.setTimeout(() => {
       closeTimer = null
-      dispatch('close')
+      emitClose()
     }, modalCloseDurationMs())
+  }
+
+  function handleBackdropPointerDown(event: PointerEvent): void {
+    backdropPointerStarted = event.target === event.currentTarget
+  }
+
+  function clearBackdropPointerIntentSoon(): void {
+    window.setTimeout(() => {
+      backdropPointerStarted = false
+    }, 0)
+  }
+
+  function handleBackdropClick(event: MouseEvent): void {
+    const shouldClose =
+      closeOnBackdrop && event.target === event.currentTarget && backdropPointerStarted
+
+    backdropPointerStarted = false
+
+    if (shouldClose) {
+      requestClose()
+    }
   }
 
   onMount(() => {
@@ -76,11 +104,12 @@
   role="presentation"
   tabindex="-1"
   use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
-  on:click={(event) => {
-    if (closeOnBackdrop && event.target === event.currentTarget) {
-      requestClose()
-    }
+  on:pointerdown={handleBackdropPointerDown}
+  on:pointerup={clearBackdropPointerIntentSoon}
+  on:pointercancel={() => {
+    backdropPointerStarted = false
   }}
+  on:click={handleBackdropClick}
   on:keydown={(event) => {
     if (closeOnEscape && event.key === 'Escape') {
       requestClose()

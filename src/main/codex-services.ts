@@ -99,7 +99,9 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   })
   const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
   const skillService = createCodexSkillService()
-  const promptService = createCodexPromptService(options.userDataPath)
+  const promptService = createCodexPromptService(options.promptDataPath ?? options.userDataPath, {
+    legacyUserDataPaths: options.legacyPromptDataPaths
+  })
 
   const localGatewayService = new CodexLocalGatewayService({
     store,
@@ -612,7 +614,11 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       removeCategory: (name) => promptService.removeCategory(name),
       importFile: (filePath) => promptService.importFile(filePath),
       importDir: (dirPath) => promptService.importDir(dirPath),
-      exportDir: (targetDir) => promptService.exportDir(targetDir)
+      exportDir: (targetDir) => promptService.exportDir(targetDir),
+      addAttachment: (promptId, payload) => promptService.addAttachment(promptId, payload),
+      removeAttachment: (promptId, fileName) =>
+        promptService.removeAttachment(promptId, fileName),
+      readAttachment: (promptId, fileName) => promptService.readAttachment(promptId, fileName)
     }
   }
 }

@@ -49,6 +49,8 @@ import {
   type WakeAccountRateLimitsInput,
   type WakeAccountRateLimitsResult,
   type CreatePromptInput,
+  type PromptAttachmentData,
+  type PromptAttachmentPayload,
   type PromptCategoryList,
   type PromptDetail,
   type PromptImportResult,
@@ -411,11 +413,16 @@ export interface CodexServices {
     importFile(filePath: string): Promise<PromptImportResult>
     importDir(dirPath: string): Promise<PromptImportResult>
     exportDir(targetDir: string): Promise<{ exported: number }>
+    addAttachment(promptId: string, payload: PromptAttachmentPayload): Promise<PromptDetail>
+    removeAttachment(promptId: string, fileName: string): Promise<PromptDetail>
+    readAttachment(promptId: string, fileName: string): Promise<PromptAttachmentData>
   }
 }
 
 export interface CreateCodexServicesOptions {
   userDataPath: string
+  promptDataPath?: string
+  legacyPromptDataPaths?: string[]
   defaultWorkspacePath: string
   defaultCodexHome?: string
   platform: CodexPlatformAdapter
