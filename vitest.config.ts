@@ -9,7 +9,7 @@ const rendererComponentTests = [
   'src/renderer/src/components/__test__/AccountsProvidersView.test.ts',
   'src/renderer/src/components/__test__/LocalGatewayView.test.ts',
   'src/renderer/src/components/__test__/AccountsTagsView.test.ts',
-  'src/renderer/src/components/__test__/HeroPanel.test.ts',
+  'src/renderer/src/components/__test__/SettingsView.test.ts',
   'src/renderer/src/components/__test__/SessionsView.test.ts'
 ]
 

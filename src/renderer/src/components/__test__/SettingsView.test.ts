@@ -15,26 +15,19 @@ vi.mock('../gsap-motion', () => {
   }
 })
 
-import HeroPanel from '../HeroPanel.svelte'
+import SettingsView from '../SettingsView.svelte'
 import { messages } from '../app-view'
 
 const copy = messages['zh-CN']
 
-describe('HeroPanel', () => {
-  it('在设置弹层里展示基础设置', () => {
-    render(HeroPanel, {
+describe('SettingsView', () => {
+  it('展示基础设置', () => {
+    render(SettingsView, {
       props: {
-        compactGhostButton: 'ghost',
         copy,
-        loginEvent: null,
-        showSettings: true,
-        showProviderComposer: false,
-        onClose: vi.fn(),
+        language: 'zh-CN',
+        theme: 'light',
         showCodexDesktopExecutablePath: false,
-        showCallbackLoginDetails: true,
-        showDeviceLoginDetails: true,
-        loginActionBusy: false,
-        pollingOptions: [5, 15, 30],
         settings: {
           usagePollingMinutes: 15,
           statusBarAccountIds: [],
@@ -50,17 +43,20 @@ describe('HeroPanel', () => {
           currentVersion: '0.3.5',
           supported: true
         },
-        createProvider: vi.fn().mockResolvedValue(undefined),
+        appMeta: {
+          version: '0.4.6',
+          githubUrl: 'https://github.com/bee1an/CodexDock'
+        },
         updatePollingInterval: vi.fn(),
         updateCheckForUpdatesOnStartup: vi.fn(),
         updateShowLocalMockData: vi.fn(),
+        updateLanguage: vi.fn(),
+        updateTheme: vi.fn(),
         updateCodexDesktopExecutablePath: vi.fn().mockResolvedValue(undefined),
         showLocalMockToggle: false,
         checkForUpdates: vi.fn(),
         downloadUpdate: vi.fn().mockResolvedValue(undefined),
         installUpdate: vi.fn().mockResolvedValue(undefined),
-        copyAuthUrl: vi.fn(),
-        copyDeviceCode: vi.fn(),
         openExternalLink: vi.fn()
       }
     })

@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.6 - 2026-05-12
+
+This release expands account management and makes the local gateway safer to use with grouped accounts and provider-backed Codex launches.
+
+- Added richer account management flows with a dedicated details panel, group manager, token editing dialog, and account-focused workbench controls.
+- Added local gateway Codex launch support that reuses the gateway URL and API key through a managed local-gateway Codex home.
+- Improved local gateway target selection so routing can be limited by groups or standalone accounts, while accounts already assigned to a group are no longer offered or routed as separate account targets.
+- Improved local gateway request logs with readable non-200 error details and clearer group/account copy in the desktop UI.
+- Added a Settings view and refined account, provider, session, skill, prompt, wake, and cost surfaces for more consistent compact layouts.
+- Updated the CLI alongside the expanded account and gateway workflows so command output and parsing stay aligned with the desktop app.
+
 ## 0.4.5 - 2026-05-10
 
 This patch release adds image references to Prompts and hardens prompt data migration and dialog behavior.
