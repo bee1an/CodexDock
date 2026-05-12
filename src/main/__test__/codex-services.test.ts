@@ -979,6 +979,164 @@ describe('createCodexServices', () => {
     }
   })
 
+  it('starts the local gateway with account-only routing enabled', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const port = await getFreePort()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: ['account-1']
+      }
+    })
+
+    await expect(services.gateway.start()).resolves.toMatchObject({
+      localGatewayStatus: {
+        running: true,
+        baseUrl: `http://127.0.0.1:${port}`
+      }
+    })
+    await expect(services.getSnapshot()).resolves.toMatchObject({
+      settings: {
+        localGateway: {
+          allowedGroupIds: [],
+          allowedAccountIds: ['account-1']
+        }
+      }
+    })
+    await services.gateway.stop()
+
+    const reloadedServices = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    await expect(reloadedServices.getSnapshot()).resolves.toMatchObject({
+      settings: {
+        localGateway: {
+          allowedGroupIds: [],
+          allowedAccountIds: ['account-1']
+        }
+      }
+    })
+  })
+
+  it('does not route local gateway traffic through account allowlist entries once the account belongs to a group', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+    let snapshot = await services.groups.create('Team')
+    const account = snapshot.accounts[0]
+    const group = snapshot.groups[0]
+    snapshot = await services.accounts.updateGroups(account.id, [group.id])
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [snapshot.accounts[0].id]
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', messages: [] })
+      })
+      const payload = (await response.json()) as { error?: { code?: string } }
+
+      expect(response.status).toBe(503)
+      expect(payload.error?.code).toBe('no_provider')
+      expect(platform.fetch).not.toHaveBeenCalled()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('rejects model requests when allowed gateway targets are cleared while running', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const port = await getFreePort()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: ['group-1'],
+        allowedAccountIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      await services.settings.update({
+        localGateway: {
+          host: '127.0.0.1',
+          port,
+          apiKey: 'gateway-secret-a',
+          stickyTtlMinutes: 360,
+          requestTimeoutMs: 120_000,
+          modelMappings: [],
+          allowedGroupIds: [],
+          allowedAccountIds: []
+        }
+      })
+
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', messages: [] })
+      })
+      const payload = (await response.json()) as { error?: { code?: string; message?: string } }
+
+      expect(response.status).toBe(403)
+      expect(payload.error?.code).toBe('no_allowed_target')
+      expect(payload.error?.message).toContain('allowed group or account')
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
   it('lists default and named instances in service results and snapshots', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -1180,6 +1338,12 @@ describe('createCodexServices', () => {
         body: '{}'
       })
       expect(unauthorized.status).toBe(401)
+      await unauthorized.text()
+      const unauthorizedLog = (await gateway.status()).logs?.find((log) => log.status === 401)
+      expect(unauthorizedLog).toMatchObject({
+        status: 401,
+        message: 'Unauthorized local gateway request. (unauthorized)'
+      })
 
       const wrongMethod = await fetch(`${baseUrl}/codex/open`, {
         method: 'GET',

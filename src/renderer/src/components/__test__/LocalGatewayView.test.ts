@@ -33,12 +33,15 @@ function renderGateway(props = {}): void {
       localGatewayApiKey: '',
       modelMappings: [],
       allowedGroupIds: ['group-1'],
+      allowedAccountIds: [],
       groups: [{ id: 'group-1', name: '默认组', createdAt: '2026-01-01T00:00:00.000Z' }],
+      accounts: [],
       startLocalGateway: vi.fn().mockResolvedValue(undefined),
       stopLocalGateway: vi.fn().mockResolvedValue(undefined),
       rotateLocalGatewayKey: vi.fn().mockResolvedValue(undefined),
       updateModelMappings: vi.fn().mockResolvedValue(undefined),
       updateAllowedGroups: vi.fn().mockResolvedValue(undefined),
+      updateAllowedAccounts: vi.fn().mockResolvedValue(undefined),
       ...props
     }
   })
@@ -78,5 +81,93 @@ describe('LocalGatewayView', () => {
     await waitFor(() =>
       expect(updateModelMappings).toHaveBeenCalledWith([{ from: 'client-model', to: 'gpt-5.4' }])
     )
+  })
+
+  it('allows routing by individual accounts and uses account-aware copy', async () => {
+    const updateAllowedAccounts = vi.fn().mockResolvedValue(undefined)
+    renderGateway({
+      allowedGroupIds: [],
+      accounts: [
+        {
+          id: 'account-1',
+          email: 'bee@example.com',
+          name: 'Bee',
+          accountId: 'acct-1',
+          groupIds: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        }
+      ],
+      updateAllowedAccounts
+    })
+
+    expect(screen.getByText(copy.localGatewayAllowedGroupsTitle)).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayAllowedTargetsAdd }))
+    await fireEvent.click(screen.getByRole('button', { name: 'bee@example.com' }))
+
+    await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith(['account-1']))
+  })
+
+  it('hides accounts that already belong to a group from gateway account choices', async () => {
+    const updateAllowedAccounts = vi.fn().mockResolvedValue(undefined)
+    renderGateway({
+      allowedGroupIds: [],
+      allowedAccountIds: ['grouped-account'],
+      groups: [{ id: 'group-1', name: '默认组', createdAt: '2026-01-01T00:00:00.000Z' }],
+      accounts: [
+        {
+          id: 'grouped-account',
+          email: 'grouped@example.com',
+          name: 'Grouped',
+          accountId: 'acct-grouped',
+          groupIds: ['group-1'],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        },
+        {
+          id: 'standalone-account',
+          email: 'standalone@example.com',
+          name: 'Standalone',
+          accountId: 'acct-standalone',
+          groupIds: [],
+          createdAt: '2026-01-01T00:00:00.000Z',
+          updatedAt: '2026-01-01T00:00:00.000Z'
+        }
+      ],
+      updateAllowedAccounts
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayAllowedTargetsAdd }))
+    await fireEvent.click(screen.getByRole('button', { name: 'standalone@example.com' }))
+
+    expect(screen.queryByText('grouped@example.com')).toBeNull()
+    expect(screen.getByText('standalone@example.com')).toBeTruthy()
+    await waitFor(() =>
+      expect(updateAllowedAccounts).toHaveBeenCalledWith(['standalone-account'])
+    )
+  })
+
+  it('shows details for non-200 request logs', async () => {
+    renderGateway({
+      localGatewayStatus: {
+        ...status,
+        logs: [
+          {
+            id: 'log-1',
+            timestamp: '2026-01-01T00:00:00.000Z',
+            method: 'POST',
+            path: '/v1/chat/completions',
+            status: 500,
+            durationMs: 42,
+            provider: 'Codex',
+            model: 'gpt-5.4',
+            tokens: 0,
+            message: 'Upstream request failed'
+          }
+        ]
+      }
+    })
+
+    expect(screen.getByText('Upstream request failed')).toBeTruthy()
   })
 })

@@ -802,6 +802,20 @@ export class CodexAccountStore {
         delete state.wakeSchedulesByAccountId[accountId]
       }
 
+      const gateway = state.settings.localGateway
+      if (gateway && Array.isArray(gateway.allowedAccountIds) && gateway.allowedAccountIds.length) {
+        const nextAllowed = gateway.allowedAccountIds.filter((item) => item !== accountId)
+        if (nextAllowed.length !== gateway.allowedAccountIds.length) {
+          state.settings = {
+            ...state.settings,
+            localGateway: normalizeLocalGatewaySettings({
+              ...gateway,
+              allowedAccountIds: nextAllowed
+            })
+          }
+        }
+      }
+
       await this.writeState(state)
     })
   }

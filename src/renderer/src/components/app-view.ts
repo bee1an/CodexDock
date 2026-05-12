@@ -517,6 +517,7 @@ export const messages = {
     localGatewayLogTokens: 'Tokens',
     localGatewayLogLatency: '延迟',
     localGatewayLogStatus: '状态',
+    localGatewayLogDetail: '详情',
     localGatewayModelMappingsTitle: '模型映射',
     localGatewayModelMappingsHint:
       '将客户端发送的模型名映射到上游 Codex 支持的模型。命中映射后用目标模型向上游发请求。',
@@ -528,10 +529,12 @@ export const messages = {
     localGatewayModelMappingDuplicate: '已存在相同的源模型，请直接编辑现有条目。',
     localGatewayModelMappingsManage: '管理映射',
     localGatewayModelMappingsMore: (count: number) => `还有 ${count} 条映射，打开弹框查看。`,
-    localGatewayAllowedGroupsTitle: '允许使用的组',
-    localGatewayAllowedGroupsHint: '至少选择一个组才能启动本地网关，只有被选组下的账号会参与路由。',
+    localGatewayAllowedGroupsTitle: '允许使用的组或账号',
+    localGatewayAllowedGroupsHint:
+      '至少选择一个组或账号才能启动本地网关，只有被选中的账号或组内账号会参与路由。',
     localGatewayAllowedGroupsEmpty: '还没有创建组，请先在账号页的组管理中创建。',
-    localGatewayAllowedGroupsRequired: '请至少选择一个组后再启动本地网关。',
+    localGatewayAllowedGroupsRequired: '请至少选择一个组或账号后再启动本地网关。',
+    localGatewayAllowedTargetsAdd: '添加组或账号',
     instanceManager: '实例管理',
     instanceManagerHint: '独立实例使用独立 CODEX_HOME，首次创建会复制当前 .codex。',
     instanceCount: (count: number) => `${count} 个实例`,
@@ -1102,6 +1105,7 @@ export const messages = {
     localGatewayLogTokens: 'Tokens',
     localGatewayLogLatency: 'Latency',
     localGatewayLogStatus: 'Status',
+    localGatewayLogDetail: 'Detail',
     localGatewayModelMappingsTitle: 'Model mappings',
     localGatewayModelMappingsHint:
       'Map client-sent model names to upstream Codex models. Matched entries rewrite the model before the upstream request.',
@@ -1115,12 +1119,13 @@ export const messages = {
     localGatewayModelMappingsManage: 'Manage mappings',
     localGatewayModelMappingsMore: (count: number) =>
       `${count} more mapping${count === 1 ? '' : 's'} hidden. Open the dialog to view all.`,
-    localGatewayAllowedGroupsTitle: 'Allowed groups',
+    localGatewayAllowedGroupsTitle: 'Allowed groups or accounts',
     localGatewayAllowedGroupsHint:
-      'Select at least one group before starting the local gateway. Only accounts in the selected groups will be routed.',
+      'Select at least one group or account before starting the local gateway. Only selected accounts or accounts in selected groups will be routed.',
     localGatewayAllowedGroupsEmpty:
       'No groups yet. Create one from group management on the accounts page first.',
-    localGatewayAllowedGroupsRequired: 'Select at least one group before starting the gateway.',
+    localGatewayAllowedGroupsRequired: 'Select at least one group or account before starting the gateway.',
+    localGatewayAllowedTargetsAdd: 'Add group or account',
     instanceManager: 'Instances',
     instanceManagerHint:
       'Each instance uses its own CODEX_HOME and copies the current .codex on first creation.',

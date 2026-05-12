@@ -243,6 +243,123 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
   response.end(`${JSON.stringify(body)}\n`)
 }
 
+function hasAllowedGatewayTargets(settings: LocalGatewaySettings): boolean {
+  return settings.allowedGroupIds.length > 0 || settings.allowedAccountIds.length > 0
+}
+
+function requiresAllowedGatewayTargets(pathname: string): boolean {
+  return (
+    pathname === '/v1/models' ||
+    pathname === '/v1beta/models' ||
+    pathname === '/v1/responses' ||
+    pathname === '/v1/chat/completions' ||
+    pathname === '/v1/messages' ||
+    pathname === '/v1/messages/count_tokens' ||
+    pathname.startsWith('/v1beta/')
+  )
+}
+
+function safeStringifyForLog(value: unknown): string {
+  if (typeof value === 'string') {
+    return value
+  }
+  try {
+    return JSON.stringify(value)
+  } catch {
+    return String(value)
+  }
+}
+
+function truncateLogMessage(message: string, maxLength = 1200): string {
+  const normalized = message.replace(/\s+/g, ' ').trim()
+  if (normalized.length <= maxLength) {
+    return normalized
+  }
+  return `${normalized.slice(0, maxLength - 1)}…`
+}
+
+function logMessageFromResponseBody(rawBody: string): string | undefined {
+  const trimmed = rawBody.trim()
+  if (!trimmed) {
+    return undefined
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown
+    if (parsed && typeof parsed === 'object') {
+      const record = parsed as Record<string, unknown>
+      const error = record.error
+      if (error && typeof error === 'object') {
+        const errorRecord = error as Record<string, unknown>
+        const message =
+          typeof errorRecord.message === 'string'
+            ? errorRecord.message
+            : safeStringifyForLog(errorRecord)
+        const code = typeof errorRecord.code === 'string' ? errorRecord.code : ''
+        return truncateLogMessage(code ? `${message} (${code})` : message)
+      }
+      if (typeof record.message === 'string') {
+        return truncateLogMessage(record.message)
+      }
+      if (typeof record.error === 'string') {
+        return truncateLogMessage(record.error)
+      }
+    }
+    return truncateLogMessage(safeStringifyForLog(parsed))
+  } catch {
+    return truncateLogMessage(trimmed)
+  }
+}
+
+function installResponseBodyCapture(response: ServerResponse): () => string {
+  const chunks: Buffer[] = []
+  let capturedBytes = 0
+  const maxBytes = 8192
+  const originalWrite = response.write.bind(response)
+  const originalEnd = response.end.bind(response)
+
+  const capture = (chunk: unknown, encoding?: BufferEncoding): void => {
+    if (chunk === undefined || chunk === null || capturedBytes >= maxBytes) {
+      return
+    }
+
+    let buffer: Buffer | null = null
+    if (Buffer.isBuffer(chunk)) {
+      buffer = chunk
+    } else if (typeof chunk === 'string') {
+      buffer = Buffer.from(chunk, encoding)
+    } else if (chunk instanceof Uint8Array) {
+      buffer = Buffer.from(chunk)
+    }
+
+    if (!buffer?.length) {
+      return
+    }
+
+    const available = maxBytes - capturedBytes
+    chunks.push(buffer.length > available ? buffer.subarray(0, available) : buffer)
+    capturedBytes += Math.min(buffer.length, available)
+  }
+
+  response.write = ((chunk: unknown, encodingOrCallback?: unknown, callback?: unknown) => {
+    capture(
+      chunk,
+      typeof encodingOrCallback === 'string' ? (encodingOrCallback as BufferEncoding) : undefined
+    )
+    return originalWrite(chunk as never, encodingOrCallback as never, callback as never)
+  }) as typeof response.write
+
+  response.end = ((chunk?: unknown, encodingOrCallback?: unknown, callback?: unknown) => {
+    capture(
+      chunk,
+      typeof encodingOrCallback === 'string' ? (encodingOrCallback as BufferEncoding) : undefined
+    )
+    return originalEnd(chunk as never, encodingOrCallback as never, callback as never)
+  }) as typeof response.end
+
+  return () => Buffer.concat(chunks).toString('utf8')
+}
+
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') {
     return content
@@ -573,8 +690,10 @@ export class CodexLocalGatewayService {
   async start(): Promise<LocalGatewayStatus> {
     await this.ensureLogsLoaded()
     const settings = await this.ensureApiKey()
-    if (!settings.allowedGroupIds.length) {
-      throw new Error('Local gateway requires at least one allowed group before it can start.')
+    if (!hasAllowedGatewayTargets(settings)) {
+      throw new Error(
+        'Local gateway requires at least one allowed group or account before it can start.'
+      )
     }
     if (this.server?.listening) {
       return this.status()
@@ -702,12 +821,20 @@ export class CodexLocalGatewayService {
     const startedAt = Date.now()
     const logMeta: Pick<LocalGatewayLogEntry, 'provider' | 'model' | 'tokens'> = {}
     if (url.pathname !== '/health') {
+      const readCapturedBody = installResponseBodyCapture(response)
       response.once('finish', () => {
+        const message =
+          response.statusCode === 200
+            ? undefined
+            : (logMessageFromResponseBody(readCapturedBody()) ||
+              response.statusMessage ||
+              `HTTP ${response.statusCode}`)
         void this.pushLog({
           method: request.method ?? 'GET',
           path: url.pathname,
           status: response.statusCode,
           durationMs: Date.now() - startedAt,
+          message,
           ...logMeta
         })
       })
@@ -735,6 +862,19 @@ export class CodexLocalGatewayService {
     const jsonBody = parseJsonBody(body)
     logMeta.provider = 'Codex'
     logMeta.model = logModelFromRequest(url.pathname, jsonBody)
+
+    if (requiresAllowedGatewayTargets(url.pathname) && !hasAllowedGatewayTargets(settings)) {
+      writeJson(
+        response,
+        403,
+        openAiError(
+          'Local gateway requires at least one allowed group or account before routing requests.',
+          403,
+          'no_allowed_target'
+        ).body
+      )
+      return
+    }
 
     if (request.method === 'GET' && url.pathname === '/v1/models') {
       writeJson(response, 200, await this.openAiModels())
@@ -799,9 +939,12 @@ export class CodexLocalGatewayService {
   private async openAiModels(): Promise<unknown> {
     const snapshot = await this.options.store.getSnapshot(false)
     const providers = await this.options.providerStore.list()
+    const allowed = await this.allowedTargetSets()
     const data = [
       ...snapshot.accounts
-        .filter((account) => !isLocalMockAccount(account))
+        .filter(
+          (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
+        )
         .map((account) => ({
           id: account.email ? `codex:${account.email}` : `codex:${account.id}`,
           object: 'model',
@@ -819,8 +962,13 @@ export class CodexLocalGatewayService {
   private async geminiModels(): Promise<unknown> {
     const snapshot = await this.options.store.getSnapshot(false)
     const providers = await this.options.providerStore.list()
+    const allowed = await this.allowedTargetSets()
     const modelIds = new Set(providers.map((provider) => provider.model))
-    if (snapshot.accounts.some((account) => !isLocalMockAccount(account))) {
+    if (
+      snapshot.accounts.some(
+        (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
+      )
+    ) {
       modelIds.add('gpt-5.4')
     }
     return {
@@ -1316,39 +1464,51 @@ export class CodexLocalGatewayService {
 
   private async bestAccount(): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
-    const allowed = await this.allowedGroupIdSet()
+    const allowed = await this.allowedTargetSets()
     const accounts = snapshot.accounts.filter(
-      (account) => !isLocalMockAccount(account) && this.matchesAllowedGroups(account, allowed)
+      (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
     )
     return resolveBestAccount(accounts, snapshot.usageByAccountId, snapshot.activeAccountId)
   }
 
   private async accountById(accountId: string): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
-    const allowed = await this.allowedGroupIdSet()
+    const allowed = await this.allowedTargetSets()
     return (
       snapshot.accounts.find(
         (account) =>
           account.id === accountId &&
           !isLocalMockAccount(account) &&
-          this.matchesAllowedGroups(account, allowed)
+          this.matchesAllowedTargets(account, allowed)
       ) ?? null
     )
   }
 
-  private async allowedGroupIdSet(): Promise<Set<string> | null> {
+  private async allowedTargetSets(): Promise<{
+    groupIds: Set<string>
+    accountIds: Set<string>
+  } | null> {
     const settings = await this.settings()
-    if (!settings.allowedGroupIds.length) {
+    if (!settings.allowedGroupIds.length && !settings.allowedAccountIds.length) {
       return null
     }
-    return new Set(settings.allowedGroupIds)
+    return {
+      groupIds: new Set(settings.allowedGroupIds),
+      accountIds: new Set(settings.allowedAccountIds)
+    }
   }
 
-  private matchesAllowedGroups(account: AccountSummary, allowed: Set<string> | null): boolean {
+  private matchesAllowedTargets(
+    account: AccountSummary,
+    allowed: { groupIds: Set<string>; accountIds: Set<string> } | null
+  ): boolean {
     if (!allowed) {
       return false
     }
-    return account.groupIds.some((groupId) => allowed.has(groupId))
+    return (
+      (account.groupIds.length === 0 && allowed.accountIds.has(account.id)) ||
+      account.groupIds.some((groupId) => allowed.groupIds.has(groupId))
+    )
   }
 
   private async firstProvider(

@@ -52,9 +52,9 @@
 
   const toggleAllowedAccount = async (accountId: string): Promise<void> => {
     if (allowedAccountsBusy) return
-    const next = allowedAccountIds.includes(accountId)
-      ? allowedAccountIds.filter((id) => id !== accountId)
-      : [...allowedAccountIds, accountId]
+    const next = allowedAccountIdSet.has(accountId)
+      ? allowedStandaloneAccountIds.filter((id) => id !== accountId)
+      : [...allowedStandaloneAccountIds, accountId]
     allowedAccountsBusy = true
     try {
       await updateAllowedAccounts(next)
@@ -230,6 +230,9 @@
       .some((value) => value?.toLowerCase().includes(query))
   }
 
+  const logDetail = (log: LocalGatewayLogEntry): string =>
+    log.status !== 200 ? log.message || `HTTP ${log.status}` : ''
+
   const resolvePort = (baseUrl: string): string => {
     try {
       const parsed = new URL(baseUrl)
@@ -270,8 +273,18 @@
     (log) => matchesStatusFilter(log, statusFilter) && matchesSearch(log, normalizedLogSearch)
   )
   $: allowedGroupIdSet = new Set(allowedGroupIds)
-  $: allowedAccountIdSet = new Set(allowedAccountIds)
-  $: hasAllowedEntities = allowedGroupIds.length > 0 || allowedAccountIds.length > 0
+  $: standaloneAccounts = accounts.filter((account) => account.groupIds.length === 0)
+  $: standaloneAccountIdSet = new Set(standaloneAccounts.map((account) => account.id))
+  $: allowedStandaloneAccountIds = allowedAccountIds.filter((id) => standaloneAccountIdSet.has(id))
+  $: allowedAccountIdSet = new Set(allowedStandaloneAccountIds)
+  $: selectedStandaloneAccounts = standaloneAccounts.filter((account) =>
+    allowedAccountIdSet.has(account.id)
+  )
+  $: availableStandaloneAccounts = standaloneAccounts.filter(
+    (account) => !allowedAccountIdSet.has(account.id)
+  )
+  $: allowedTargetCount = allowedGroupIds.length + selectedStandaloneAccounts.length
+  $: hasAllowedEntities = allowedTargetCount > 0
   $: startDisabled = localGatewayBusy || !hasAllowedEntities
 
   onMount(() => {
@@ -616,7 +629,7 @@
               <span
                 class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
               >
-                {formatNumber(allowedGroupIds.length + allowedAccountIds.length)}
+                {formatNumber(allowedTargetCount)}
               </span>
             </div>
             <p class="mt-0.5 text-[10px] leading-4 text-faint">
@@ -641,7 +654,7 @@
               <span>{group.name}</span>
             </AppButton>
           {/each}
-          {#each accounts.filter((a) => allowedAccountIdSet.has(a.id)) as account (account.id)}
+          {#each selectedStandaloneAccounts as account (account.id)}
             <AppButton
               variant="filter"
               size="xs"
@@ -658,8 +671,8 @@
             variant="secondary"
             size="xs"
             onclick={() => { showAccountPicker = !showAccountPicker }}
-            ariaLabel={showAccountPicker ? copy.closeDialog : copy.addAccount}
-            title={showAccountPicker ? copy.closeDialog : copy.addAccount}
+            ariaLabel={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
+            title={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
           >
             <span class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`} aria-hidden="true"></span>
           </AppButton>
@@ -679,7 +692,7 @@
                 <span>{group.name}</span>
               </AppButton>
             {/each}
-            {#each accounts.filter((a) => !allowedAccountIdSet.has(a.id)) as account (account.id)}
+            {#each availableStandaloneAccounts as account (account.id)}
               <AppButton
                 variant="filter"
                 size="xs"
@@ -889,6 +902,27 @@
                       >
                     </td>
                   </tr>
+                  {#if logDetail(log)}
+                    <tr class="gateway-log-detail-row">
+                      <td colspan="8" class="px-3 pb-2">
+                        <div
+                          class="gateway-log-detail flex min-w-0 items-start gap-2 rounded-[0.35rem] border px-2.5 py-2"
+                        >
+                          <span
+                            class="i-lucide-alert-circle mt-0.5 h-3.5 w-3.5 flex-none text-danger/70"
+                            aria-hidden="true"
+                          ></span>
+                          <span class="text-[10px] font-medium text-muted-strong"
+                            >{copy.localGatewayLogDetail}</span
+                          >
+                          <code
+                            class="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-carbon"
+                            >{logDetail(log)}</code
+                          >
+                        </div>
+                      </td>
+                    </tr>
+                  {/if}
                 {/each}
               </tbody>
             </table>
@@ -1207,6 +1241,12 @@
     box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ink-soft-strong) 72%, transparent);
   }
 
+  .gateway-log-detail {
+    border-color: color-mix(in srgb, var(--line-strong) 64%, transparent);
+    background: transparent;
+    border-left: 3px solid color-mix(in srgb, var(--color-danger) 56%, transparent);
+  }
+
   .gateway-method-pill,
   .gateway-status-code {
     display: inline-flex;
@@ -1251,7 +1291,7 @@
 
   .gateway-status-success {
     border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
-    background: color-mix(in srgb, var(--success) 8%, transparent);
+    background: transparent;
     color: var(--success);
   }
 
@@ -1351,6 +1391,12 @@
 
   :global(html[data-theme='dark']) .gateway-table-row:nth-child(even) {
     background: color-mix(in srgb, var(--surface-soft) 28%, var(--panel-strong));
+  }
+
+  :global(html[data-theme='dark']) .gateway-log-detail {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent);
+    background: transparent;
+    border-left-color: color-mix(in srgb, var(--color-danger) 62%, transparent);
   }
 
   :global(html[data-theme='dark']) .gateway-mappings-header {
