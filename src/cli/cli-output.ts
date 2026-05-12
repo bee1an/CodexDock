@@ -1,6 +1,6 @@
 import type {
   AccountRateLimits,
-  AccountTag,
+  AccountGroup,
   AccountSummary,
   AppSettings,
   CliAccountListPayload,
@@ -41,12 +41,12 @@ Usage:
   cdock instance start <instance-id|default> [--workspace <path>] [--json]
   cdock instance stop <instance-id|default> [--json]
   cdock instance remove <instance-id> [--json]
-  cdock tag list [--json]
-  cdock tag create <name> [--json]
-  cdock tag rename <tag-id> <name> [--json]
-  cdock tag remove <tag-id> [--json]
-  cdock tag assign <account-id> <tag-id> [--json]
-  cdock tag unassign <account-id> <tag-id> [--json]
+  cdock group list [--json]
+  cdock group create <name> [--json]
+  cdock group rename <group-id> <name> [--json]
+  cdock group remove <group-id> [--json]
+  cdock group assign <account-id> <group-id> [--json]
+  cdock group unassign <account-id> <group-id> [--json]
   cdock session current [--json]
   cdock usage read [account-id] [--json]
   cdock cost read [--refresh] [--json]
@@ -113,12 +113,12 @@ function formatCliSubscriptionExpiresAt(value?: string): string | null {
   return new Date(parsed).toISOString()
 }
 
-export function tagLabel(tag?: Pick<AccountTag, 'id' | 'name'> | null): string {
-  if (!tag) {
+export function groupLabel(group?: Pick<AccountGroup, 'id' | 'name'> | null): string {
+  if (!group) {
     return 'unknown'
   }
 
-  return tag.name || tag.id
+  return group.name || group.id
 }
 
 export function providerLabel(
@@ -248,18 +248,18 @@ export function printTokenCost(detail: TokenCostDetail, quiet: boolean): void {
   }
 }
 
-export function printTags(tags: AccountTag[], quiet: boolean): void {
+export function printGroups(groups: AccountGroup[], quiet: boolean): void {
   if (quiet) {
     return
   }
 
-  if (!tags.length) {
-    console.log('No tags')
+  if (!groups.length) {
+    console.log('No groups')
     return
   }
 
-  for (const tag of tags) {
-    console.log(`${tag.id}  ${tag.name}`)
+  for (const group of groups) {
+    console.log(`${group.id}  ${group.name}`)
   }
 }
 

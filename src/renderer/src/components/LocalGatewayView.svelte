@@ -1,8 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
-  import type { LocalGatewayLogEntry, LocalGatewayStatus } from '../../../shared/codex'
+  import type {
+    AccountGroup,
+    LocalGatewayLogEntry,
+    LocalGatewayModelMapping,
+    LocalGatewayStatus
+  } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
 
   type StatusFilter = 'all' | 'ok' | 'warn' | 'error'
@@ -11,14 +17,89 @@
   export let localGatewayStatus: LocalGatewayStatus
   export let localGatewayBusy = false
   export let localGatewayApiKey = ''
+  export let modelMappings: LocalGatewayModelMapping[] = []
+  export let allowedGroupIds: string[] = []
+  export let groups: AccountGroup[] = []
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
+  export let openLocalGatewayInCodex: () => Promise<void> = async () => {}
+  export let updateModelMappings: (
+    mappings: LocalGatewayModelMapping[]
+  ) => Promise<void> = async () => {}
+  export let updateAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
+
+  let allowedGroupsBusy = false
+
+  const toggleAllowedGroup = async (groupId: string): Promise<void> => {
+    if (allowedGroupsBusy) return
+    const next = allowedGroupIds.includes(groupId)
+      ? allowedGroupIds.filter((id) => id !== groupId)
+      : [...allowedGroupIds, groupId]
+    allowedGroupsBusy = true
+    try {
+      await updateAllowedGroups(next)
+    } finally {
+      allowedGroupsBusy = false
+    }
+  }
+
+  let draftFrom = ''
+  let draftTo = ''
+  let mappingError = ''
+  let mappingBusy = false
+  let showMappingDialog = false
+
+  const normalizeMappingValue = (value: string): string => value.trim()
+
+  const addMapping = async (): Promise<void> => {
+    if (mappingBusy) return
+    const from = normalizeMappingValue(draftFrom)
+    const to = normalizeMappingValue(draftTo)
+    if (!from || !to) {
+      mappingError = ''
+      return
+    }
+    if (modelMappings.some((entry) => entry.from === from)) {
+      mappingError = copy.localGatewayModelMappingDuplicate
+      return
+    }
+    mappingError = ''
+    mappingBusy = true
+    try {
+      await updateModelMappings([...modelMappings, { from, to }])
+      draftFrom = ''
+      draftTo = ''
+    } finally {
+      mappingBusy = false
+    }
+  }
+
+  const removeMapping = async (from: string): Promise<void> => {
+    if (mappingBusy) return
+    mappingError = ''
+    mappingBusy = true
+    try {
+      await updateModelMappings(modelMappings.filter((entry) => entry.from !== from))
+    } finally {
+      mappingBusy = false
+    }
+  }
+
+  const onAddMappingKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      void addMapping()
+    }
+  }
 
   let displayedStatus: LocalGatewayStatus = localGatewayStatus
   let pollTimer: ReturnType<typeof setInterval> | null = null
   let logSearch = ''
   let statusFilter: StatusFilter = 'all'
+  let gatewayApiKeyVisible = false
+  let gatewayApiKeyBusy = false
+  let revealedLocalGatewayApiKey = ''
 
   const statusFilters: StatusFilter[] = ['all', 'ok', 'warn', 'error']
 
@@ -26,11 +107,54 @@
     if (value) await navigator.clipboard.writeText(value)
   }
 
+  const revealGatewayApiKey = async (): Promise<string> => {
+    if (revealedLocalGatewayApiKey || localGatewayApiKey) {
+      return localGatewayApiKey || revealedLocalGatewayApiKey
+    }
+    if (gatewayApiKeyBusy) {
+      return ''
+    }
+    gatewayApiKeyBusy = true
+    try {
+      revealedLocalGatewayApiKey = await window.codexApp.getLocalGatewayApiKey()
+      await refreshGatewayStatus()
+      return revealedLocalGatewayApiKey
+    } finally {
+      gatewayApiKeyBusy = false
+    }
+  }
+
+  const toggleGatewayApiKeyVisible = async (): Promise<void> => {
+    if (gatewayApiKeyVisible) {
+      gatewayApiKeyVisible = false
+      return
+    }
+    const apiKey = await revealGatewayApiKey()
+    gatewayApiKeyVisible = Boolean(apiKey)
+  }
+
+  const copyGatewayApiKey = async (): Promise<void> => {
+    const apiKey = await revealGatewayApiKey()
+    await copyText(apiKey)
+  }
+
+  let refreshingStatus = false
+
   const refreshGatewayStatus = async (): Promise<void> => {
     try {
       displayedStatus = await window.codexApp.getLocalGatewayStatus()
     } catch {
       displayedStatus = localGatewayStatus
+    }
+  }
+
+  const refreshGatewayManually = async (): Promise<void> => {
+    if (refreshingStatus) return
+    refreshingStatus = true
+    try {
+      await refreshGatewayStatus()
+    } finally {
+      refreshingStatus = false
     }
   }
 
@@ -98,7 +222,11 @@
   }
 
   $: displayedStatus = localGatewayStatus
-  $: gatewayKey = localGatewayApiKey || displayedStatus.apiKeyPreview || 'sk-cdock-…'
+  $: fullGatewayApiKey = localGatewayApiKey || revealedLocalGatewayApiKey
+  $: gatewayKey =
+    gatewayApiKeyVisible && fullGatewayApiKey
+      ? fullGatewayApiKey
+      : displayedStatus.apiKeyPreview || 'sk-cdock-…'
   $: endpointUrl = `${displayedStatus.baseUrl}/v1`
   $: logs = displayedStatus.logs ?? []
   $: statusText = displayedStatus.running ? copy.localGatewayRunning : copy.localGatewayStopped
@@ -122,6 +250,9 @@
   $: visibleLogs = logs.filter(
     (log) => matchesStatusFilter(log, statusFilter) && matchesSearch(log, normalizedLogSearch)
   )
+  $: allowedGroupIdSet = new Set(allowedGroupIds)
+  $: hasAllowedGroups = allowedGroupIds.length > 0
+  $: startDisabled = localGatewayBusy || !hasAllowedGroups
 
   onMount(() => {
     void refreshGatewayStatus()
@@ -133,7 +264,9 @@
   })
 </script>
 
-<div class="gateway-container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
+<div
+  class="gateway-container gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
+>
   <div
     class="gateway-toolbar theme-soft-panel flex flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4"
   >
@@ -183,6 +316,27 @@
         <span>{copy.rotateLocalGatewayKey}</span>
       </AppButton>
 
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={() => void openLocalGatewayInCodex()}
+        disabled={localGatewayBusy || !displayedStatus.running}
+        ariaLabel={copy.localGatewayOpenCodex}
+        title={displayedStatus.running
+          ? copy.localGatewayOpenCodex
+          : copy.localGatewayOpenCodexRequiresRunning}
+      >
+        {#if localGatewayBusy}
+          <span
+            class="i-lucide-loader-circle gateway-spinner h-3.5 w-3.5 animate-spin"
+            aria-hidden="true"
+          ></span>
+        {:else}
+          <span class="i-lucide-copy-plus h-3.5 w-3.5" aria-hidden="true"></span>
+        {/if}
+        <span>{copy.localGatewayOpenCodex}</span>
+      </AppButton>
+
       {#if displayedStatus.running}
         <AppButton
           variant="danger"
@@ -206,8 +360,9 @@
           variant="primary"
           size="xs"
           onclick={() => void startLocalGateway()}
-          disabled={localGatewayBusy}
+          disabled={startDisabled}
           ariaLabel={copy.startLocalGateway}
+          title={hasAllowedGroups ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired}
         >
           {#if localGatewayBusy}
             <span
@@ -332,29 +487,35 @@
                   {gatewayKey || copy.localGatewayNoApiKey}
                 </code>
               </div>
-              {#if localGatewayApiKey}
-                <AppButton
-                  variant="icon"
-                  size="xs"
-                  class="flex-none"
-                  onclick={() => void copyText(localGatewayApiKey)}
-                  ariaLabel={copy.copyLocalGatewayApiKey}
-                  title={copy.copyLocalGatewayApiKey}
-                >
-                  <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
-                </AppButton>
-              {:else}
-                <AppButton
-                  variant="icon"
-                  size="xs"
-                  class="flex-none"
-                  disabled
-                  ariaLabel={copy.localGatewayNoApiKey}
-                  title={copy.localGatewayNoApiKey}
-                >
-                  <span class="i-lucide-lock-keyhole h-3.5 w-3.5" aria-hidden="true"></span>
-                </AppButton>
-              {/if}
+              <AppButton
+                variant="icon"
+                size="xs"
+                class="flex-none"
+                onclick={() => void toggleGatewayApiKeyVisible()}
+                disabled={gatewayApiKeyBusy}
+                ariaLabel={gatewayApiKeyVisible
+                  ? copy.localGatewayHideApiKey
+                  : copy.localGatewayShowApiKey}
+                title={gatewayApiKeyVisible
+                  ? copy.localGatewayHideApiKey
+                  : copy.localGatewayShowApiKey}
+              >
+                <span
+                  class={`${gatewayApiKeyBusy ? 'i-lucide-loader-circle animate-spin' : gatewayApiKeyVisible ? 'i-lucide-eye-off' : 'i-lucide-eye'} h-3.5 w-3.5`}
+                  aria-hidden="true"
+                ></span>
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
+                class="flex-none"
+                onclick={() => void copyGatewayApiKey()}
+                disabled={gatewayApiKeyBusy}
+                ariaLabel={copy.copyLocalGatewayApiKey}
+                title={copy.copyLocalGatewayApiKey}
+              >
+                <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
+              </AppButton>
             </div>
           </div>
         </div>
@@ -414,6 +575,69 @@
     </section>
 
     <section
+      class="gateway-panel gateway-groups-panel rounded-[0.45rem] border"
+      aria-labelledby="local-gateway-groups-heading"
+    >
+      <div
+        class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5"
+      >
+        <div class="flex min-w-0 items-start gap-2">
+          <span
+            class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
+            aria-hidden="true"
+          >
+            <span class="i-lucide-users h-3.5 w-3.5"></span>
+          </span>
+          <div class="min-w-0">
+            <div class="flex min-w-0 items-center gap-2">
+              <h3 id="local-gateway-groups-heading" class="text-[12px] font-semibold text-carbon">
+                {copy.localGatewayAllowedGroupsTitle}
+              </h3>
+              <span
+                class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+              >
+                {formatNumber(allowedGroupIds.length)} / {formatNumber(groups.length)}
+              </span>
+            </div>
+            <p class="mt-0.5 text-[10px] leading-4 text-faint">
+              {copy.localGatewayAllowedGroupsHint}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-2 p-3">
+        {#if groups.length}
+          <div class="flex flex-wrap gap-1.5">
+            {#each groups as group (group.id)}
+              {@const selected = allowedGroupIdSet.has(group.id)}
+              <AppButton
+                variant="filter"
+                size="xs"
+                {selected}
+                ariaPressed={selected}
+                disabled={allowedGroupsBusy || localGatewayBusy}
+                onclick={() => void toggleAllowedGroup(group.id)}
+              >
+                {#if selected}
+                  <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
+                {/if}
+                <span>{group.name}</span>
+              </AppButton>
+            {/each}
+          </div>
+          {#if !hasAllowedGroups}
+            <p class="text-[11px] leading-4 text-danger" role="alert">
+              {copy.localGatewayAllowedGroupsRequired}
+            </p>
+          {/if}
+        {:else}
+          <p class="text-[11px] leading-4 text-faint">{copy.localGatewayAllowedGroupsEmpty}</p>
+        {/if}
+      </div>
+    </section>
+
+    <section
       class="gateway-panel gateway-logs-panel rounded-[0.45rem] border"
       aria-labelledby="local-gateway-logs-heading"
     >
@@ -433,7 +657,7 @@
               </span>
               {#if errorCount}
                 <span
-                  class="inline-flex items-center rounded border border-danger/20 bg-danger/10 px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-danger"
+                  class="gateway-errors-badge inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums"
                 >
                   {formatNumber(errorCount)}
                   {copy.localGatewayErrors}
@@ -464,11 +688,15 @@
           <AppButton
             variant="icon"
             size="sm"
-            onclick={() => void refreshGatewayStatus()}
+            onclick={() => void refreshGatewayManually()}
+            disabled={refreshingStatus}
             ariaLabel={copy.localGatewayLogs}
             title={copy.localGatewayLogs}
           >
-            <span class="i-lucide-refresh-cw h-3.5 w-3.5" aria-hidden="true"></span>
+            <span
+              class={`${refreshingStatus ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+              aria-hidden="true"
+            ></span>
           </AppButton>
         </div>
       </div>
@@ -490,7 +718,7 @@
 
       <div class="gateway-table-container">
         {#if visibleLogs.length}
-          <div class="max-h-[400px] overflow-auto">
+          <div class="gateway-scrollbar max-h-[400px] overflow-auto">
             <table class="w-full text-left text-xs" aria-label={copy.localGatewayLogs}>
               <thead
                 class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
@@ -584,12 +812,229 @@
         {/if}
       </div>
     </section>
+
+    <section
+      class="gateway-panel gateway-mappings-panel rounded-[0.45rem] border"
+      aria-labelledby="local-gateway-mappings-heading"
+    >
+      <div
+        class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5"
+      >
+        <div class="flex min-w-0 items-start gap-2">
+          <span
+            class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
+            aria-hidden="true"
+          >
+            <span class="i-lucide-arrow-left-right h-3.5 w-3.5"></span>
+          </span>
+          <div class="min-w-0">
+            <div class="flex min-w-0 items-center gap-2">
+              <h3 id="local-gateway-mappings-heading" class="text-[12px] font-semibold text-carbon">
+                {copy.localGatewayModelMappingsTitle}
+              </h3>
+              <span
+                class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+              >
+                {formatNumber(modelMappings.length)}
+              </span>
+            </div>
+            <p class="mt-0.5 text-[10px] leading-4 text-faint">
+              {copy.localGatewayModelMappingsHint}
+            </p>
+          </div>
+        </div>
+        <AppButton
+          variant="secondary"
+          size="xs"
+          onclick={() => {
+            showMappingDialog = true
+          }}
+        >
+          <span class="i-lucide-settings-2 h-3.5 w-3.5" aria-hidden="true"></span>
+          <span>{copy.localGatewayModelMappingsManage}</span>
+        </AppButton>
+      </div>
+
+      <div class="flex flex-col gap-2 p-3">
+        {#if modelMappings.length}
+          <ul class="flex flex-col gap-1.5" aria-label={copy.localGatewayModelMappingsTitle}>
+            {#each modelMappings.slice(0, 3) as entry (entry.from)}
+              <li
+                class="gateway-mapping-row flex items-center gap-2 rounded-[0.35rem] border px-2.5 py-1.5"
+              >
+                <code
+                  class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                  title={entry.from}
+                  translate="no">{entry.from}</code
+                >
+                <span
+                  class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
+                  aria-hidden="true"
+                ></span>
+                <code
+                  class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                  title={entry.to}
+                  translate="no">{entry.to}</code
+                >
+              </li>
+            {/each}
+          </ul>
+          {#if modelMappings.length > 3}
+            <p class="text-[11px] leading-4 text-faint">
+              {copy.localGatewayModelMappingsMore(modelMappings.length - 3)}
+            </p>
+          {/if}
+        {:else}
+          <p class="text-[11px] leading-4 text-faint">{copy.localGatewayModelMappingsEmpty}</p>
+        {/if}
+      </div>
+    </section>
   </div>
 </div>
+
+{#if showMappingDialog}
+  <AppDialog
+    title={copy.localGatewayModelMappingsTitle}
+    description={copy.localGatewayModelMappingsHint}
+    closeLabel={copy.closeDialog}
+    showClose
+    scrollable
+    closeDisabled={mappingBusy}
+    maxWidthClass="max-w-2xl"
+    onclose={() => {
+      if (!mappingBusy) showMappingDialog = false
+    }}
+  >
+    <div class="grid gap-4">
+      <div class="flex flex-wrap items-center gap-2" data-dialog-motion>
+        <AppInput
+          id="local-gateway-mapping-from"
+          name="local-gateway-mapping-from"
+          size="xs"
+          class="min-w-[180px] flex-1"
+          autocomplete="off"
+          spellcheck={false}
+          placeholder={copy.localGatewayModelMappingFromPlaceholder}
+          bind:value={draftFrom}
+          onkeydown={onAddMappingKey}
+        />
+        <span
+          class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
+          aria-hidden="true"
+        ></span>
+        <AppInput
+          id="local-gateway-mapping-to"
+          name="local-gateway-mapping-to"
+          size="xs"
+          class="min-w-[180px] flex-1"
+          autocomplete="off"
+          spellcheck={false}
+          placeholder={copy.localGatewayModelMappingToPlaceholder}
+          bind:value={draftTo}
+          onkeydown={onAddMappingKey}
+        />
+        <AppButton
+          variant="primary"
+          size="xs"
+          onclick={() => void addMapping()}
+          disabled={mappingBusy || !draftFrom.trim() || !draftTo.trim()}
+          ariaLabel={copy.localGatewayModelMappingAdd}
+        >
+          <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
+          <span>{copy.localGatewayModelMappingAdd}</span>
+        </AppButton>
+      </div>
+
+      {#if mappingError}
+        <p class="text-[11px] leading-4 text-danger" role="alert" data-dialog-motion>
+          {mappingError}
+        </p>
+      {/if}
+
+      {#if modelMappings.length}
+        <ul class="flex flex-col gap-1.5" data-dialog-motion>
+          {#each modelMappings as entry (entry.from)}
+            <li
+              class="gateway-mapping-row flex items-center gap-2 rounded-[0.35rem] border px-2.5 py-1.5"
+            >
+              <code
+                class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                title={entry.from}
+                translate="no">{entry.from}</code
+              >
+              <span
+                class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
+                aria-hidden="true"
+              ></span>
+              <code
+                class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                title={entry.to}
+                translate="no">{entry.to}</code
+              >
+              <AppButton
+                variant="icon"
+                size="xs"
+                class="flex-none"
+                onclick={() => void removeMapping(entry.from)}
+                disabled={mappingBusy}
+                ariaLabel={copy.localGatewayModelMappingRemove}
+                title={copy.localGatewayModelMappingRemove}
+              >
+                <span class="i-lucide-trash-2 h-3.5 w-3.5" aria-hidden="true"></span>
+              </AppButton>
+            </li>
+          {/each}
+        </ul>
+      {:else}
+        <p class="text-[11px] leading-4 text-faint" data-dialog-motion>
+          {copy.localGatewayModelMappingsEmpty}
+        </p>
+      {/if}
+    </div>
+
+    <svelte:fragment slot="footer">
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={() => {
+          showMappingDialog = false
+        }}
+        disabled={mappingBusy}
+      >
+        {copy.closeDialog}
+      </AppButton>
+    </svelte:fragment>
+  </AppDialog>
+{/if}
 
 <style>
   .gateway-container {
     background: transparent;
+  }
+
+  .gateway-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
+  }
+
+  .gateway-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .gateway-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .gateway-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
+  }
+
+  .gateway-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
   }
 
   .gateway-toolbar {
@@ -750,6 +1195,16 @@
     background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
   }
 
+  .gateway-mapping-row {
+    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
+  }
+
+  .gateway-mappings-header {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  }
+
   .gateway-method-get {
     border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--success) 8%, transparent);
@@ -786,6 +1241,12 @@
     color: var(--danger);
   }
 
+  .gateway-errors-badge {
+    border-color: color-mix(in srgb, var(--danger) 24%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+
   .gateway-latency-warn {
     color: var(--warn);
   }
@@ -801,6 +1262,18 @@
       color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)),
       color-mix(in srgb, var(--panel-strong) 62%, var(--surface-soft))
     ) !important;
+  }
+
+  :global(html[data-theme='dark']) .gateway-scrollbar {
+    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
+  }
+
+  :global(html[data-theme='dark']) .gateway-scrollbar::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
   }
 
   :global(html[data-theme='dark']) .gateway-title-icon,
@@ -855,6 +1328,16 @@
 
   :global(html[data-theme='dark']) .gateway-table-row:nth-child(even) {
     background: color-mix(in srgb, var(--surface-soft) 28%, var(--panel-strong));
+  }
+
+  :global(html[data-theme='dark']) .gateway-mappings-header {
+    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 84%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .gateway-mapping-row {
+    background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 80%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

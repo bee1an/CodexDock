@@ -4,7 +4,8 @@
   import type {
     AccountRateLimits,
     AccountSummary,
-    AccountTag,
+    AccountGroup,
+    AccountTokensDetail,
     AccountWakeSchedule,
     AppLanguage,
     CodexInstanceSummary,
@@ -17,10 +18,14 @@
     CopyCodexSessionToProviderResult,
     CopyCodexSkillInput,
     CopyCodexSkillResult,
+    CreateCustomProviderInput,
     CustomProviderDetail,
     CustomProviderSummary,
     LocalGatewayStatus,
+    LocalGatewayModelMapping,
     ListCodexSessionsInput,
+    ProbeProviderModelsInput,
+    ProviderModelsProbeResult,
     StatsDisplaySettings,
     TokenCostDetail,
     TokenCostReadOptions,
@@ -31,7 +36,7 @@
   import type { LocalizedCopy } from './app-view'
   import AccountsListView from './AccountsListView.svelte'
   import AccountsProvidersView from './AccountsProvidersView.svelte'
-  import AccountsTagsView from './AccountsTagsView.svelte'
+  import GroupManagerDialog from './GroupManagerDialog.svelte'
   import AppButton from './AppButton.svelte'
   import Checkbox from './Checkbox.svelte'
   import CostStatsView from './CostStatsView.svelte'
@@ -40,7 +45,7 @@
   import SessionsView from './SessionsView.svelte'
   import SkillsView from './SkillsView.svelte'
   import PromptsView from './PromptsView.svelte'
-  import { taggedAccountCount as taggedAccountCountForAccounts } from './accounts-panel-account'
+  import { groupMemberCount as groupMemberCountForAccounts } from './accounts-panel-account'
   import {
     buildProviderUpdateInput,
     createProviderDraft,
@@ -69,7 +74,8 @@
   export let localGatewayStatus: LocalGatewayStatus
   export let localGatewayBusy = false
   export let localGatewayApiKey = ''
-  export let tags: AccountTag[] = []
+  export let localGatewayModelMappings: LocalGatewayModelMapping[] = []
+  export let groups: AccountGroup[] = []
   export let activeAccountId: string | undefined
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
@@ -89,6 +95,12 @@
   export let openAccountInCodex: (accountId: string) => void
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
+  export let openEditTokensDialog: (account: AccountSummary) => void
+  export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
+  export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
+  export let probeProviderModels: (
+    input: ProbeProviderModelsInput
+  ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
   export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
   export let reorderProviders: (providerIds: string[]) => Promise<void>
@@ -97,11 +109,17 @@
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
+  export let openLocalGatewayInCodex: () => Promise<void>
+  export let updateLocalGatewayModelMappings: (
+    mappings: LocalGatewayModelMapping[]
+  ) => Promise<void> = async () => {}
+  export let localGatewayAllowedGroupIds: string[] = []
+  export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
-  export let createTag: (name: string) => Promise<void>
-  export let updateTag: (tag: AccountTag, name: string) => Promise<void>
-  export let deleteTag: (tag: AccountTag) => Promise<void>
-  export let updateAccountTags: (account: AccountSummary, tagIds: string[]) => Promise<void>
+  export let createGroup: (name: string) => Promise<void>
+  export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
+  export let deleteGroup: (group: AccountGroup) => Promise<void>
+  export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let updateShowLocalMockData: (enabled: boolean) => void
   export let updateStatsDisplay: (statsDisplay: StatsDisplaySettings) => Promise<void>
@@ -130,16 +148,13 @@
     | 'accounts'
     | 'providers'
     | 'gateway'
-    | 'tags'
     | 'stats'
     | 'sessions'
     | 'skills'
     | 'prompts' = 'accounts'
-  let activeTagFilter = 'all'
-  let newTagName = ''
-  let editingTagId: string | null = null
-  let editingTagName = ''
-  let tagMutationBusy = false
+  let activeGroupFilter = 'all'
+  let groupMutationBusy = false
+  let showGroupManagerDialog = false
   let selectedAccountIds: string[] = []
   let accountWorkbenchExpanded = false
   let sortableProviders: CustomProviderSummary[] = []
@@ -221,73 +236,51 @@
     })
   }
 
-  async function runTagMutation(task: () => Promise<void>): Promise<void> {
-    if (loginActionBusy || tagMutationBusy) {
+  async function runGroupMutation(task: () => Promise<void>): Promise<void> {
+    if (loginActionBusy || groupMutationBusy) {
       return
     }
 
-    tagMutationBusy = true
+    groupMutationBusy = true
 
     try {
       await task()
     } finally {
-      tagMutationBusy = false
+      groupMutationBusy = false
     }
   }
 
-  async function submitNewTag(): Promise<void> {
-    const name = newTagName.trim()
-    if (!name) {
-      return
-    }
-
-    await runTagMutation(async () => {
-      await createTag(name)
-      newTagName = ''
+  async function handleCreateGroup(name: string): Promise<void> {
+    const trimmed = name.trim()
+    if (!trimmed) return
+    await runGroupMutation(async () => {
+      await createGroup(trimmed)
     })
   }
 
-  function beginEditingTag(tag: AccountTag): void {
-    editingTagId = tag.id
-    editingTagName = tag.name
-  }
-
-  function cancelEditingTag(): void {
-    editingTagId = null
-    editingTagName = ''
-  }
-
-  async function saveEditedTag(tag: AccountTag): Promise<void> {
-    const name = editingTagName.trim()
-    if (!name) {
-      return
-    }
-
-    await runTagMutation(async () => {
-      await updateTag(tag, name)
-      cancelEditingTag()
+  async function handleRenameGroup(group: AccountGroup, nextName: string): Promise<void> {
+    const trimmed = nextName.trim()
+    if (!trimmed || trimmed === group.name) return
+    await runGroupMutation(async () => {
+      await updateGroup(group, trimmed)
     })
   }
 
-  async function confirmDeleteTag(tag: AccountTag): Promise<void> {
-    if (!window.confirm(copy.deleteTagConfirm(tag.name))) {
+  async function handleDeleteGroup(group: AccountGroup): Promise<void> {
+    if (!window.confirm(copy.deleteGroupConfirm(group.name))) {
       return
     }
-
-    await runTagMutation(async () => {
-      await deleteTag(tag)
-      if (editingTagId === tag.id) {
-        cancelEditingTag()
-      }
+    await runGroupMutation(async () => {
+      await deleteGroup(group)
     })
   }
 
-  async function updateAccountTagsWithProtection(
+  async function updateAccountGroupsWithProtection(
     account: AccountSummary,
-    tagIds: string[]
+    groupIds: string[]
   ): Promise<void> {
-    await runTagMutation(async () => {
-      await updateAccountTags(account, tagIds)
+    await runGroupMutation(async () => {
+      await updateAccountGroups(account, groupIds)
     })
   }
 
@@ -418,18 +411,6 @@
         <AppButton
           variant="filter"
           size="sm"
-          selected={currentView === 'tags'}
-          ariaPressed={currentView === 'tags'}
-          onclick={() => {
-            currentView = 'tags'
-          }}
-        >
-          <span class="i-lucide-tags h-3.5 w-3.5"></span>
-          <span>{copy.tagManager}</span>
-        </AppButton>
-        <AppButton
-          variant="filter"
-          size="sm"
           selected={currentView === 'stats'}
           ariaPressed={currentView === 'stats'}
           onclick={() => {
@@ -530,47 +511,35 @@
         window.codexApp.removePromptAttachment(id, fileName)}
       readPromptAttachment={(id, fileName) => window.codexApp.readPromptAttachment(id, fileName)}
     />
-  {:else if currentView === 'tags'}
-    <AccountsTagsView
-      {copy}
-      {tags}
-      {accounts}
-      {loginActionBusy}
-      {tagMutationBusy}
-      bind:newTagName
-      bind:editingTagId
-      bind:editingTagName
-      {submitNewTag}
-      {beginEditingTag}
-      {cancelEditingTag}
-      {saveEditedTag}
-      {confirmDeleteTag}
-      taggedAccountCount={(tagId) => taggedAccountCountForAccounts(accounts, tagId)}
-    />
   {:else if currentView === 'accounts'}
     <AccountsListView
-      bind:activeTagFilter
+      bind:activeGroupFilter
       bind:selectedAccountIds
       bind:accountWorkbenchExpanded
       {copy}
       {language}
       {accounts}
-      {tags}
+      {groups}
       {activeAccountId}
       {usageByAccountId}
       {usageLoadingByAccountId}
       {usageErrorByAccountId}
       {wakeSchedulesByAccountId}
       {loginActionBusy}
-      {tagMutationBusy}
+      {groupMutationBusy}
+      openGroupManager={() => {
+        showGroupManagerDialog = true
+      }}
       {openingAccountId}
       {openingIsolatedAccountId}
       {wakingAccountId}
       {openAccountInCodex}
       {openAccountInIsolatedCodex}
       {openWakeDialog}
+      {openEditTokensDialog}
+      {getAccountTokens}
       {reorderAccounts}
-      updateAccountTags={updateAccountTagsWithProtection}
+      updateAccountGroups={updateAccountGroupsWithProtection}
       {refreshAccountUsage}
       {removeAccount}
       {removeAccounts}
@@ -582,9 +551,15 @@
       {localGatewayStatus}
       {localGatewayBusy}
       {localGatewayApiKey}
+      modelMappings={localGatewayModelMappings}
+      allowedGroupIds={localGatewayAllowedGroupIds}
+      {groups}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
+      {openLocalGatewayInCodex}
+      updateModelMappings={updateLocalGatewayModelMappings}
+      updateAllowedGroups={updateLocalGatewayAllowedGroups}
     />
   {:else if currentView === 'providers'}
     <AccountsProvidersView
@@ -598,6 +573,8 @@
       {providerDrafts}
       {openingProviderId}
       {providerActionBusy}
+      {createProvider}
+      {probeProviderModels}
       {openProviderInCodex}
       {startEditingProvider}
       {saveProvider}
@@ -652,6 +629,21 @@
     </div>
   {/if}
 </section>
+
+<GroupManagerDialog
+  open={showGroupManagerDialog}
+  {copy}
+  {groups}
+  {accounts}
+  loginActionBusy={loginActionBusy || groupMutationBusy}
+  onClose={() => {
+    showGroupManagerDialog = false
+  }}
+  createGroup={handleCreateGroup}
+  renameGroup={handleRenameGroup}
+  deleteGroup={handleDeleteGroup}
+  groupAccountCount={(groupId) => groupMemberCountForAccounts(accounts, groupId)}
+/>
 
 <style>
   .workspace-topbar {

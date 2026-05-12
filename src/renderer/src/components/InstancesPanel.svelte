@@ -27,6 +27,10 @@
   let newInstanceArgs = ''
   let newInstanceBindAccountId = ''
   let drafts: Record<string, { name: string; bindAccountId: string; extraArgs: string }> = {}
+  let creatingInstance = false
+  let savingInstanceId = ''
+  let togglingInstanceId = ''
+  let removingInstanceId = ''
 
   $: {
     const nextDrafts: typeof drafts = {}
@@ -42,26 +46,31 @@
 
   async function submitCreate(): Promise<void> {
     const name = newInstanceName.trim()
-    if (!name || busy) {
+    if (!name || busy || creatingInstance) {
       return
     }
 
-    await createInstance({
-      name,
-      codexHome: newInstanceDir.trim() || undefined,
-      bindAccountId: newInstanceBindAccountId || undefined,
-      extraArgs: newInstanceArgs.trim() || undefined
-    })
+    creatingInstance = true
+    try {
+      await createInstance({
+        name,
+        codexHome: newInstanceDir.trim() || undefined,
+        bindAccountId: newInstanceBindAccountId || undefined,
+        extraArgs: newInstanceArgs.trim() || undefined
+      })
 
-    newInstanceName = ''
-    newInstanceDir = ''
-    newInstanceArgs = ''
-    newInstanceBindAccountId = ''
+      newInstanceName = ''
+      newInstanceDir = ''
+      newInstanceArgs = ''
+      newInstanceBindAccountId = ''
+    } finally {
+      creatingInstance = false
+    }
   }
 
   async function save(instance: CodexInstanceSummary): Promise<void> {
     const draft = drafts[instance.id]
-    if (!draft || busy) {
+    if (!draft || busy || savingInstanceId) {
       return
     }
 
@@ -87,11 +96,29 @@
       return
     }
 
-    await updateInstance(instance.id, input)
+    savingInstanceId = instance.id
+    try {
+      await updateInstance(instance.id, input)
+    } finally {
+      savingInstanceId = ''
+    }
+  }
+
+  async function toggleInstance(instance: CodexInstanceSummary): Promise<void> {
+    if (busy || togglingInstanceId) {
+      return
+    }
+
+    togglingInstanceId = instance.id
+    try {
+      await (instance.running ? stopInstance(instance.id) : startInstance(instance.id))
+    } finally {
+      togglingInstanceId = ''
+    }
   }
 
   async function confirmRemove(instance: CodexInstanceSummary): Promise<void> {
-    if (instance.isDefault || busy) {
+    if (instance.isDefault || busy || removingInstanceId) {
       return
     }
 
@@ -100,7 +127,12 @@
       return
     }
 
-    await removeInstance(instance.id)
+    removingInstanceId = instance.id
+    try {
+      await removeInstance(instance.id)
+    } finally {
+      removingInstanceId = ''
+    }
   }
 </script>
 
@@ -144,8 +176,16 @@
             <option value={account.id}>{account.email ?? account.name ?? account.id}</option>
           {/each}
         </select>
-        <AppButton variant="primary" size="md" onclick={() => void submitCreate()} disabled={busy}>
-          {copy.createInstance}
+        <AppButton
+          variant="primary"
+          size="md"
+          onclick={() => void submitCreate()}
+          disabled={busy || creatingInstance || !newInstanceName.trim()}
+        >
+          {#if creatingInstance}
+            <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+          {/if}
+          <span>{copy.createInstance}</span>
         </AppButton>
       </div>
 
@@ -204,27 +244,35 @@
               variant="secondary"
               size="sm"
               onclick={() => void save(instance)}
-              disabled={busy}
+              disabled={busy || savingInstanceId === instance.id}
             >
-              {copy.saveInstance}
+              {#if savingInstanceId === instance.id}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {/if}
+              <span>{copy.saveInstance}</span>
             </AppButton>
             <AppButton
               variant="secondary"
               size="sm"
-              onclick={() =>
-                void (instance.running ? stopInstance(instance.id) : startInstance(instance.id))}
-              disabled={busy}
+              onclick={() => void toggleInstance(instance)}
+              disabled={busy || togglingInstanceId === instance.id}
             >
-              {instance.running ? copy.stopInstance : copy.startInstance}
+              {#if togglingInstanceId === instance.id}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {/if}
+              <span>{instance.running ? copy.stopInstance : copy.startInstance}</span>
             </AppButton>
             {#if !instance.isDefault}
               <AppButton
                 variant="danger"
                 size="sm"
                 onclick={() => void confirmRemove(instance)}
-                disabled={busy}
+                disabled={busy || removingInstanceId === instance.id}
               >
-                {copy.deleteInstance}
+                {#if removingInstanceId === instance.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {/if}
+                <span>{copy.deleteInstance}</span>
               </AppButton>
             {/if}
           </div>

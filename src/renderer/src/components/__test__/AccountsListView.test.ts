@@ -53,23 +53,23 @@ Object.defineProperty(Element.prototype, 'animate', {
 const accounts = [
   {
     id: 'acct-1',
-    email: 'tagged@example.com',
-    tagIds: ['tag-1'],
+    email: 'grouped@example.com',
+    groupIds: ['group-1'],
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
   },
   {
     id: 'acct-2',
-    email: 'untagged@example.com',
-    tagIds: [],
+    email: 'ungrouped@example.com',
+    groupIds: [],
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
   }
 ]
 
-const tags = [
+const groups = [
   {
-    id: 'tag-1',
+    id: 'group-1',
     name: '重点',
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
@@ -107,14 +107,14 @@ function renderAccountsListView(
       copy,
       language: 'zh-CN',
       accounts,
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
       usageErrorByAccountId: {},
       wakeSchedulesByAccountId: {},
       loginActionBusy: false,
-      tagMutationBusy: false,
+      groupMutationBusy: false,
       openingAccountId: '',
       openingIsolatedAccountId: '',
       wakingAccountId: '',
@@ -122,25 +122,26 @@ function renderAccountsListView(
       openAccountInIsolatedCodex: vi.fn(),
       openWakeDialog: vi.fn(),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       removeAccount: vi.fn(),
       removeAccounts: vi.fn().mockResolvedValue(undefined),
       exportSelectedAccounts: vi.fn().mockResolvedValue(undefined),
+      openGroupManager: vi.fn(),
       ...overrideProps
     }
   })
 }
 
 describe('AccountsListView', () => {
-  it('filters visible accounts by tag chip', async () => {
+  it('filters visible accounts by group chip', async () => {
     renderAccountsListView()
 
     await fireEvent.click(screen.getByRole('button', { name: copy.showFiltersAndBulkActions }))
     await fireEvent.click(screen.getByRole('button', { name: '重点 · 1' }))
 
-    expect(screen.getByText('tagged@example.com')).toBeTruthy()
-    expect(screen.queryByText('untagged@example.com')).toBeNull()
+    expect(screen.getByText('grouped@example.com')).toBeTruthy()
+    expect(screen.queryByText('ungrouped@example.com')).toBeNull()
   })
 
   it('exports the currently selected visible accounts', async () => {
@@ -165,7 +166,7 @@ describe('AccountsListView', () => {
       exportSelectedAccounts
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '更多操作 · tagged@example.com' }))
+    await fireEvent.click(screen.getByRole('button', { name: '更多操作 · grouped@example.com' }))
     await fireEvent.click(screen.getByRole('button', { name: copy.exportAccount }))
 
     expect(exportSelectedAccounts).toHaveBeenCalledWith(['acct-1'])
@@ -176,7 +177,7 @@ describe('AccountsListView', () => {
       loginActionBusy: true
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: '更多操作 · tagged@example.com' }))
+    await fireEvent.click(screen.getByRole('button', { name: '更多操作 · grouped@example.com' }))
 
     expect(
       (screen.getByRole('button', { name: copy.exportAccount }) as HTMLButtonElement).disabled
@@ -225,7 +226,7 @@ describe('AccountsListView', () => {
     await fireEvent(zone, new CustomEvent('consider', { detail: dragDetail, bubbles: true }))
 
     expect(
-      within(screen.getByRole('article', { name: 'tagged@example.com' })).getByText('40%')
+      within(screen.getByRole('article', { name: 'grouped@example.com' })).getByText('40%')
     ).toBeTruthy()
 
     await fireEvent(zone, new CustomEvent('finalize', { detail: dragDetail, bubbles: true }))
@@ -260,7 +261,7 @@ describe('AccountsListView', () => {
         {
           id: 'free-1',
           email: 'free@example.com',
-          tagIds: [],
+          groupIds: [],
           createdAt: '2026-04-21T00:00:00.000Z',
           updatedAt: '2026-04-21T00:00:00.000Z'
         }

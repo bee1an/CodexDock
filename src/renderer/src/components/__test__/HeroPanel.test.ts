@@ -24,7 +24,6 @@ describe('HeroPanel', () => {
   it('在设置弹层里展示基础设置', () => {
     render(HeroPanel, {
       props: {
-        heroClass: 'hero',
         compactGhostButton: 'ghost',
         copy,
         loginEvent: null,

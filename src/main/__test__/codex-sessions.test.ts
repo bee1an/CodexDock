@@ -406,7 +406,9 @@ describe('Codex session scanner', () => {
       targetModelProvider: 'custom',
       targetModel: 'gpt-5.4-mini'
     })
-    expect(result.targetFilePath).toContain(join(targetHome, 'sessions', 'imported'))
+    expect(result.targetFilePath).toBe(
+      join(targetHome, 'sessions', '2026', '04', '22', 'source.jsonl')
+    )
 
     const copied = await readCodexSessionDetail([targetInstance], {
       instanceId: 'target',

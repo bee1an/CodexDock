@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { promises as fs } from 'node:fs'
 import {
   createServer,
   type IncomingHttpHeaders,
@@ -6,6 +7,7 @@ import {
   type Server,
   type ServerResponse
 } from 'node:http'
+import { dirname } from 'node:path'
 
 import type { CodexAuthPayload } from './codex-auth'
 import type { CodexAccountStore } from './codex-account-store'
@@ -21,8 +23,11 @@ import {
   type CustomProviderProtocol,
   type CustomProviderSummary,
   type LocalGatewayLogEntry,
+  type LocalGatewayModelMapping,
   type LocalGatewaySettings,
-  type LocalGatewayStatus
+  type LocalGatewayStatus,
+  type OpenCodexFromServiceInput,
+  type OpenCodexFromServiceResult
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
@@ -238,36 +243,6 @@ function writeJson(response: ServerResponse, status: number, body: unknown): voi
   response.end(`${JSON.stringify(body)}\n`)
 }
 
-function extractResponseText(payload: unknown): string {
-  if (!payload || typeof payload !== 'object') {
-    return ''
-  }
-  const record = payload as Record<string, unknown>
-  if (typeof record.output_text === 'string') {
-    return record.output_text
-  }
-  const output = Array.isArray(record.output) ? record.output : []
-  const chunks: string[] = []
-  for (const item of output) {
-    if (!item || typeof item !== 'object') {
-      continue
-    }
-    const content = Array.isArray((item as Record<string, unknown>).content)
-      ? ((item as Record<string, unknown>).content as unknown[])
-      : []
-    for (const part of content) {
-      if (
-        part &&
-        typeof part === 'object' &&
-        typeof (part as Record<string, unknown>).text === 'string'
-      ) {
-        chunks.push((part as Record<string, string>).text)
-      }
-    }
-  }
-  return chunks.join('')
-}
-
 function textFromContent(content: unknown): string {
   if (typeof content === 'string') {
     return content
@@ -331,10 +306,39 @@ function toResponsesInputMessage(message: unknown): Record<string, unknown> | nu
   }
 }
 
+function applyModelMapping(
+  payload: Record<string, unknown>,
+  mappings: LocalGatewayModelMapping[]
+): void {
+  if (!mappings.length) return
+  const raw = typeof payload.model === 'string' ? payload.model.trim() : ''
+  if (!raw) return
+  const hit = mappings.find((entry) => entry.from === raw)
+  if (hit) {
+    payload.model = hit.to
+  }
+}
+
+const DEFAULT_RESPONSES_INSTRUCTIONS = 'You are a helpful assistant.'
+
 function chatToResponsesPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const messages = Array.isArray(payload.messages) ? payload.messages : []
   const responsesPayload = { ...payload }
   delete responsesPayload.messages
+  delete responsesPayload.max_tokens
+  delete responsesPayload.max_completion_tokens
+  delete responsesPayload.n
+  delete responsesPayload.frequency_penalty
+  delete responsesPayload.presence_penalty
+  delete responsesPayload.logit_bias
+  delete responsesPayload.logprobs
+  delete responsesPayload.top_logprobs
+  delete responsesPayload.response_format
+  delete responsesPayload.seed
+  delete responsesPayload.stop
+  delete responsesPayload.user
+  delete responsesPayload.tools
+  delete responsesPayload.tool_choice
   const systemMessages = messages.filter(
     (message) =>
       message && typeof message === 'object' && (message as { role?: unknown }).role === 'system'
@@ -359,24 +363,48 @@ function chatToResponsesPayload(payload: Record<string, unknown>): Record<string
     ...responsesPayload,
     input,
     instructions:
-      typeof payload.instructions === 'string' ? payload.instructions : instructions || undefined
+      (typeof payload.instructions === 'string' && payload.instructions) ||
+      instructions ||
+      DEFAULT_RESPONSES_INSTRUCTIONS,
+    store: false,
+    stream: true
   }
+}
+
+function estimateAnthropicTokenCount(payload: Record<string, unknown>): {
+  input_tokens: number
+} {
+  const parts: string[] = []
+  const system = payload.system
+  if (typeof system === 'string') {
+    parts.push(system)
+  } else if (system) {
+    parts.push(textFromContent(system))
+  }
+  const messages = Array.isArray(payload.messages) ? payload.messages : []
+  for (const message of messages) {
+    if (!message || typeof message !== 'object') {
+      continue
+    }
+    const content = (message as Record<string, unknown>).content
+    parts.push(textFromContent(content))
+  }
+  const charCount = parts.reduce((sum, text) => sum + text.length, 0)
+  return { input_tokens: Math.max(1, Math.ceil(charCount / 4)) }
 }
 
 function anthropicToResponsesPayload(payload: Record<string, unknown>): Record<string, unknown> {
   const messages = Array.isArray(payload.messages) ? payload.messages : []
   const system =
     typeof payload.system === 'string' ? payload.system : textFromContent(payload.system)
-  const maxTokens =
-    typeof payload.max_tokens === 'number' ? { max_output_tokens: payload.max_tokens } : {}
   return {
     model: typeof payload.model === 'string' ? payload.model : undefined,
-    instructions: system || undefined,
+    instructions: system || DEFAULT_RESPONSES_INSTRUCTIONS,
     input: messages.map(toResponsesInputMessage).filter(Boolean),
-    stream: payload.stream === true,
+    store: false,
+    stream: true,
     temperature: payload.temperature,
-    top_p: payload.top_p,
-    ...maxTokens
+    top_p: payload.top_p
   }
 }
 
@@ -401,110 +429,23 @@ function geminiToResponsesPayload(
     payload.generationConfig && typeof payload.generationConfig === 'object'
       ? (payload.generationConfig as Record<string, unknown>)
       : {}
-  const maxTokens =
-    typeof generationConfig.maxOutputTokens === 'number'
-      ? { max_output_tokens: generationConfig.maxOutputTokens }
-      : {}
   return {
     model: geminiModelFromPath(pathname),
-    instructions: textFromContent(payload.systemInstruction) || undefined,
+    instructions: textFromContent(payload.systemInstruction) || DEFAULT_RESPONSES_INSTRUCTIONS,
     input: contents.map(toResponsesInputMessage).filter(Boolean),
-    stream: pathname.includes(':streamGenerateContent'),
+    store: false,
+    stream: true,
     temperature: generationConfig.temperature,
-    top_p: generationConfig.topP,
-    ...maxTokens
+    top_p: generationConfig.topP
   }
 }
 
-function responsesToChatCompletion(payload: unknown, model: string): unknown {
-  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
-  const id = typeof record.id === 'string' ? record.id : `chatcmpl-cdock-${Date.now()}`
-  const created =
-    typeof record.created_at === 'number' ? record.created_at : Math.floor(Date.now() / 1000)
-  const text = extractResponseText(payload)
-  const usage =
-    record.usage && typeof record.usage === 'object'
-      ? {
-          prompt_tokens: (record.usage as Record<string, unknown>).input_tokens ?? 0,
-          completion_tokens: (record.usage as Record<string, unknown>).output_tokens ?? 0,
-          total_tokens: (record.usage as Record<string, unknown>).total_tokens ?? 0
-        }
-      : undefined
-
-  return {
-    id,
-    object: 'chat.completion',
-    created,
-    model,
-    choices: [
-      {
-        index: 0,
-        message: {
-          role: 'assistant',
-          content: text
-        },
-        finish_reason: 'stop'
-      }
-    ],
-    usage
-  }
-}
-
-function responsesToAnthropicMessage(payload: unknown, model: string): unknown {
-  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
-  const usage =
-    record.usage && typeof record.usage === 'object'
-      ? {
-          input_tokens: (record.usage as Record<string, unknown>).input_tokens ?? 0,
-          output_tokens: (record.usage as Record<string, unknown>).output_tokens ?? 0
-        }
-      : { input_tokens: 0, output_tokens: 0 }
-
-  return {
-    id: typeof record.id === 'string' ? record.id : `msg_cdock_${Date.now()}`,
-    type: 'message',
-    role: 'assistant',
-    model,
-    content: [
-      {
-        type: 'text',
-        text: extractResponseText(payload)
-      }
-    ],
-    stop_reason: 'end_turn',
-    stop_sequence: null,
-    usage
-  }
-}
-
-function responsesToGeminiContent(payload: unknown, model: string): unknown {
-  const record = payload && typeof payload === 'object' ? (payload as Record<string, unknown>) : {}
-  const usage =
-    record.usage && typeof record.usage === 'object'
-      ? (record.usage as Record<string, unknown>)
-      : {}
-  return {
-    candidates: [
-      {
-        content: {
-          role: 'model',
-          parts: [
-            {
-              text: extractResponseText(payload)
-            }
-          ]
-        },
-        finishReason: 'STOP',
-        index: 0
-      }
-    ],
-    usageMetadata: {
-      promptTokenCount: usage.input_tokens ?? 0,
-      candidatesTokenCount: usage.output_tokens ?? 0,
-      totalTokenCount: usage.total_tokens ?? 0
-    },
-    modelVersion: model
-  }
+async function collectResponsesText(upstream: Response): Promise<string> {
+  const chunks: string[] = []
+  await streamResponsesTextDeltas(upstream, (delta) => {
+    chunks.push(delta)
+  })
+  return chunks.join('')
 }
 
 function writeSse(response: ServerResponse, payload: unknown, event?: string): void {
@@ -534,13 +475,10 @@ function textDeltaFromResponsesSseBlock(block: string): string {
   try {
     const parsed = JSON.parse(data) as Record<string, unknown>
     if (
-      (event === 'response.output_text.delta' || event === 'response.text.delta' || !event) &&
+      (event === 'response.output_text.delta' || event === 'response.text.delta') &&
       typeof parsed.delta === 'string'
     ) {
       return parsed.delta
-    }
-    if (typeof parsed.text === 'string') {
-      return parsed.text
     }
   } catch {
     return ''
@@ -593,12 +531,16 @@ export class CodexLocalGatewayService {
   private lastError = ''
   private requestLogSeq = 0
   private requestLogs: LocalGatewayLogEntry[] = []
+  private logsLoaded = false
+  private logsLoadTask: Promise<void> | null = null
+  private logsPersistTask: Promise<void> | null = null
   private stickyTargets = new Map<string, StickyTarget>()
 
   constructor(
     private readonly options: {
       store: CodexAccountStore
       providerStore: CodexProviderStore
+      logFilePath: string
       platform: CodexPlatformAdapter
       refreshAuthForUse: (
         accountId: string,
@@ -609,10 +551,14 @@ export class CodexLocalGatewayService {
         accountId: string,
         expectedAuth: CodexAuthPayload
       ) => Promise<StoredAuthRefreshResult>
+      openCodexFromService: (
+        input?: OpenCodexFromServiceInput
+      ) => Promise<OpenCodexFromServiceResult>
     }
   ) {}
 
   async status(): Promise<LocalGatewayStatus> {
+    await this.ensureLogsLoaded()
     const settings = await this.settings()
     const apiKey = this.readStoredApiKey(settings)
     return {
@@ -625,7 +571,11 @@ export class CodexLocalGatewayService {
   }
 
   async start(): Promise<LocalGatewayStatus> {
+    await this.ensureLogsLoaded()
     const settings = await this.ensureApiKey()
+    if (!settings.allowedGroupIds.length) {
+      throw new Error('Local gateway requires at least one allowed group before it can start.')
+    }
     if (this.server?.listening) {
       return this.status()
     }
@@ -651,7 +601,7 @@ export class CodexLocalGatewayService {
     })
 
     this.lastError = ''
-    this.pushLog({
+    await this.pushLog({
       method: 'SYSTEM',
       path: 'gateway',
       status: 200,
@@ -662,12 +612,13 @@ export class CodexLocalGatewayService {
   }
 
   async stop(): Promise<LocalGatewayStatus> {
+    await this.ensureLogsLoaded()
     const server = this.server
     this.server = null
     if (server?.listening) {
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
-    this.pushLog({
+    await this.pushLog({
       method: 'SYSTEM',
       path: 'gateway',
       status: 200,
@@ -678,6 +629,7 @@ export class CodexLocalGatewayService {
   }
 
   async rotateKey(): Promise<LocalGatewayStatus & { apiKey: string }> {
+    await this.ensureLogsLoaded()
     const settings = await this.settings()
     const apiKey = generateGatewayApiKey()
     await this.options.store.updateSettings({
@@ -686,7 +638,7 @@ export class CodexLocalGatewayService {
         apiKey: this.options.platform.protect(apiKey)
       }
     })
-    this.pushLog({
+    await this.pushLog({
       method: 'SYSTEM',
       path: 'key',
       status: 200,
@@ -697,6 +649,11 @@ export class CodexLocalGatewayService {
       ...(await this.status()),
       apiKey
     }
+  }
+
+  async getApiKey(): Promise<string> {
+    const settings = await this.ensureApiKey()
+    return this.readStoredApiKey(settings)
   }
 
   private async settings(): Promise<LocalGatewaySettings> {
@@ -746,7 +703,7 @@ export class CodexLocalGatewayService {
     const logMeta: Pick<LocalGatewayLogEntry, 'provider' | 'model' | 'tokens'> = {}
     if (url.pathname !== '/health') {
       response.once('finish', () => {
-        this.pushLog({
+        void this.pushLog({
           method: request.method ?? 'GET',
           path: url.pathname,
           status: response.statusCode,
@@ -798,6 +755,15 @@ export class CodexLocalGatewayService {
       return
     }
 
+    if (url.pathname === '/codex/open') {
+      writeJson(
+        response,
+        200,
+        await this.options.openCodexFromService(jsonBody as OpenCodexFromServiceInput)
+      )
+      return
+    }
+
     if (url.pathname === '/v1/responses') {
       await this.handleOpenAiResponses(request, response, body, jsonBody)
       return
@@ -810,6 +776,11 @@ export class CodexLocalGatewayService {
 
     if (url.pathname === '/v1/messages') {
       await this.handleAnthropicMessages(request, response, jsonBody)
+      return
+    }
+
+    if (url.pathname === '/v1/messages/count_tokens') {
+      writeJson(response, 200, estimateAnthropicTokenCount(jsonBody))
       return
     }
 
@@ -867,15 +838,18 @@ export class CodexLocalGatewayService {
     body: Buffer,
     jsonBody: Record<string, unknown>
   ): Promise<void> {
+    const mappings = (await this.settings()).modelMappings
+    applyModelMapping(jsonBody, mappings)
+    const effectiveBody = mappings.length ? Buffer.from(JSON.stringify(jsonBody)) : body
     try {
-      const upstream = await this.fetchCodexResponses(request, body, jsonBody)
+      const upstream = await this.fetchCodexResponses(request, effectiveBody, jsonBody)
       if (upstream.status === 429) {
-        await this.proxyProviderProtocol('openai', request, response, body)
+        await this.proxyProviderProtocol('openai', request, response, effectiveBody)
         return
       }
       await writeFetchResponse(response, upstream)
     } catch {
-      await this.proxyProviderProtocol('openai', request, response, body)
+      await this.proxyProviderProtocol('openai', request, response, effectiveBody)
     }
   }
 
@@ -885,6 +859,7 @@ export class CodexLocalGatewayService {
     body: Buffer,
     jsonBody: Record<string, unknown>
   ): Promise<void> {
+    applyModelMapping(jsonBody, (await this.settings()).modelMappings)
     const responsesBody = Buffer.from(JSON.stringify(chatToResponsesPayload(jsonBody)))
     if (jsonBody.stream === true) {
       await this.handleChatCompletionStream(request, response, responsesBody, body, jsonBody)
@@ -904,24 +879,31 @@ export class CodexLocalGatewayService {
       await this.proxyProviderProtocol('openai', request, response, body)
       return
     }
-    const upstreamPayload = await upstream.json().catch(() => null)
     if (!upstream.ok) {
       writeJson(
         response,
         upstream.status,
-        upstreamPayload ?? openAiError('Upstream request failed.', upstream.status).body
+        (await upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', upstream.status).body
       )
       return
     }
 
-    writeJson(
-      response,
-      200,
-      responsesToChatCompletion(
-        upstreamPayload,
-        typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
-      )
-    )
+    const text = await collectResponsesText(upstream)
+    const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
+    writeJson(response, 200, {
+      id: `chatcmpl-cdock-${Date.now()}`,
+      object: 'chat.completion',
+      created: Math.floor(Date.now() / 1000),
+      model,
+      choices: [
+        {
+          index: 0,
+          message: { role: 'assistant', content: text },
+          finish_reason: 'stop'
+        }
+      ]
+    })
   }
 
   private async handleChatCompletionStream(
@@ -992,6 +974,7 @@ export class CodexLocalGatewayService {
     response: ServerResponse,
     jsonBody: Record<string, unknown>
   ): Promise<void> {
+    applyModelMapping(jsonBody, (await this.settings()).modelMappings)
     const responsesPayload = anthropicToResponsesPayload(jsonBody)
     const responsesBody = Buffer.from(JSON.stringify(responsesPayload))
     if (jsonBody.stream === true) {
@@ -1010,23 +993,28 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    const upstreamPayload = await upstream.json().catch(() => null)
     if (!upstream.ok) {
       writeJson(
         response,
         upstream.status,
-        upstreamPayload ?? openAiError('Upstream request failed.', upstream.status).body
+        (await upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', upstream.status).body
       )
       return
     }
-    writeJson(
-      response,
-      200,
-      responsesToAnthropicMessage(
-        upstreamPayload,
-        typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
-      )
-    )
+
+    const text = await collectResponsesText(upstream)
+    const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
+    writeJson(response, 200, {
+      id: `msg_cdock_${Date.now()}`,
+      type: 'message',
+      role: 'assistant',
+      model,
+      content: [{ type: 'text', text }],
+      stop_reason: 'end_turn',
+      stop_sequence: null,
+      usage: { input_tokens: 0, output_tokens: 0 }
+    })
   }
 
   private async handleAnthropicMessageStream(
@@ -1116,6 +1104,16 @@ export class CodexLocalGatewayService {
     jsonBody: Record<string, unknown>,
     pathname: string
   ): Promise<void> {
+    const mappings = (await this.settings()).modelMappings
+    const modelFromPath = geminiModelFromPath(pathname)
+    if (modelFromPath) {
+      jsonBody.model = modelFromPath
+      applyModelMapping(jsonBody, mappings)
+      const mapped = typeof jsonBody.model === 'string' ? jsonBody.model : modelFromPath
+      if (mapped !== modelFromPath) {
+        pathname = pathname.replace(`/models/${modelFromPath}:`, `/models/${mapped}:`)
+      }
+    }
     const responsesPayload = geminiToResponsesPayload(jsonBody, pathname)
     const responsesBody = Buffer.from(JSON.stringify(responsesPayload))
     if (pathname.includes(':streamGenerateContent')) {
@@ -1134,20 +1132,28 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    const upstreamPayload = await upstream.json().catch(() => null)
     if (!upstream.ok) {
       writeJson(
         response,
         upstream.status,
-        upstreamPayload ?? openAiError('Upstream request failed.', upstream.status).body
+        (await upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', upstream.status).body
       )
       return
     }
-    writeJson(
-      response,
-      200,
-      responsesToGeminiContent(upstreamPayload, geminiModelFromPath(pathname) ?? 'codex')
-    )
+
+    const text = await collectResponsesText(upstream)
+    const model = geminiModelFromPath(pathname) ?? 'codex'
+    writeJson(response, 200, {
+      candidates: [
+        {
+          content: { role: 'model', parts: [{ text }] },
+          finishReason: 'STOP',
+          index: 0
+        }
+      ],
+      modelVersion: model
+    })
   }
 
   private async handleGeminiContentStream(
@@ -1310,17 +1316,39 @@ export class CodexLocalGatewayService {
 
   private async bestAccount(): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
-    const accounts = snapshot.accounts.filter((account) => !isLocalMockAccount(account))
+    const allowed = await this.allowedGroupIdSet()
+    const accounts = snapshot.accounts.filter(
+      (account) => !isLocalMockAccount(account) && this.matchesAllowedGroups(account, allowed)
+    )
     return resolveBestAccount(accounts, snapshot.usageByAccountId, snapshot.activeAccountId)
   }
 
   private async accountById(accountId: string): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
+    const allowed = await this.allowedGroupIdSet()
     return (
       snapshot.accounts.find(
-        (account) => account.id === accountId && !isLocalMockAccount(account)
+        (account) =>
+          account.id === accountId &&
+          !isLocalMockAccount(account) &&
+          this.matchesAllowedGroups(account, allowed)
       ) ?? null
     )
+  }
+
+  private async allowedGroupIdSet(): Promise<Set<string> | null> {
+    const settings = await this.settings()
+    if (!settings.allowedGroupIds.length) {
+      return null
+    }
+    return new Set(settings.allowedGroupIds)
+  }
+
+  private matchesAllowedGroups(account: AccountSummary, allowed: Set<string> | null): boolean {
+    if (!allowed) {
+      return false
+    }
+    return account.groupIds.some((groupId) => allowed.has(groupId))
   }
 
   private async firstProvider(
@@ -1363,12 +1391,91 @@ export class CodexLocalGatewayService {
     this.stickyTargets.set(key, target)
   }
 
-  private pushLog(input: Omit<LocalGatewayLogEntry, 'id' | 'timestamp'>): void {
+  private async ensureLogsLoaded(): Promise<void> {
+    if (this.logsLoaded) {
+      return
+    }
+
+    this.logsLoadTask ??= this.loadLogs().finally(() => {
+      this.logsLoadTask = null
+      this.logsLoaded = true
+    })
+    await this.logsLoadTask
+  }
+
+  private async loadLogs(): Promise<void> {
+    try {
+      const raw = await fs.readFile(this.options.logFilePath, 'utf8')
+      const parsed = JSON.parse(raw) as { logs?: unknown } | unknown[]
+      const entries = Array.isArray(parsed)
+        ? parsed
+        : Array.isArray((parsed as { logs?: unknown }).logs)
+          ? ((parsed as { logs: unknown[] }).logs)
+          : []
+
+      this.requestLogs = entries
+        .map((entry) => this.normalizePersistedLog(entry))
+        .filter((entry): entry is LocalGatewayLogEntry => Boolean(entry))
+        .slice(0, 80)
+      this.requestLogSeq = this.requestLogs.length
+    } catch {
+      this.requestLogs = []
+      this.requestLogSeq = 0
+    }
+  }
+
+  private normalizePersistedLog(entry: unknown): LocalGatewayLogEntry | null {
+    if (!entry || typeof entry !== 'object') {
+      return null
+    }
+
+    const record = entry as Record<string, unknown>
+    if (
+      typeof record.id !== 'string' ||
+      typeof record.timestamp !== 'string' ||
+      typeof record.method !== 'string' ||
+      typeof record.path !== 'string' ||
+      typeof record.status !== 'number' ||
+      typeof record.durationMs !== 'number'
+    ) {
+      return null
+    }
+
+    return {
+      id: record.id,
+      timestamp: record.timestamp,
+      method: record.method,
+      path: record.path,
+      status: record.status,
+      durationMs: record.durationMs,
+      provider: typeof record.provider === 'string' ? record.provider : undefined,
+      model: typeof record.model === 'string' ? record.model : undefined,
+      tokens: typeof record.tokens === 'number' ? record.tokens : undefined,
+      message: typeof record.message === 'string' ? record.message : undefined
+    }
+  }
+
+  private persistLogs(): Promise<void> {
+    this.logsPersistTask = (this.logsPersistTask ?? Promise.resolve())
+      .catch(() => undefined)
+      .then(async () => {
+        await fs.mkdir(dirname(this.options.logFilePath), { recursive: true })
+        await fs.writeFile(
+          this.options.logFilePath,
+          `${JSON.stringify({ version: 1, logs: this.requestLogs }, null, 2)}\n`,
+          'utf8'
+        )
+      })
+    return this.logsPersistTask
+  }
+
+  private pushLog(input: Omit<LocalGatewayLogEntry, 'id' | 'timestamp'>): Promise<void> {
     const entry: LocalGatewayLogEntry = {
       id: `gw-${Date.now()}-${this.requestLogSeq++}`,
       timestamp: new Date().toISOString(),
       ...input
     }
     this.requestLogs = [entry, ...this.requestLogs].slice(0, 80)
+    return this.persistLogs()
   }
 }

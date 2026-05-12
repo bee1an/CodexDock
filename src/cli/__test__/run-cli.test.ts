@@ -16,7 +16,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
   return {
     accounts: [],
     providers: [],
-    tags: [],
+    groups: [],
     codexInstances: [],
     codexInstanceDefaults: {
       rootDir: '/tmp/codex-instance-homes',
@@ -60,10 +60,10 @@ interface CliTestRuntime {
       activateBest: ReturnType<typeof vi.fn>
       reorder: ReturnType<typeof vi.fn>
       remove: ReturnType<typeof vi.fn>
-      updateTags: ReturnType<typeof vi.fn>
+      updateGroups: ReturnType<typeof vi.fn>
       get: ReturnType<typeof vi.fn>
     }
-    tags: {
+    groups: {
       create: ReturnType<typeof vi.fn>
       update: ReturnType<typeof vi.fn>
       remove: ReturnType<typeof vi.fn>
@@ -140,20 +140,20 @@ function createRuntime(): {
       {
         id: 'acct_1',
         email: 'one@example.com',
-        tagIds: ['tag_a'],
+        groupIds: ['group_a'],
         createdAt: '2026-03-01T00:00:00.000Z',
         updatedAt: '2026-03-01T00:00:00.000Z'
       }
     ],
-    tags: [
+    groups: [
       {
-        id: 'tag_a',
+        id: 'group_a',
         name: 'Alpha',
         createdAt: '2026-03-01T00:00:00.000Z',
         updatedAt: '2026-03-01T00:00:00.000Z'
       },
       {
-        id: 'tag_b',
+        id: 'group_b',
         name: 'Beta',
         createdAt: '2026-03-02T00:00:00.000Z',
         updatedAt: '2026-03-02T00:00:00.000Z'
@@ -292,14 +292,14 @@ function createRuntime(): {
         activateBest: vi.fn(async () => snapshot),
         reorder: vi.fn(async () => snapshot),
         remove: vi.fn(async () => snapshot),
-        updateTags: vi.fn(async () => snapshot),
+        updateGroups: vi.fn(async () => snapshot),
         get: vi.fn()
       },
-      tags: {
+      groups: {
         create: vi.fn(async () => snapshot),
         update: vi.fn(async () => snapshot),
         remove: vi.fn(async () => snapshot),
-        getAll: vi.fn(async () => snapshot.tags)
+        getAll: vi.fn(async () => snapshot.groups)
       },
       providers: {
         list: vi.fn(async () => snapshot.providers),
@@ -774,34 +774,34 @@ describe('runCli', () => {
     })
   })
 
-  it('covers tag commands', async () => {
+  it('covers group commands', async () => {
     const { runtime, snapshot } = createRuntime()
 
-    await expect(runCli(runtime as never, ['tag', 'list', '--json'])).resolves.toBe(0)
-    expect(runtime.services.tags.getAll).toHaveBeenCalledOnce()
+    await expect(runCli(runtime as never, ['group', 'list', '--json'])).resolves.toBe(0)
+    expect(runtime.services.groups.getAll).toHaveBeenCalledOnce()
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
-      data: snapshot.tags,
+      data: snapshot.groups,
       error: null
     })
 
     const createdSnapshot = createSnapshot({
       ...snapshot,
       accounts: snapshot.accounts,
-      tags: [
-        ...snapshot.tags,
+      groups: [
+        ...snapshot.groups,
         {
-          id: 'tag_c',
+          id: 'group_c',
           name: 'Gamma',
           createdAt: '2026-03-03T00:00:00.000Z',
           updatedAt: '2026-03-03T00:00:00.000Z'
         }
       ]
     })
-    runtime.services.tags.create = vi.fn(async () => createdSnapshot)
+    runtime.services.groups.create = vi.fn(async () => createdSnapshot)
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['tag', 'create', 'Gamma', '--json'])).resolves.toBe(0)
-    expect(runtime.services.tags.create).toHaveBeenCalledWith('Gamma')
+    await expect(runCli(runtime as never, ['group', 'create', 'Gamma', '--json'])).resolves.toBe(0)
+    expect(runtime.services.groups.create).toHaveBeenCalledWith('Gamma')
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: createdSnapshot,
@@ -811,14 +811,16 @@ describe('runCli', () => {
     const renamedSnapshot = createSnapshot({
       ...snapshot,
       accounts: snapshot.accounts,
-      tags: snapshot.tags.map((tag) => (tag.id === 'tag_a' ? { ...tag, name: 'Alpha 2' } : tag))
+      groups: snapshot.groups.map((group) =>
+        group.id === 'group_a' ? { ...group, name: 'Alpha 2' } : group
+      )
     })
-    runtime.services.tags.update = vi.fn(async () => renamedSnapshot)
+    runtime.services.groups.update = vi.fn(async () => renamedSnapshot)
     logSpy.mockClear()
     await expect(
-      runCli(runtime as never, ['tag', 'rename', 'tag_a', 'Alpha 2', '--json'])
+      runCli(runtime as never, ['group', 'rename', 'group_a', 'Alpha 2', '--json'])
     ).resolves.toBe(0)
-    expect(runtime.services.tags.update).toHaveBeenCalledWith('tag_a', 'Alpha 2')
+    expect(runtime.services.groups.update).toHaveBeenCalledWith('group_a', 'Alpha 2')
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: renamedSnapshot,
@@ -827,13 +829,15 @@ describe('runCli', () => {
 
     const removedSnapshot = createSnapshot({
       ...snapshot,
-      accounts: snapshot.accounts.map((account) => ({ ...account, tagIds: [] })),
-      tags: snapshot.tags.filter((tag) => tag.id !== 'tag_a')
+      accounts: snapshot.accounts.map((account) => ({ ...account, groupIds: [] })),
+      groups: snapshot.groups.filter((group) => group.id !== 'group_a')
     })
-    runtime.services.tags.remove = vi.fn(async () => removedSnapshot)
+    runtime.services.groups.remove = vi.fn(async () => removedSnapshot)
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['tag', 'remove', 'tag_a', '--json'])).resolves.toBe(0)
-    expect(runtime.services.tags.remove).toHaveBeenCalledWith('tag_a')
+    await expect(runCli(runtime as never, ['group', 'remove', 'group_a', '--json'])).resolves.toBe(
+      0
+    )
+    expect(runtime.services.groups.remove).toHaveBeenCalledWith('group_a')
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: removedSnapshot,
@@ -842,15 +846,21 @@ describe('runCli', () => {
 
     const assignedSnapshot = createSnapshot({
       ...snapshot,
-      accounts: snapshot.accounts.map((account) => ({ ...account, tagIds: ['tag_a', 'tag_b'] })),
-      tags: snapshot.tags
+      accounts: snapshot.accounts.map((account) => ({
+        ...account,
+        groupIds: ['group_a', 'group_b']
+      })),
+      groups: snapshot.groups
     })
-    runtime.services.accounts.updateTags = vi.fn(async () => assignedSnapshot)
+    runtime.services.accounts.updateGroups = vi.fn(async () => assignedSnapshot)
     logSpy.mockClear()
     await expect(
-      runCli(runtime as never, ['tag', 'assign', 'acct_1', 'tag_b', '--json'])
+      runCli(runtime as never, ['group', 'assign', 'acct_1', 'group_b', '--json'])
     ).resolves.toBe(0)
-    expect(runtime.services.accounts.updateTags).toHaveBeenCalledWith('acct_1', ['tag_a', 'tag_b'])
+    expect(runtime.services.accounts.updateGroups).toHaveBeenCalledWith('acct_1', [
+      'group_a',
+      'group_b'
+    ])
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: assignedSnapshot,
@@ -859,15 +869,15 @@ describe('runCli', () => {
 
     const unassignedSnapshot = createSnapshot({
       ...snapshot,
-      accounts: snapshot.accounts.map((account) => ({ ...account, tagIds: [] })),
-      tags: snapshot.tags
+      accounts: snapshot.accounts.map((account) => ({ ...account, groupIds: [] })),
+      groups: snapshot.groups
     })
-    runtime.services.accounts.updateTags = vi.fn(async () => unassignedSnapshot)
+    runtime.services.accounts.updateGroups = vi.fn(async () => unassignedSnapshot)
     logSpy.mockClear()
     await expect(
-      runCli(runtime as never, ['tag', 'unassign', 'acct_1', 'tag_a', '--json'])
+      runCli(runtime as never, ['group', 'unassign', 'acct_1', 'group_a', '--json'])
     ).resolves.toBe(0)
-    expect(runtime.services.accounts.updateTags).toHaveBeenCalledWith('acct_1', [])
+    expect(runtime.services.accounts.updateGroups).toHaveBeenCalledWith('acct_1', [])
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
       data: unassignedSnapshot,

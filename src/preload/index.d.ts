@@ -1,6 +1,7 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AccountRateLimits,
+  AccountTokensDetail,
   AccountWakeSchedule,
   AccountTransferFormat,
   AppMeta,
@@ -28,6 +29,8 @@ import type {
   PromptImportResult,
   PromptSearchInput,
   PromptSummary,
+  ProbeProviderModelsInput,
+  ProviderModelsProbeResult,
   ReadCodexSessionDetailInput,
   LoginAttempt,
   LoginEvent,
@@ -37,6 +40,7 @@ import type {
   TokenCostReadOptions,
   LocalGatewayStatus,
   UpdateAccountWakeScheduleInput,
+  UpdateAccountTokensInput,
   UpdatePromptInput,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
@@ -62,23 +66,27 @@ interface CodexDesktopApi {
   reorderAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   removeAccount: (accountId: string) => Promise<AppSnapshot>
   removeAccounts: (accountIds: string[]) => Promise<AppSnapshot>
-  updateAccountTags: (accountId: string, tagIds: string[]) => Promise<AppSnapshot>
+  updateAccountGroups: (accountId: string, groupIds: string[]) => Promise<AppSnapshot>
+  updateAccountTokens: (accountId: string, input: UpdateAccountTokensInput) => Promise<AppSnapshot>
+  getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   getAccountWakeSchedule: (accountId: string) => Promise<AccountWakeSchedule | null>
   updateAccountWakeSchedule: (
     accountId: string,
     input: UpdateAccountWakeScheduleInput
   ) => Promise<AppSnapshot>
   deleteAccountWakeSchedule: (accountId: string) => Promise<AppSnapshot>
-  createTag: (name: string) => Promise<AppSnapshot>
-  updateTag: (tagId: string, name: string) => Promise<AppSnapshot>
-  deleteTag: (tagId: string) => Promise<AppSnapshot>
+  createGroup: (name: string) => Promise<AppSnapshot>
+  updateGroup: (groupId: string, name: string) => Promise<AppSnapshot>
+  deleteGroup: (groupId: string) => Promise<AppSnapshot>
   listProviders: () => Promise<AppSnapshot['providers']>
   getProvider: (providerId: string) => Promise<CustomProviderDetail>
   reorderProviders: (providerIds: string[]) => Promise<AppSnapshot>
   createProvider: (input: CreateCustomProviderInput) => Promise<AppSnapshot>
   updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<AppSnapshot>
   removeProvider: (providerId: string) => Promise<AppSnapshot>
+  probeProviderModels: (input: ProbeProviderModelsInput) => Promise<ProviderModelsProbeResult>
   openProviderInCodex: (providerId: string) => Promise<AppSnapshot>
+  openLocalGatewayInCodex: () => Promise<AppSnapshot>
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
   openAccountInIsolatedCodex: (accountId: string) => Promise<AppSnapshot>
   readAccountRateLimits: (accountId: string) => Promise<AccountRateLimits>
@@ -111,13 +119,11 @@ interface CodexDesktopApi {
   importPromptFile: (filePath: string) => Promise<PromptImportResult>
   importPromptDir: (dirPath: string) => Promise<PromptImportResult>
   exportPromptDir: (targetDir: string) => Promise<{ exported: number }>
-  addPromptAttachment: (
-    promptId: string,
-    payload: PromptAttachmentPayload
-  ) => Promise<PromptDetail>
+  addPromptAttachment: (promptId: string, payload: PromptAttachmentPayload) => Promise<PromptDetail>
   removePromptAttachment: (promptId: string, fileName: string) => Promise<PromptDetail>
   readPromptAttachment: (promptId: string, fileName: string) => Promise<PromptAttachmentData>
   getLocalGatewayStatus: () => Promise<LocalGatewayStatus>
+  getLocalGatewayApiKey: () => Promise<string>
   startLocalGateway: () => Promise<AppSnapshot>
   stopLocalGateway: () => Promise<AppSnapshot>
   rotateLocalGatewayKey: () => Promise<LocalGatewayStatus & { apiKey: string }>

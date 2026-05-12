@@ -1,4 +1,5 @@
-import { join, resolve } from 'node:path'
+import { randomUUID } from 'node:crypto'
+import { join, relative, resolve, sep } from 'node:path'
 import { promises as fs } from 'node:fs'
 import { parse as parseToml } from '@iarna/toml'
 
@@ -16,10 +17,15 @@ import {
 } from './codex-launcher'
 import {
   isLocalMockAccount,
+  localGatewayBaseUrl,
+  normalizeLocalGatewaySettings,
   type AccountSummary,
   type AppSnapshot,
   type CodexInstanceSummary,
-  type CustomProviderSummary
+  type CustomProviderSummary,
+  type OpenCodexFromServiceInput,
+  type OpenCodexFromServiceResult,
+  type OpenCodexFromServiceTarget
 } from '../shared/codex'
 import {
   BACKGROUND_AUTH_REFRESH_SKEW_MS,
@@ -50,6 +56,17 @@ export interface CodexServicesInstanceRuntime {
   startNamedInstance(instanceId: string, workspacePath: string): Promise<CodexInstanceSummary>
   startAccountInstance(accountId: string, workspacePath: string): Promise<CodexInstanceSummary>
   startProviderInstance(providerId: string, workspacePath: string): Promise<CustomProviderSummary>
+  syncLocalGatewayInstanceConfig(input: {
+    baseUrl: string
+    apiKey: string
+    create?: boolean
+  }): Promise<CodexInstanceSummary | null>
+  startLocalGatewayInstance(input: {
+    baseUrl: string
+    apiKey: string
+    workspacePath: string
+  }): Promise<CodexInstanceSummary>
+  openFromService(input?: OpenCodexFromServiceInput): Promise<OpenCodexFromServiceResult>
   stopInstance(instanceId: string): Promise<CodexInstanceSummary>
 }
 
@@ -59,6 +76,16 @@ export function createCodexServicesInstanceRuntime(
 ): CodexServicesInstanceRuntime {
   const { store, instanceStore, providerStore, loginCoordinator } = context
   const { refreshAuthForUse, refreshStoredAuthGuarded } = authRuntime
+  const serviceLaunchConfigEntries = new Set([
+    'auth.json',
+    'config.toml',
+    'memory.md',
+    'instructions.md',
+    'prompts',
+    'automations'
+  ])
+  const localGatewayInstanceName = 'Local Gateway'
+  const localGatewayProviderModel = 'gpt-5.4'
 
   function normalizeBaseUrl(value: string): string {
     return value.trim().replace(/\/+$/u, '').toLowerCase()
@@ -318,6 +345,111 @@ export function createCodexServicesInstanceRuntime(
     return value || undefined
   }
 
+  function serviceLaunchSlug(value: string): string {
+    return (
+      value
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '') || 'codex'
+    )
+  }
+
+  function serviceTargetKind(input?: OpenCodexFromServiceInput): OpenCodexFromServiceTarget {
+    switch (input?.target ?? 'default') {
+      case 'default':
+      case 'account':
+      case 'provider':
+      case 'instance':
+      case 'localGateway':
+        return input?.target ?? 'default'
+      default:
+        throw new Error('Unsupported Codex open target.')
+    }
+  }
+
+  async function pathExists(value: string): Promise<boolean> {
+    try {
+      await fs.access(value)
+      return true
+    } catch {
+      return false
+    }
+  }
+
+  async function copyServiceLaunchHome(
+    sourceCodexHome: string,
+    targetCodexHome: string
+  ): Promise<void> {
+    await fs.mkdir(targetCodexHome, { recursive: true })
+    try {
+      await fs.cp(sourceCodexHome, targetCodexHome, {
+        recursive: true,
+        force: true,
+        filter: (sourcePath) => {
+          const relativePath = relative(sourceCodexHome, sourcePath)
+          if (!relativePath) {
+            return true
+          }
+
+          return serviceLaunchConfigEntries.has(relativePath.split(sep)[0] ?? '')
+        }
+      })
+    } catch {
+      // Missing source homes are valid for first launches; the target directory was created above.
+    }
+  }
+
+  function serviceLaunchHome(target: string): string {
+    const { rootDir } = instanceStore.getDefaults()
+    return join(rootDir, `service-launch-${serviceLaunchSlug(target)}-${randomUUID().slice(0, 8)}`)
+  }
+
+  function localGatewayCodexHome(): string {
+    const { rootDir } = instanceStore.getDefaults()
+    return join(rootDir, 'local-gateway')
+  }
+
+  function localGatewayProviderBaseUrl(baseUrl: string): string {
+    return `${baseUrl.replace(/\/+$/u, '')}/v1`
+  }
+
+  async function resolveLocalGatewayOpenConfig(): Promise<{ baseUrl: string; apiKey: string }> {
+    const settings = normalizeLocalGatewaySettings((await store.getSettings()).localGateway)
+    const apiKey =
+      typeof settings.apiKey === 'string'
+        ? settings.apiKey
+        : settings.apiKey
+          ? context.options.platform.unprotect(settings.apiKey)
+          : ''
+
+    if (!apiKey) {
+      throw new Error('Local gateway API key is required.')
+    }
+
+    return {
+      baseUrl: localGatewayBaseUrl(settings),
+      apiKey
+    }
+  }
+
+  async function launchServiceCodex(input: {
+    workspacePath: string
+    codexHome: string
+    extraArgs: string
+    preferAppBundle: boolean
+    requireDesktopExecutable: boolean
+  }): Promise<number> {
+    return launchCodexDesktop({
+      workspacePath: input.workspacePath,
+      codexHome: input.codexHome,
+      extraArgs: input.extraArgs,
+      preferAppBundle: input.preferAppBundle,
+      requireDesktopExecutable: input.requireDesktopExecutable,
+      desktopExecutablePath: await getDesktopExecutablePathOverride()
+    })
+  }
+
   async function startDefaultInstance(
     workspacePath: string,
     accountId?: string
@@ -507,6 +639,371 @@ export function createCodexServicesInstanceRuntime(
     return providerStore.markUsed(providerId)
   }
 
+  async function ensureLocalGatewayInstance(): Promise<PersistedCodexInstance> {
+    const codexHome = localGatewayCodexHome()
+    const existing = (await instanceStore.list()).find(
+      (instance) => resolve(instance.codexHome) === resolve(codexHome)
+    )
+    if (existing) {
+      return existing
+    }
+
+    return instanceStore.create({
+      name: localGatewayInstanceName,
+      codexHome
+    })
+  }
+
+  async function syncLocalGatewayInstanceConfig(input: {
+    baseUrl: string
+    apiKey: string
+    create?: boolean
+  }): Promise<CodexInstanceSummary | null> {
+    const codexHome = localGatewayCodexHome()
+    const existing = (await instanceStore.list()).find(
+      (instance) => resolve(instance.codexHome) === resolve(codexHome)
+    )
+    if (!input.create && !existing && !(await pathExists(codexHome))) {
+      return null
+    }
+
+    const instance = existing ?? (input.create ? await ensureLocalGatewayInstance() : undefined)
+    await instanceStore.ensureInitialized(codexHome)
+    await instanceStore.syncConfigFromDefault(codexHome)
+    await writeProviderApiKeyToCodexHome(codexHome, input.apiKey)
+    await writeProviderConfigToCodexHome(codexHome, {
+      name: localGatewayInstanceName,
+      baseUrl: localGatewayProviderBaseUrl(input.baseUrl),
+      model: localGatewayProviderModel,
+      fastMode: true
+    })
+
+    return instance ? toInstanceSummary(instance) : null
+  }
+
+  async function startLocalGatewayInstance(input: {
+    baseUrl: string
+    apiKey: string
+    workspacePath: string
+  }): Promise<CodexInstanceSummary> {
+    const instance =
+      (await syncLocalGatewayInstanceConfig({
+        baseUrl: input.baseUrl,
+        apiKey: input.apiKey,
+        create: true
+      })) ?? (await toInstanceSummary(await ensureLocalGatewayInstance()))
+
+    const runningPid = await resolveManagedCodexPid(instance.codexHome, instance.lastPid)
+    if (runningPid) {
+      await stopCodexProcess(runningPid)
+    }
+
+    const persisted = await ensureLocalGatewayInstance()
+    const pid = await launchServiceCodex({
+      workspacePath: input.workspacePath,
+      codexHome: persisted.codexHome,
+      extraArgs: persisted.extraArgs,
+      preferAppBundle: true,
+      requireDesktopExecutable: true
+    })
+
+    return toInstanceSummary(await instanceStore.markLaunched(persisted.id, pid))
+  }
+
+  function requiredServiceTargetId(value: string | undefined, label: string): string {
+    const normalized = value?.trim()
+    if (!normalized) {
+      throw new Error(`${label} is required.`)
+    }
+    return normalized
+  }
+
+  function serviceTargetName(
+    target: OpenCodexFromServiceTarget,
+    value: { name?: string; email?: string; accountId?: string; baseUrl?: string; id?: string }
+  ): string {
+    switch (target) {
+      case 'default':
+        return 'Default'
+      case 'account':
+        return value.email ?? value.name ?? value.accountId ?? value.id ?? 'Account'
+      case 'provider':
+        return value.name ?? value.baseUrl ?? value.id ?? 'Provider'
+      case 'instance':
+        return value.name ?? value.id ?? 'Instance'
+      case 'localGateway':
+        return localGatewayInstanceName
+    }
+  }
+
+  async function openManagedFromService(input: {
+    target: OpenCodexFromServiceTarget
+    workspacePath: string
+    accountId?: string
+    providerId?: string
+    instanceId?: string
+  }): Promise<OpenCodexFromServiceResult> {
+    switch (input.target) {
+      case 'default': {
+        const summary = await startDefaultInstance(input.workspacePath)
+        return {
+          ok: true,
+          pid: summary.lastPid,
+          codexHome: summary.codexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'default',
+            name: serviceTargetName('default', {})
+          }
+        }
+      }
+      case 'account': {
+        const accountId = await resolveAccountIdOrThrow(input.accountId)
+        const account = await store.getAccountSummary(accountId)
+        const summary = await startDefaultInstance(input.workspacePath, accountId)
+        return {
+          ok: true,
+          pid: summary.lastPid,
+          codexHome: summary.codexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'account',
+            id: accountId,
+            name: serviceTargetName('account', account)
+          }
+        }
+      }
+      case 'provider': {
+        const providerId = requiredServiceTargetId(input.providerId, 'Provider id')
+        const provider = await startProviderInstance(providerId, input.workspacePath)
+        const { rootDir } = instanceStore.getDefaults()
+        const providerCodexHome = join(rootDir, `provider-${providerId}`)
+        const instance = (await instanceStore.list()).find(
+          (item) => resolve(item.codexHome) === resolve(providerCodexHome)
+        )
+        return {
+          ok: true,
+          pid: instance?.lastPid,
+          codexHome: instance?.codexHome ?? providerCodexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'provider',
+            id: providerId,
+            name: serviceTargetName('provider', provider)
+          }
+        }
+      }
+      case 'instance': {
+        const instanceId = requiredServiceTargetId(input.instanceId, 'Instance id')
+        const summary = await startNamedInstance(instanceId, input.workspacePath)
+        return {
+          ok: true,
+          pid: summary.lastPid,
+          codexHome: summary.codexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'instance',
+            id: instanceId,
+            name: serviceTargetName('instance', summary)
+          }
+        }
+      }
+      case 'localGateway': {
+        const gateway = await resolveLocalGatewayOpenConfig()
+        const summary = await startLocalGatewayInstance({
+          ...gateway,
+          workspacePath: input.workspacePath
+        })
+        return {
+          ok: true,
+          pid: summary.lastPid,
+          codexHome: summary.codexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'localGateway',
+            name: serviceTargetName('localGateway', summary)
+          }
+        }
+      }
+    }
+  }
+
+  async function openMultiFromService(input: {
+    target: OpenCodexFromServiceTarget
+    workspacePath: string
+    accountId?: string
+    providerId?: string
+    instanceId?: string
+  }): Promise<OpenCodexFromServiceResult> {
+    const { defaultCodexHome } = instanceStore.getDefaults()
+
+    switch (input.target) {
+      case 'default': {
+        await assertDefaultCodexLaunchAllowed()
+        const defaultInstance = await instanceStore.getDefaultInstance()
+        const codexHome = serviceLaunchHome('default')
+        await copyServiceLaunchHome(defaultCodexHome, codexHome)
+        if (defaultInstance.bindAccountId) {
+          const authPayload = await prepareLaunchAuthPayload(defaultInstance.bindAccountId)
+          await writeAuthPayloadToCodexHome(codexHome, authPayload)
+        }
+        const pid = await launchServiceCodex({
+          workspacePath: input.workspacePath,
+          codexHome,
+          extraArgs: defaultInstance.extraArgs,
+          preferAppBundle: false,
+          requireDesktopExecutable: false
+        })
+        return {
+          ok: true,
+          pid,
+          codexHome,
+          workspacePath: input.workspacePath,
+          multi: true,
+          target: {
+            type: 'default',
+            name: serviceTargetName('default', {})
+          }
+        }
+      }
+      case 'account': {
+        const accountId = await resolveAccountIdOrThrow(input.accountId)
+        const account = await store.getAccountSummary(accountId)
+        await assertIsolatedCodexLaunchAllowed(accountId)
+        const existingInstance = await instanceStore.findByBoundAccountId(accountId)
+        const codexHome = serviceLaunchHome(`account-${accountId}`)
+        await copyServiceLaunchHome(existingInstance?.codexHome ?? defaultCodexHome, codexHome)
+        const authPayload = await prepareLaunchAuthPayload(accountId)
+        await writeAuthPayloadToCodexHome(codexHome, authPayload)
+        const pid = await launchServiceCodex({
+          workspacePath: input.workspacePath,
+          codexHome,
+          extraArgs: existingInstance?.extraArgs ?? '',
+          preferAppBundle: true,
+          requireDesktopExecutable: true
+        })
+        return {
+          ok: true,
+          pid,
+          codexHome,
+          workspacePath: input.workspacePath,
+          multi: true,
+          target: {
+            type: 'account',
+            id: accountId,
+            name: serviceTargetName('account', account)
+          }
+        }
+      }
+      case 'provider': {
+        const providerId = requiredServiceTargetId(input.providerId, 'Provider id')
+        const provider = await providerStore.getResolvedProvider(providerId)
+        const { rootDir } = instanceStore.getDefaults()
+        const providerCodexHome = join(rootDir, `provider-${providerId}`)
+        const existingInstance = (await instanceStore.list()).find(
+          (item) => resolve(item.codexHome) === resolve(providerCodexHome)
+        )
+        const codexHome = serviceLaunchHome(`provider-${providerId}`)
+        await copyServiceLaunchHome(existingInstance?.codexHome ?? defaultCodexHome, codexHome)
+        await writeProviderApiKeyToCodexHome(codexHome, provider.apiKey)
+        await writeProviderConfigToCodexHome(codexHome, provider.summary)
+        const pid = await launchServiceCodex({
+          workspacePath: input.workspacePath,
+          codexHome,
+          extraArgs: existingInstance?.extraArgs ?? '',
+          preferAppBundle: true,
+          requireDesktopExecutable: true
+        })
+        await providerStore.markUsed(providerId)
+        return {
+          ok: true,
+          pid,
+          codexHome,
+          workspacePath: input.workspacePath,
+          multi: true,
+          target: {
+            type: 'provider',
+            id: providerId,
+            name: serviceTargetName('provider', provider.summary)
+          }
+        }
+      }
+      case 'instance': {
+        const instanceId = requiredServiceTargetId(input.instanceId, 'Instance id')
+        const instance = await instanceStore.getInstance(instanceId)
+        await assertIsolatedCodexLaunchAllowed(instance.bindAccountId)
+        const codexHome = serviceLaunchHome(`instance-${instance.id}`)
+        await copyServiceLaunchHome(instance.codexHome, codexHome)
+        if (instance.bindAccountId) {
+          const authPayload = await prepareLaunchAuthPayload(instance.bindAccountId)
+          await writeAuthPayloadToCodexHome(codexHome, authPayload)
+        }
+        const pid = await launchServiceCodex({
+          workspacePath: input.workspacePath,
+          codexHome,
+          extraArgs: instance.extraArgs,
+          preferAppBundle: true,
+          requireDesktopExecutable: true
+        })
+        return {
+          ok: true,
+          pid,
+          codexHome,
+          workspacePath: input.workspacePath,
+          multi: true,
+          target: {
+            type: 'instance',
+            id: instanceId,
+            name: serviceTargetName('instance', instance)
+          }
+        }
+      }
+      case 'localGateway': {
+        const gateway = await resolveLocalGatewayOpenConfig()
+        const summary = await startLocalGatewayInstance({
+          ...gateway,
+          workspacePath: input.workspacePath
+        })
+        return {
+          ok: true,
+          pid: summary.lastPid,
+          codexHome: summary.codexHome,
+          workspacePath: input.workspacePath,
+          multi: false,
+          target: {
+            type: 'localGateway',
+            name: serviceTargetName('localGateway', summary)
+          }
+        }
+      }
+    }
+  }
+
+  async function openFromService(
+    input: OpenCodexFromServiceInput = {}
+  ): Promise<OpenCodexFromServiceResult> {
+    const target = serviceTargetKind(input)
+    const workspacePath = input.workspacePath?.trim() || context.options.defaultWorkspacePath
+    const payload = {
+      target,
+      workspacePath,
+      accountId: input.accountId,
+      providerId: input.providerId,
+      instanceId: input.instanceId
+    }
+
+    if (input.multi === true) {
+      return openMultiFromService(payload)
+    }
+
+    return openManagedFromService(payload)
+  }
+
   async function stopInstance(instanceId: string): Promise<CodexInstanceSummary> {
     if (instanceId === DEFAULT_CODEX_INSTANCE_ID) {
       const defaultInstance = await instanceStore.getDefaultInstance()
@@ -548,6 +1045,9 @@ export function createCodexServicesInstanceRuntime(
     startNamedInstance,
     startAccountInstance,
     startProviderInstance,
+    syncLocalGatewayInstanceConfig,
+    startLocalGatewayInstance,
+    openFromService,
     stopInstance
   }
 }

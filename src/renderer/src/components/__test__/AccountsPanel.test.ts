@@ -107,23 +107,23 @@ const copy = messages['zh-CN']
 const accounts = [
   {
     id: 'acct-1',
-    email: 'tagged@example.com',
-    tagIds: ['tag-1'],
+    email: 'grouped@example.com',
+    groupIds: ['group-1'],
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
   },
   {
     id: 'acct-2',
-    email: 'untagged@example.com',
-    tagIds: [],
+    email: 'ungrouped@example.com',
+    groupIds: [],
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
   }
 ]
 
-const tags = [
+const groups = [
   {
-    id: 'tag-1',
+    id: 'group-1',
     name: '重点',
     createdAt: '2026-04-21T00:00:00.000Z',
     updatedAt: '2026-04-21T00:00:00.000Z'
@@ -150,7 +150,7 @@ function renderAccountsPanel(
       accounts,
       codexInstances: [],
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -189,10 +189,10 @@ function renderAccountsPanel(
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -255,11 +255,11 @@ describe('AccountsPanel', () => {
     expect(
       (
         screen.getByRole('checkbox', {
-          name: `${copy.selectAccount} · tagged@example.com`
+          name: `${copy.selectAccount} · grouped@example.com`
         }) as HTMLInputElement
       ).checked
     ).toBe(true)
-    expect(screen.queryByText('untagged@example.com')).toBeNull()
+    expect(screen.queryByText('ungrouped@example.com')).toBeNull()
 
     await fireEvent.click(screen.getByRole('button', { name: copy.providerCount(0) }))
     await fireEvent.click(screen.getByRole('button', { name: copy.accountCount(accounts.length) }))
@@ -268,35 +268,35 @@ describe('AccountsPanel', () => {
     expect(
       (
         screen.getByRole('checkbox', {
-          name: `${copy.selectAccount} · tagged@example.com`
+          name: `${copy.selectAccount} · grouped@example.com`
         }) as HTMLInputElement
       ).checked
     ).toBe(true)
-    expect(screen.queryByText('untagged@example.com')).toBeNull()
+    expect(screen.queryByText('ungrouped@example.com')).toBeNull()
   })
 
-  it('账户标签变更在忙碌期间只允许串行执行一次', async () => {
-    const updateAccountTagsDeferred = createDeferred()
-    const updateAccountTags = vi.fn().mockReturnValue(updateAccountTagsDeferred.promise)
+  it('账户组变更在忙碌期间只允许串行执行一次', async () => {
+    const updateAccountGroupsDeferred = createDeferred()
+    const updateAccountGroups = vi.fn().mockReturnValue(updateAccountGroupsDeferred.promise)
 
     renderAccountsPanel({
-      updateAccountTags
+      updateAccountGroups
     })
 
-    const removeTagButton = screen.getByRole('button', { name: `${copy.removeTag} · 重点` })
+    const removeGroupButton = screen.getByRole('button', { name: `${copy.removeGroup} · 重点` })
 
-    await fireEvent.click(removeTagButton)
+    await fireEvent.click(removeGroupButton)
 
-    expect(updateAccountTags).toHaveBeenCalledOnce()
-    expect(updateAccountTags).toHaveBeenCalledWith(accounts[0], [])
-    expect((removeTagButton as HTMLButtonElement).disabled).toBe(true)
+    expect(updateAccountGroups).toHaveBeenCalledOnce()
+    expect(updateAccountGroups).toHaveBeenCalledWith(accounts[0], [])
+    expect((removeGroupButton as HTMLButtonElement).disabled).toBe(true)
 
-    await fireEvent.click(removeTagButton)
+    await fireEvent.click(removeGroupButton)
 
-    expect(updateAccountTags).toHaveBeenCalledOnce()
+    expect(updateAccountGroups).toHaveBeenCalledOnce()
 
-    updateAccountTagsDeferred.resolve()
-    await updateAccountTagsDeferred.promise
+    updateAccountGroupsDeferred.resolve()
+    await updateAccountGroupsDeferred.promise
   })
 
   it('统计页在实例集合变化但更新时间不变时重新拉取明细', async () => {
@@ -353,7 +353,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -401,10 +401,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -662,7 +662,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -698,10 +698,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -779,7 +779,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -815,10 +815,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -908,7 +908,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -944,10 +944,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -984,7 +984,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -1020,10 +1020,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -1125,7 +1125,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -1161,10 +1161,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),
@@ -1236,7 +1236,7 @@ describe('AccountsPanel', () => {
       language: 'zh-CN',
       accounts,
       providers: [],
-      tags,
+      groups,
       activeAccountId: 'acct-1',
       usageByAccountId: {},
       usageLoadingByAccountId: {},
@@ -1278,10 +1278,10 @@ describe('AccountsPanel', () => {
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
-      createTag: vi.fn().mockResolvedValue(undefined),
-      updateTag: vi.fn().mockResolvedValue(undefined),
-      deleteTag: vi.fn().mockResolvedValue(undefined),
-      updateAccountTags: vi.fn().mockResolvedValue(undefined),
+      createGroup: vi.fn().mockResolvedValue(undefined),
+      updateGroup: vi.fn().mockResolvedValue(undefined),
+      deleteGroup: vi.fn().mockResolvedValue(undefined),
+      updateAccountGroups: vi.fn().mockResolvedValue(undefined),
       refreshAccountUsage: vi.fn(),
       updateShowLocalMockData: vi.fn(),
       updateStatsDisplay: vi.fn().mockResolvedValue(undefined),

@@ -103,8 +103,16 @@
       {/if}
 
       {#if updateActionLabel() && updateAction()}
-        <AppButton variant="secondary" size="sm" onclick={() => updateAction()?.()}>
-          {updateActionLabel()}
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={() => updateAction()?.()}
+          disabled={updateState.status === 'downloading'}
+        >
+          {#if updateState.status === 'downloading'}
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+          {/if}
+          <span>{updateActionLabel()}</span>
         </AppButton>
       {/if}
     </div>

@@ -1,11 +1,6 @@
 <script lang="ts">
   import type { AccountRateLimits, AccountSummary, AppSnapshot } from '../../../shared/codex'
-  import {
-    isLocalMockAccount,
-    remainingPercent,
-    supportsWakeSessionQuota,
-    supportsWeeklyQuota
-  } from '../../../shared/codex'
+  import { isLocalMockAccount, remainingPercent } from '../../../shared/codex'
   import {
     accountEmail,
     planLabel,
@@ -85,7 +80,7 @@
           </div>
 
           <div class="grid gap-1.5">
-            {#if !usageByAccountId[account.id] || supportsWakeSessionQuota(usageByAccountId[account.id])}
+            {#if !usageByAccountId[account.id] || usageByAccountId[account.id]?.primary}
               <div class="flex items-center gap-2">
                 <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
                   {copy.sessionQuota}
@@ -106,7 +101,7 @@
               </div>
             {/if}
 
-            {#if !usageByAccountId[account.id] || supportsWeeklyQuota(usageByAccountId[account.id])}
+            {#if !usageByAccountId[account.id] || usageByAccountId[account.id]?.secondary}
               <div class="flex items-center gap-2">
                 <span class="w-12 text-[10px] font-semibold tracking-[0.08em] text-muted">
                   {copy.weeklyQuota}

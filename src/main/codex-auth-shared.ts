@@ -4,7 +4,7 @@ import type { Server } from 'node:http'
 import { promisify } from 'node:util'
 
 import type {
-  AccountTag,
+  AccountGroup,
   AccountRateLimits,
   AccountWakeSchedule,
   AccountSummary,
@@ -45,7 +45,7 @@ interface PersistedState {
   version: 3
   activeAccountId?: string
   accounts: PersistedAccount[]
-  tags: AccountTag[]
+  groups: AccountGroup[]
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
   usageErrorByAccountId: Record<string, string>
@@ -56,7 +56,8 @@ interface LegacyPersistedState {
   version?: 1 | 2
   activeAccountId?: string
   accounts?: PersistedAccount[]
-  tags?: AccountTag[]
+  groups?: AccountGroup[]
+  tags?: AccountGroup[]
   settings?: AppSettings
   usageByAccountId?: Record<string, AccountRateLimits>
   usageErrorByAccountId?: Record<string, string>
@@ -109,7 +110,7 @@ function defaultState(): PersistedState {
   return {
     version: 3,
     accounts: [],
-    tags: [],
+    groups: [],
     settings: defaultSettings(),
     usageByAccountId: {},
     usageErrorByAccountId: {},
@@ -141,15 +142,21 @@ function normalizeWakeSchedule(
 }
 
 function normalizePersistedState(parsed: PersistedState | LegacyPersistedState): PersistedState {
+  const raw = parsed as Record<string, unknown>
+  const rawAccounts = (raw.accounts ?? []) as Array<
+    PersistedAccount & { tagIds?: string[] }
+  >
+  const rawGroups = (raw.groups ?? raw.tags ?? []) as AccountGroup[]
+
   return {
     ...defaultState(),
     ...parsed,
     version: 3,
-    accounts: (parsed.accounts ?? []).map((account) => ({
+    accounts: rawAccounts.map((account) => ({
       ...account,
-      tagIds: dedupeAccountTagIds(account.tagIds ?? [])
+      groupIds: dedupeAccountGroupIds(account.groupIds ?? account.tagIds ?? [])
     })),
-    tags: parsed.tags ?? [],
+    groups: rawGroups,
     settings: {
       ...defaultSettings(),
       ...('settings' in parsed ? parsed.settings : {}),
@@ -170,12 +177,12 @@ function describeError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
-function normalizeTagName(value: string): string {
+function normalizeGroupName(value: string): string {
   return value.trim().replace(/\s+/g, ' ')
 }
 
-function dedupeAccountTagIds(tagIds: string[]): string[] {
-  return [...new Set(tagIds)]
+function dedupeAccountGroupIds(groupIds: string[]): string[] {
+  return [...new Set(groupIds)]
 }
 
 function base64UrlEncode(value: Buffer): string {
@@ -348,12 +355,42 @@ export async function refreshCodexAuthPayload(
   })
 }
 
+function resolveOpenAiProfileClaim(payload: Record<string, unknown>): Record<string, unknown> {
+  const value = payload['https://api.openai.com/profile']
+  return value && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+}
+
+function resolveStringFromTokens(
+  tokens: Array<string | undefined>,
+  extract: (payload: Record<string, unknown>) => unknown
+): string | undefined {
+  for (const token of tokens) {
+    const payload = decodeJwtPayload(token)
+    const value = extract(payload)
+    if (typeof value === 'string' && value.trim()) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
 function summarizeAuth(
   auth: CodexAuthPayload
 ): Pick<AccountSummary, 'email' | 'name' | 'accountId' | 'subscriptionExpiresAt'> {
-  const payload = decodeJwtPayload(auth.tokens?.id_token)
-  const email = typeof payload.email === 'string' ? payload.email : undefined
-  const name = typeof payload.name === 'string' ? payload.name : undefined
+  const tokens = [auth.tokens?.id_token, auth.tokens?.access_token]
+  const email = resolveStringFromTokens(tokens, (payload) => {
+    if (typeof payload.email === 'string' && payload.email.trim()) {
+      return payload.email
+    }
+    return resolveOpenAiProfileClaim(payload).email
+  })
+  const name = resolveStringFromTokens(tokens, (payload) => {
+    if (typeof payload.name === 'string' && payload.name.trim()) {
+      return payload.name
+    }
+    return resolveOpenAiProfileClaim(payload).name
+  })
   const accountId = extractChatGptAccountId(auth)
   const subscriptionExpiresAt = resolveChatGptSubscriptionExpiresAtFromTokens(
     auth.tokens?.id_token,
@@ -446,7 +483,7 @@ function toAccountSummary(account: PersistedAccount): AccountSummary {
     name: account.name,
     accountId: account.accountId,
     subscriptionExpiresAt: account.subscriptionExpiresAt,
-    tagIds: account.tagIds,
+    groupIds: account.groupIds,
     createdAt: account.createdAt,
     updatedAt: account.updatedAt,
     lastUsedAt: account.lastUsedAt
@@ -465,13 +502,13 @@ export {
   buildAuthorizeUrl,
   defaultSettings,
   defaultState,
-  dedupeAccountTagIds,
+  dedupeAccountGroupIds,
   describeError,
   encodeFormComponent,
   extractChatGptAccountId,
   findMatchingAccount,
   normalizePersistedState,
-  normalizeTagName,
+  normalizeGroupName,
   normalizeWakeSchedule,
   parseTokenEndpointError,
   resolveAccountId,

@@ -644,7 +644,7 @@ async function uniqueImportedSessionPath(
   sourceFilePath: string,
   createdAt?: string
 ): Promise<string> {
-  const targetDir = join(targetCodexHome, 'sessions', 'imported', sessionImportDatePath(createdAt))
+  const targetDir = join(targetCodexHome, 'sessions', sessionImportDatePath(createdAt))
   const baseName = basename(sourceFilePath).replace(/\.jsonl$/i, '')
   let index = 0
 
@@ -652,7 +652,7 @@ async function uniqueImportedSessionPath(
 
   while (true) {
     const suffix = index === 0 ? '' : `-${index + 1}`
-    const candidate = join(targetDir, `${baseName}.imported${suffix}.jsonl`)
+    const candidate = join(targetDir, `${baseName}${suffix}.jsonl`)
     try {
       await fs.access(candidate)
       index += 1

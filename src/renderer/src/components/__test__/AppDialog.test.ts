@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { fireEvent, render } from '@testing-library/svelte'
+import { fireEvent, render, screen } from '@testing-library/svelte'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import AppDialogHarness from './AppDialogHarness.svelte'
@@ -54,5 +54,28 @@ describe('AppDialog', () => {
     vi.advanceTimersByTime(200)
 
     expect(handleClose).toHaveBeenCalledOnce()
+  })
+
+  it('renders title/footer and blocks close while disabled', async () => {
+    const handleClose = vi.fn()
+    const { container } = render(AppDialogHarness, {
+      props: {
+        onClose: handleClose,
+        title: 'Dialog title',
+        closeDisabled: true
+      }
+    })
+
+    expect(screen.getByRole('heading', { name: 'Dialog title' })).toBeTruthy()
+    expect(screen.getByText('Footer action')).toBeTruthy()
+
+    const backdrop = container.querySelector<HTMLElement>('.theme-dialog-backdrop')
+    await fireEvent.pointerDown(backdrop!, { pointerId: 1 })
+    await fireEvent.pointerUp(backdrop!, { pointerId: 1 })
+    await fireEvent.click(backdrop!)
+    await fireEvent.keyDown(backdrop!, { key: 'Escape' })
+    vi.advanceTimersByTime(200)
+
+    expect(handleClose).not.toHaveBeenCalled()
   })
 })

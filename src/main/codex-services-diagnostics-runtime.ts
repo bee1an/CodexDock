@@ -1,6 +1,12 @@
 import { getOpenAiCallbackPortOccupant } from './codex-auth'
 import { resolveCodexLaunchCommand } from './codex-launcher'
-import type { DoctorReport, HealthCheckResult, ProviderCheckReport } from '../shared/codex'
+import type {
+  DoctorReport,
+  HealthCheckResult,
+  ProbeProviderModelsInput,
+  ProviderCheckReport,
+  ProviderModelsProbeResult
+} from '../shared/codex'
 import {
   accountErrorLabel,
   appendPathSegment,
@@ -15,6 +21,7 @@ import type { CodexServicesInstanceRuntime } from './codex-services-instance-run
 
 export interface CodexServicesDiagnosticsRuntime {
   checkProvider(providerId: string): Promise<ProviderCheckReport>
+  probeProviderModels(input: ProbeProviderModelsInput): Promise<ProviderModelsProbeResult>
   runDoctor(): Promise<DoctorReport>
 }
 
@@ -25,6 +32,54 @@ export function createCodexServicesDiagnosticsRuntime(
   const { store, providerStore, options } = context
   const { getSnapshot, getDesktopExecutablePathOverride, prepareLaunchAuthPayload } =
     instanceRuntime
+
+  async function probeProviderModels(
+    input: ProbeProviderModelsInput
+  ): Promise<ProviderModelsProbeResult> {
+    const baseUrl = input.baseUrl.trim()
+    const apiKey = input.apiKey.trim()
+    let latencyMs: number | null = null
+    let httpStatus: number | null = null
+
+    try {
+      const modelsUrl = appendPathSegment(baseUrl, 'models')
+      const startedAt = Date.now()
+      const response = await options.platform.fetch(modelsUrl, {
+        method: 'GET',
+        headers: {
+          authorization: `Bearer ${apiKey}`
+        }
+      })
+      latencyMs = Date.now() - startedAt
+      httpStatus = response.status
+      const raw = await response.text()
+      const availableModels = response.ok ? parseProviderModels(raw) : []
+      const errorDetail = response.ok ? undefined : extractProviderErrorDetail(raw)
+
+      return {
+        ok: response.ok && availableModels.length > 0,
+        baseUrl,
+        latencyMs,
+        httpStatus,
+        availableModels,
+        error:
+          response.ok && !availableModels.length
+            ? 'Provider returned no models.'
+            : response.ok
+              ? undefined
+              : errorDetail || `Provider model probe failed with HTTP ${response.status}.`
+      }
+    } catch (error) {
+      return {
+        ok: false,
+        baseUrl,
+        latencyMs,
+        httpStatus,
+        availableModels: [],
+        error: error instanceof Error ? error.message : 'Provider model probe failed.'
+      }
+    }
+  }
 
   async function checkProvider(providerId: string): Promise<ProviderCheckReport> {
     const provider = await providerStore.getResolvedProvider(providerId)
@@ -259,6 +314,7 @@ export function createCodexServicesDiagnosticsRuntime(
 
   return {
     checkProvider,
+    probeProviderModels,
     runDoctor
   }
 }

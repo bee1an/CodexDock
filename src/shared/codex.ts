@@ -12,12 +12,19 @@ export interface StatsDisplaySettings {
   instanceUsage: boolean
 }
 
+export interface LocalGatewayModelMapping {
+  from: string
+  to: string
+}
+
 export interface LocalGatewaySettings {
   host: string
   port: number
   apiKey?: string | ProtectedPayload
   stickyTtlMinutes: number
   requestTimeoutMs: number
+  modelMappings: LocalGatewayModelMapping[]
+  allowedGroupIds: string[]
 }
 
 export interface LocalGatewayStatus {
@@ -39,6 +46,35 @@ export interface LocalGatewayLogEntry {
   model?: string
   tokens?: number
   message?: string
+}
+
+export type OpenCodexFromServiceTarget =
+  | 'default'
+  | 'account'
+  | 'provider'
+  | 'instance'
+  | 'localGateway'
+
+export interface OpenCodexFromServiceInput {
+  target?: OpenCodexFromServiceTarget
+  accountId?: string
+  providerId?: string
+  instanceId?: string
+  workspacePath?: string
+  multi?: boolean
+}
+
+export interface OpenCodexFromServiceResult {
+  ok: true
+  pid?: number
+  codexHome: string
+  workspacePath: string
+  multi: boolean
+  target: {
+    type: OpenCodexFromServiceTarget
+    id?: string
+    name?: string
+  }
 }
 
 export const accountTransferFormats = [
@@ -87,6 +123,21 @@ export interface CreateCustomProviderInput {
   protocol?: CustomProviderProtocol
   model?: string
   fastMode?: boolean
+}
+
+export interface ProbeProviderModelsInput {
+  baseUrl: string
+  apiKey: string
+  protocol?: CustomProviderProtocol
+}
+
+export interface ProviderModelsProbeResult {
+  ok: boolean
+  baseUrl: string
+  latencyMs: number | null
+  httpStatus: number | null
+  availableModels: string[]
+  error?: string
 }
 
 export interface UpdateCustomProviderInput {
@@ -245,17 +296,31 @@ export interface AccountSummary {
   name?: string
   accountId?: string
   subscriptionExpiresAt?: string
-  tagIds: string[]
+  groupIds: string[]
   createdAt: string
   updatedAt: string
   lastUsedAt?: string
 }
 
-export interface AccountTag {
+export interface AccountGroup {
   id: string
   name: string
   createdAt: string
   updatedAt: string
+}
+
+export interface UpdateAccountTokensInput {
+  accessToken?: string
+  refreshToken?: string
+  idToken?: string
+  accountId?: string
+}
+
+export interface AccountTokensDetail {
+  accessToken?: string
+  refreshToken?: string
+  idToken?: string
+  accountId?: string
 }
 
 export interface CurrentSessionSummary {
@@ -459,7 +524,7 @@ interface LocalMockProviderIdentity {
 export interface AppSnapshot {
   accounts: AccountSummary[]
   providers: CustomProviderSummary[]
-  tags: AccountTag[]
+  groups: AccountGroup[]
   codexInstances: CodexInstanceSummary[]
   codexInstanceDefaults: CodexInstanceDefaults
   activeAccountId?: string
@@ -647,8 +712,49 @@ export function defaultLocalGatewaySettings(): LocalGatewaySettings {
     host: '127.0.0.1',
     port: 11456,
     stickyTtlMinutes: 360,
-    requestTimeoutMs: 120_000
+    requestTimeoutMs: 120_000,
+    modelMappings: [],
+    allowedGroupIds: []
   }
+}
+
+function normalizeModelMappings(value: unknown): LocalGatewayModelMapping[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const seen = new Set<string>()
+  const result: LocalGatewayModelMapping[] = []
+  for (const entry of value) {
+    if (!entry || typeof entry !== 'object') continue
+    const from =
+      typeof (entry as Record<string, unknown>).from === 'string'
+        ? ((entry as Record<string, unknown>).from as string).trim()
+        : ''
+    const to =
+      typeof (entry as Record<string, unknown>).to === 'string'
+        ? ((entry as Record<string, unknown>).to as string).trim()
+        : ''
+    if (!from || !to || seen.has(from)) continue
+    seen.add(from)
+    result.push({ from, to })
+  }
+  return result
+}
+
+function normalizeAllowedGroupIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+  return result
 }
 
 export function normalizeLocalGatewaySettings(
@@ -675,7 +781,9 @@ export function normalizeLocalGatewaySettings(
     requestTimeoutMs:
       Number.isFinite(requestTimeoutMs) && requestTimeoutMs >= 1000
         ? Math.floor(requestTimeoutMs)
-        : defaults.requestTimeoutMs
+        : defaults.requestTimeoutMs,
+    modelMappings: normalizeModelMappings(settings?.modelMappings),
+    allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds)
   }
 }
 

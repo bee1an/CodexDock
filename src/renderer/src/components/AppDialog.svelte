@@ -5,13 +5,27 @@
 
   export let ariaLabel = ''
   export let ariaLabelledby = ''
+  export let title = ''
+  export let description = ''
+  export let closeLabel = 'Close'
+  export let showClose = false
   export let maxWidthClass = 'max-w-xl'
+  export let maxHeightClass = 'max-h-[calc(100vh-3rem)]'
+  export let backdropClass = ''
   export let panelClass = ''
+  export let contentClass = ''
+  export let bodyClass = ''
+  export let footerClass = ''
+  export let zIndexClass = 'z-[70]'
+  export let motionSelector = '[data-dialog-motion]'
   export let closeOnBackdrop = true
   export let closeOnEscape = true
+  export let closeDisabled = false
+  export let scrollable = false
   export let onclose: (() => void) | undefined = undefined
 
   const dispatch = createEventDispatcher<{ close: void }>()
+  const generatedTitleId = `app-dialog-title-${Math.random().toString(36).slice(2)}`
 
   function emitClose(): void {
     dispatch('close')
@@ -56,7 +70,7 @@
   }
 
   function requestClose(): void {
-    if (modalMotionState === 'closing') {
+    if (closeDisabled || modalMotionState === 'closing') {
       return
     }
 
@@ -80,7 +94,10 @@
 
   function handleBackdropClick(event: MouseEvent): void {
     const shouldClose =
-      closeOnBackdrop && event.target === event.currentTarget && backdropPointerStarted
+      !closeDisabled &&
+      closeOnBackdrop &&
+      event.target === event.currentTarget &&
+      backdropPointerStarted
 
     backdropPointerStarted = false
 
@@ -97,35 +114,81 @@
   })
 
   onDestroy(clearMotionTimers)
+
+  $: resolvedAriaLabelledby = ariaLabel
+    ? undefined
+    : ariaLabelledby || (title ? generatedTitleId : undefined)
+  $: resolvedContentClass =
+    contentClass || (scrollable ? 'min-h-0 overflow-y-auto pr-1' : 'min-h-0')
 </script>
 
 <div
-  class="theme-dialog-backdrop fixed inset-0 z-[70] flex items-center justify-center bg-black/38 px-4 py-6"
+  class={`theme-dialog-backdrop fixed inset-0 ${zIndexClass} flex items-center justify-center bg-black/38 px-4 py-6 ${backdropClass}`}
   role="presentation"
   tabindex="-1"
   use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
-  on:pointerdown={handleBackdropPointerDown}
-  on:pointerup={clearBackdropPointerIntentSoon}
-  on:pointercancel={() => {
+  onpointerdown={handleBackdropPointerDown}
+  onpointerup={clearBackdropPointerIntentSoon}
+  onpointercancel={() => {
     backdropPointerStarted = false
   }}
-  on:click={handleBackdropClick}
-  on:keydown={(event) => {
-    if (closeOnEscape && event.key === 'Escape') {
+  onclick={handleBackdropClick}
+  onkeydown={(event) => {
+    if (!closeDisabled && closeOnEscape && event.key === 'Escape') {
       requestClose()
     }
   }}
 >
   <div
-    class={`theme-surface theme-dialog-surface t-modal ${modalMotionClass} w-full ${maxWidthClass} rounded-[0.75rem] border border-black/8 bg-white p-5 shadow-[0_24px_70px_-42px_var(--paper-shadow)] sm:p-6 ${panelClass}`}
+    class={`theme-surface theme-dialog-surface t-modal ${modalMotionClass} flex w-full ${maxWidthClass} ${maxHeightClass} flex-col rounded-[0.75rem] border border-black/10 bg-white p-5 shadow-[0_28px_84px_-40px_rgba(0,0,0,0.48)] sm:p-6 ${panelClass}`}
     role="dialog"
     aria-modal="true"
     aria-label={ariaLabel || undefined}
-    aria-labelledby={ariaLabel ? undefined : ariaLabelledby || undefined}
+    aria-labelledby={resolvedAriaLabelledby}
     tabindex="-1"
-    use:cascadeIn={{ selector: '[data-dialog-motion]' }}
+    use:cascadeIn={{ selector: motionSelector }}
   >
-    <slot />
+    {#if title || description || showClose || $$slots.header}
+      <header
+        class="mb-4 flex flex-none items-start justify-between gap-4"
+        data-dialog-motion
+      >
+        <div class="min-w-0">
+          <slot name="header">
+            {#if title}
+              <h2 id={generatedTitleId} class="text-[1.05rem] font-semibold text-carbon">
+                {title}
+              </h2>
+            {/if}
+            {#if description}
+              <p class="mt-1 text-sm leading-6 text-muted-strong">{description}</p>
+            {/if}
+          </slot>
+        </div>
+        {#if showClose}
+          <button
+            type="button"
+            class="theme-dialog-close-button inline-flex h-8 w-8 flex-none items-center justify-center rounded-[0.45rem] border border-black/8 bg-white text-muted-strong transition-colors duration-140 hover:bg-black/[0.045] hover:text-carbon focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-carbon disabled:cursor-not-allowed disabled:opacity-50"
+            aria-label={closeLabel}
+            title={closeLabel}
+            disabled={closeDisabled}
+            onclick={requestClose}
+          >
+            <span class="i-lucide-x h-4 w-4" aria-hidden="true"></span>
+          </button>
+        {/if}
+      </header>
+    {/if}
+
+    <div class={`${resolvedContentClass} ${bodyClass}`}>
+      <slot />
+    </div>
+
+    {#if $$slots.footer}
+      <footer class={`mt-5 flex flex-none justify-end gap-2 ${footerClass}`} data-dialog-motion>
+        <slot name="footer" />
+      </footer>
+    {/if}
   </div>
 </div>
 
@@ -133,43 +196,63 @@
   .theme-dialog-surface {
     position: relative;
     overflow: hidden;
+    border-color: color-mix(in srgb, var(--line-strong) 58%, transparent) !important;
+    box-shadow:
+      0 28px 84px -40px rgba(0, 0, 0, 0.48),
+      0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
   }
 
   .theme-dialog-surface::before {
     position: absolute;
     inset: 0;
+    z-index: 1;
     border-radius: inherit;
     pointer-events: none;
     content: '';
     box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 72%, transparent),
-      inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 48%, transparent);
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 86%, transparent),
+      inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 42%, transparent);
+  }
+
+  .theme-dialog-surface > :global(*) {
+    position: relative;
+    z-index: 2;
   }
 
   :global(html[data-theme='dark']) .theme-dialog-backdrop {
-    background: color-mix(in srgb, black 70%, transparent) !important;
-    backdrop-filter: blur(6px) saturate(0.82);
+    background:
+      radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.08), transparent 32rem),
+      color-mix(in srgb, black 76%, transparent) !important;
+    backdrop-filter: blur(7px) saturate(0.78);
   }
 
   :global(html[data-theme='dark']) .theme-surface.theme-dialog-surface[role='dialog'] {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 66%, white 34%) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, white 22%) !important;
     background: linear-gradient(
       180deg,
-      color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft)),
-      color-mix(in srgb, var(--panel-strong) 74%, var(--color-fog))
+      color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)),
+      color-mix(in srgb, var(--panel-strong) 78%, var(--color-fog))
     ) !important;
     box-shadow:
-      0 34px 120px rgba(0, 0, 0, 0.92),
-      0 18px 54px rgba(0, 0, 0, 0.68),
-      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 72%, transparent),
-      0 0 0 8px rgba(255, 255, 255, 0.035),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.055) !important;
+      0 36px 132px rgba(0, 0, 0, 0.94),
+      0 18px 58px rgba(0, 0, 0, 0.72) !important;
   }
 
   :global(html[data-theme='dark']) .theme-dialog-surface::before {
     box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 46%, transparent);
+      inset 0 1px 0 rgba(255, 255, 255, 0.14),
+      inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .theme-dialog-close-button {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 56%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 76%, transparent);
+    color: var(--ink-soft-strong);
+  }
+
+  :global(html[data-theme='dark']) .theme-dialog-close-button:hover,
+  :global(html[data-theme='dark']) .theme-dialog-close-button:focus-visible {
+    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+    color: var(--color-carbon);
   }
 </style>

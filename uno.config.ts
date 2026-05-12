@@ -39,7 +39,13 @@ export default defineConfig({
     'i-lucide-settings-2',
     'i-lucide-code-2',
     'i-lucide-wrench',
-    'i-lucide-message-circle'
+    'i-lucide-message-circle',
+    'bg-emerald-500/80',
+    'bg-sky-500/80',
+    'i-lucide-timer',
+    'i-lucide-calendar-range',
+    'text-emerald-600',
+    'text-sky-600'
   ],
   presets: [
     presetWind3(),

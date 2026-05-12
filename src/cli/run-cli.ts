@@ -5,6 +5,7 @@ import type {
   CliAccountListPayload,
   CliResult,
   LoginEvent,
+  UpdateAccountTokensInput,
   UpdateCustomProviderInput
 } from '../shared/codex'
 import { CliError, EXIT_FAILURE, EXIT_OK, EXIT_USAGE } from './cli-errors'
@@ -16,7 +17,8 @@ import {
   parseInstanceOptions,
   parsePromptOptions,
   parseProviderOptions,
-  parseSettingsValue
+  parseSettingsValue,
+  parseUpdateTokensOptions
 } from './cli-parsing'
 import {
   accountLabel,
@@ -33,12 +35,12 @@ import {
   printProviderCheck,
   printProviders,
   printSettings,
-  printTags,
+  printGroups,
   printTokenCost,
   printUsage,
   providerLabel,
   sessionLabel,
-  tagLabel,
+  groupLabel,
   toCliResult
 } from './cli-output'
 import {
@@ -46,7 +48,7 @@ import {
   type CliRuntime,
   getSnapshotAccount,
   getSnapshotInstance,
-  getSnapshotTag,
+  getSnapshotGroup,
   normalizeInstanceId,
   parseJsonMaybe,
   readStdin,
@@ -155,6 +157,65 @@ async function execute(
           }
           const snapshot = await runtime.services.accounts.remove(accountId)
           printIfNeeded(`Removed account: ${accountId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        case 'update-tokens': {
+          const options = parseUpdateTokensOptions(rest)
+          const accountId = options.positionals[0]
+          if (!accountId || options.positionals.length > 1) {
+            throw new CliError(
+              'Usage: cdock account update-tokens <account-id> [--access-token <token>] [--refresh-token <token>] [--id-token <token>] [--account-id <hint>] [--file <path>]',
+              EXIT_USAGE
+            )
+          }
+
+          let input: UpdateAccountTokensInput = {
+            accessToken: options.accessToken,
+            refreshToken: options.refreshToken,
+            idToken: options.idToken,
+            accountId: options.accountIdHint
+          }
+
+          if (options.filePath) {
+            const raw = await fs.readFile(options.filePath, 'utf8')
+            let parsed: Record<string, unknown>
+            try {
+              parsed = JSON.parse(raw) as Record<string, unknown>
+            } catch (error) {
+              throw new CliError(
+                `Failed to parse --file payload: ${error instanceof Error ? error.message : String(error)}`,
+                EXIT_USAGE
+              )
+            }
+
+            const pick = (...keys: string[]): string | undefined => {
+              for (const key of keys) {
+                const value = parsed[key]
+                if (typeof value === 'string' && value.trim()) {
+                  return value
+                }
+              }
+              return undefined
+            }
+
+            input = {
+              accessToken: input.accessToken ?? pick('accessToken', 'access_token'),
+              refreshToken: input.refreshToken ?? pick('refreshToken', 'refresh_token'),
+              idToken: input.idToken ?? pick('idToken', 'id_token'),
+              accountId: input.accountId ?? pick('accountId', 'account_id')
+            }
+          }
+
+          if (!input.accessToken && !input.refreshToken && !input.idToken && !input.accountId) {
+            throw new CliError(
+              'Provide at least one of --access-token / --refresh-token / --id-token / --account-id (or via --file).',
+              EXIT_USAGE
+            )
+          }
+
+          const snapshot = await runtime.services.accounts.updateTokens(accountId, input)
+          const updated = snapshot.accounts.find((account) => account.id === accountId)
+          printIfNeeded(`Updated tokens for account: ${accountLabel(updated) ?? accountId}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         default:
@@ -397,101 +458,104 @@ async function execute(
       printIfNeeded(`Current session: ${sessionLabel(session)}`, silent)
       return { code: EXIT_OK, payload: toCliResult(session) }
     }
-    case 'tag': {
+    case 'group': {
       switch (subcommand) {
         case 'list': {
-          const tags = await runtime.services.tags.getAll()
-          printTags(tags, silent)
-          return { code: EXIT_OK, payload: toCliResult(tags) }
+          const groups = await runtime.services.groups.getAll()
+          printGroups(groups, silent)
+          return { code: EXIT_OK, payload: toCliResult(groups) }
         }
         case 'create': {
           const name = rest.join(' ').trim()
           if (!name) {
-            throw new CliError('Missing tag name', EXIT_USAGE)
+            throw new CliError('Missing group name', EXIT_USAGE)
           }
 
-          const snapshot = await runtime.services.tags.create(name)
-          const createdTag =
-            snapshot.tags.find((tag) => tag.name === name) ?? snapshot.tags.at(-1) ?? null
-          printIfNeeded(`Created tag: ${tagLabel(createdTag)}`, silent)
+          const snapshot = await runtime.services.groups.create(name)
+          const createdGroup =
+            snapshot.groups.find((group) => group.name === name) ?? snapshot.groups.at(-1) ?? null
+          printIfNeeded(`Created group: ${groupLabel(createdGroup)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         case 'rename': {
-          const tagId = rest[0]
+          const groupId = rest[0]
           const name = rest.slice(1).join(' ').trim()
-          if (!tagId) {
-            throw new CliError('Missing tag-id', EXIT_USAGE)
+          if (!groupId) {
+            throw new CliError('Missing group-id', EXIT_USAGE)
           }
           if (!name) {
-            throw new CliError('Missing tag name', EXIT_USAGE)
+            throw new CliError('Missing group name', EXIT_USAGE)
           }
 
-          const snapshot = await runtime.services.tags.update(tagId, name)
-          const updatedTag = getSnapshotTag(snapshot, tagId)
-          printIfNeeded(`Renamed tag: ${tagLabel(updatedTag)}`, silent)
+          const snapshot = await runtime.services.groups.update(groupId, name)
+          const updatedGroup = getSnapshotGroup(snapshot, groupId)
+          printIfNeeded(`Renamed group: ${groupLabel(updatedGroup)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         case 'remove': {
-          const tagId = rest[0]
-          if (!tagId) {
-            throw new CliError('Missing tag-id', EXIT_USAGE)
+          const groupId = rest[0]
+          if (!groupId) {
+            throw new CliError('Missing group-id', EXIT_USAGE)
           }
 
           const snapshot = await runtime.services.accounts.list()
-          const tag = getSnapshotTag(snapshot, tagId)
-          const updatedSnapshot = await runtime.services.tags.remove(tagId)
-          printIfNeeded(`Removed tag: ${tagLabel(tag)}`, silent)
+          const group = getSnapshotGroup(snapshot, groupId)
+          const updatedSnapshot = await runtime.services.groups.remove(groupId)
+          printIfNeeded(`Removed group: ${groupLabel(group)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(updatedSnapshot) }
         }
         case 'assign':
         case 'unassign': {
           const accountId = rest[0]
-          const tagId = rest[1]
+          const groupId = rest[1]
           if (!accountId) {
             throw new CliError('Missing account-id', EXIT_USAGE)
           }
-          if (!tagId) {
-            throw new CliError('Missing tag-id', EXIT_USAGE)
+          if (!groupId) {
+            throw new CliError('Missing group-id', EXIT_USAGE)
           }
 
           const snapshot = await runtime.services.accounts.list()
           const account = getSnapshotAccount(snapshot, accountId)
-          const tag = getSnapshotTag(snapshot, tagId)
-          const hasTag = account.tagIds.includes(tagId)
-          const nextTagIds =
+          const group = getSnapshotGroup(snapshot, groupId)
+          const hasGroup = account.groupIds.includes(groupId)
+          const nextGroupIds =
             subcommand === 'assign'
-              ? hasTag
-                ? account.tagIds
-                : [...account.tagIds, tagId]
-              : account.tagIds.filter((id) => id !== tagId)
+              ? hasGroup
+                ? account.groupIds
+                : [...account.groupIds, groupId]
+              : account.groupIds.filter((id) => id !== groupId)
 
-          if (subcommand === 'assign' && hasTag) {
+          if (subcommand === 'assign' && hasGroup) {
             printIfNeeded(
-              `Tag already assigned: ${tagLabel(tag)} -> ${accountLabel(account)}`,
+              `Group already assigned: ${groupLabel(group)} -> ${accountLabel(account)}`,
               silent
             )
             return { code: EXIT_OK, payload: toCliResult(snapshot) }
           }
 
-          if (subcommand === 'unassign' && nextTagIds.length === account.tagIds.length) {
+          if (subcommand === 'unassign' && nextGroupIds.length === account.groupIds.length) {
             printIfNeeded(
-              `Tag already removed: ${tagLabel(tag)} -> ${accountLabel(account)}`,
+              `Group already removed: ${groupLabel(group)} -> ${accountLabel(account)}`,
               silent
             )
             return { code: EXIT_OK, payload: toCliResult(snapshot) }
           }
 
-          const updatedSnapshot = await runtime.services.accounts.updateTags(accountId, nextTagIds)
+          const updatedSnapshot = await runtime.services.accounts.updateGroups(
+            accountId,
+            nextGroupIds
+          )
           printIfNeeded(
             `${
               subcommand === 'assign' ? 'Assigned' : 'Removed'
-            } tag: ${tagLabel(tag)} ${subcommand === 'assign' ? '->' : '<-'} ${accountLabel(account)}`,
+            } group: ${groupLabel(group)} ${subcommand === 'assign' ? '->' : '<-'} ${accountLabel(account)}`,
             silent
           )
           return { code: EXIT_OK, payload: toCliResult(updatedSnapshot) }
         }
         default:
-          throw new CliError('Unknown tag command', EXIT_USAGE)
+          throw new CliError('Unknown group command', EXIT_USAGE)
       }
     }
     case 'usage': {

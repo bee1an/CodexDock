@@ -39,11 +39,38 @@
   let detailOpen = false
 
   // Copy dialog
-  let copySourceSkill: CodexSkillSummary | null = null
+  let copySourceSkills: CodexSkillSummary[] = []
   let copyOpen = false
   let copyTargetIds: string[] = []
   let copyBusy = false
   let copyResult: CopyCodexSkillResult | null = null
+  let copyProgress = { completed: 0, total: 0 }
+
+  // Multi-select
+  let selectedSkillKeys: string[] = []
+
+  function skillKey(skill: CodexSkillSummary): string {
+    return skill.filePath
+  }
+
+  function isSkillSelected(skill: CodexSkillSummary): boolean {
+    return selectedSkillKeys.includes(skillKey(skill))
+  }
+
+  function toggleSkillSelection(skill: CodexSkillSummary): void {
+    const key = skillKey(skill)
+    selectedSkillKeys = selectedSkillKeys.includes(key)
+      ? selectedSkillKeys.filter((item) => item !== key)
+      : [...selectedSkillKeys, key]
+  }
+
+  function clearSelectedSkills(): void {
+    selectedSkillKeys = []
+  }
+
+  function selectAllVisibleSkills(): void {
+    selectedSkillKeys = filteredSkills.map((skill) => skillKey(skill))
+  }
 
   $: filteredSkills = skills.filter((skill) => {
     if (selectedInstanceId !== 'all' && skill.instanceId !== selectedInstanceId) {
@@ -150,18 +177,30 @@
   }
 
   function openCopyDialog(skill: CodexSkillSummary): void {
-    copySourceSkill = skill
+    copySourceSkills = [skill]
     copyTargetIds = []
     copyResult = null
+    copyProgress = { completed: 0, total: 0 }
+    copyOpen = true
+  }
+
+  function openBulkCopyDialog(): void {
+    const sources = filteredSkills.filter((skill) => isSkillSelected(skill))
+    if (!sources.length) return
+    copySourceSkills = sources
+    copyTargetIds = []
+    copyResult = null
+    copyProgress = { completed: 0, total: 0 }
     copyOpen = true
   }
 
   function closeCopyDialog(): void {
     if (copyBusy) return
     copyOpen = false
-    copySourceSkill = null
+    copySourceSkills = []
     copyResult = null
     copyTargetIds = []
+    copyProgress = { completed: 0, total: 0 }
   }
 
   function toggleCopyTarget(instanceId: string): void {
@@ -173,37 +212,58 @@
   }
 
   async function executeCopy(): Promise<void> {
-    if (!copySourceSkill || !copyTargetIds.length || copyBusy) {
+    if (!copySourceSkills.length || !copyTargetIds.length || copyBusy) {
       return
     }
 
     copyBusy = true
+    copyProgress = { completed: 0, total: copySourceSkills.length }
 
-    try {
-      copyResult = await copyCodexSkill({
-        sourceInstanceId: copySourceSkill.instanceId,
-        sourceSkillDirName: copySourceSkill.skillDirName,
-        targetInstanceIds: copyTargetIds
-      })
-      await loadSkills()
-    } catch (err) {
-      copyResult = {
-        copied: [],
-        skipped: [],
-        failed: copyTargetIds.map((id) => ({
-          targetInstanceId: id,
-          targetInstanceName: instances.find((inst) => inst.id === id)?.name ?? id,
-          error: err instanceof Error ? err.message : String(err)
-        }))
+    const aggregated: CopyCodexSkillResult = { copied: [], skipped: [], failed: [] }
+
+    for (const source of copySourceSkills) {
+      try {
+        const partial = await copyCodexSkill({
+          sourceInstanceId: source.instanceId,
+          sourceSkillDirName: source.skillDirName,
+          targetInstanceIds: copyTargetIds
+        })
+        aggregated.copied.push(...partial.copied)
+        aggregated.skipped.push(...partial.skipped)
+        aggregated.failed.push(...partial.failed)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        for (const targetId of copyTargetIds) {
+          aggregated.failed.push({
+            targetInstanceId: targetId,
+            targetInstanceName: instances.find((inst) => inst.id === targetId)?.name ?? targetId,
+            error: `${source.name}: ${message}`
+          })
+        }
+      } finally {
+        copyProgress = { completed: copyProgress.completed + 1, total: copySourceSkills.length }
       }
-    } finally {
-      copyBusy = false
+    }
+
+    copyResult = aggregated
+    copyBusy = false
+    try {
+      await loadSkills()
+    } catch {
+      /* loadSkills 内部已记录 error，忽略 */
+    }
+
+    if (!aggregated.failed.length) {
+      selectedSkillKeys = []
     }
   }
 
-  $: availableCopyTargets = instances.filter(
-    (inst) => copySourceSkill && inst.id !== copySourceSkill.instanceId
-  )
+  $: sourceInstanceIdSet = new Set(copySourceSkills.map((skill) => skill.instanceId))
+  $: availableCopyTargets =
+    copySourceSkills.length > 0 ? instances.filter((inst) => !sourceInstanceIdSet.has(inst.id)) : []
+  $: selectedSkillCount = selectedSkillKeys.length
+  $: bulkBarVisible = selectedSkillCount > 0
+  $: allVisibleSelected = filteredSkills.length > 0 && selectedSkillCount >= filteredSkills.length
 
   onMount(() => {
     void loadSkills()
@@ -291,6 +351,30 @@
     {/if}
   </section>
 
+  {#if bulkBarVisible}
+    <section
+      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-black/8 bg-white px-3 py-2"
+    >
+      <div class="flex items-center gap-2 text-[12px] text-muted-strong">
+        <span class="font-semibold text-carbon">{copy.skillsBulkSelected(selectedSkillCount)}</span>
+        {#if !allVisibleSelected && filteredSkills.length > selectedSkillCount}
+          <AppButton variant="toolbar" size="xs" onclick={selectAllVisibleSkills}>
+            {copy.skillsBulkSelectAllVisible}
+          </AppButton>
+        {/if}
+      </div>
+      <div class="flex items-center gap-2">
+        <AppButton variant="toolbar" size="xs" onclick={clearSelectedSkills}>
+          {copy.skillsBulkClear}
+        </AppButton>
+        <AppButton variant="primary" size="sm" onclick={openBulkCopyDialog}>
+          <span class="i-lucide-copy h-3.5 w-3.5"></span>
+          <span>{copy.skillsBulkCopyAction(selectedSkillCount)}</span>
+        </AppButton>
+      </div>
+    </section>
+  {/if}
+
   <!-- Content -->
   <div class="grid gap-3">
     {#if loading && !skills.length}
@@ -348,7 +432,21 @@
 
           <div class="grid gap-1.5">
             {#each group.skills as skill (skill.filePath)}
-              <article class="skills-card" data-motion-item>
+              <article
+                class={`skills-card ${isSkillSelected(skill) ? 'is-selected' : ''}`}
+                data-motion-item
+              >
+                <label
+                  class="skills-card-checkbox"
+                  title={copy.skillsBulkToggleSelect}
+                  aria-label={copy.skillsBulkToggleSelect}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSkillSelected(skill)}
+                    onchange={() => toggleSkillSelection(skill)}
+                  />
+                </label>
                 <div class="min-w-0 flex-1">
                   <div class="flex items-center gap-2">
                     <span class="i-lucide-puzzle h-3.5 w-3.5 flex-none text-faint"></span>
@@ -463,7 +561,7 @@
 {/if}
 
 <!-- Copy Dialog -->
-{#if copyOpen && copySourceSkill}
+{#if copyOpen && copySourceSkills.length > 0}
   <AppDialog
     title={copy.skillsCopyDialogTitle}
     panelClass="skills-dialog-panel"
@@ -471,7 +569,9 @@
   >
     <div class="flex flex-col gap-4">
       <p class="text-xs leading-5 text-muted-strong">
-        {copy.skillsCopyDialogDescription(copySourceSkill.name)}
+        {copySourceSkills.length === 1
+          ? copy.skillsCopyDialogDescription(copySourceSkills[0].name)
+          : copy.skillsBulkCopyDialogDescription(copySourceSkills.length)}
       </p>
 
       <div class="skills-copy-meta-panel grid gap-3 rounded-[0.8rem] border px-3.5 py-3.5">
@@ -479,10 +579,20 @@
           <span class="i-lucide-file-clock h-3.5 w-3.5 text-faint"></span>
           <span>{copy.skillsCopySourceInstance}</span>
         </div>
-        <dl class="skills-copy-meta-item">
-          <dt>{copy.skillsInstance}</dt>
-          <dd>{copySourceSkill.instanceName || copy.defaultInstance}</dd>
-        </dl>
+
+        <div class="skills-copy-source-list flex max-h-32 flex-col gap-1 overflow-y-auto pr-1">
+          {#each copySourceSkills as source (source.filePath)}
+            <div class="skills-copy-source-item" title={source.filePath}>
+              <span class="i-lucide-puzzle h-3.5 w-3.5 flex-none text-faint"></span>
+              <span class="min-w-0 truncate text-[12px] font-medium text-carbon">
+                {source.name}
+              </span>
+              <span class="min-w-0 truncate text-[11px] text-faint">
+                {source.instanceName || copy.defaultInstance}
+              </span>
+            </div>
+          {/each}
+        </div>
       </div>
 
       <div class="skills-copy-target-panel grid gap-4 rounded-[0.9rem] border px-4 py-4">
@@ -526,6 +636,13 @@
           {/if}
         </div>
 
+        {#if copyBusy && copyProgress.total > 1}
+          <div class="skills-progress" aria-live="polite">
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+            <span>{copy.skillsBulkCopyProgress(copyProgress.completed, copyProgress.total)}</span>
+          </div>
+        {/if}
+
         {#if copyResult}
           <div class="skills-result-panel">
             <span class="text-sm font-semibold text-carbon">{copy.skillsCopyResult}</span>
@@ -543,7 +660,7 @@
               <span class="text-danger">
                 {copy.skillsCopyFailed(copyResult.failed.length)}
               </span>
-              {#each copyResult.failed as fail (fail.targetInstanceId)}
+              {#each copyResult.failed as fail, failIndex (`${fail.targetInstanceId}-${failIndex}`)}
                 <span class="pl-2 text-[11px] text-danger">
                   {fail.targetInstanceName}: {fail.error}
                 </span>
@@ -597,7 +714,7 @@
 
   .skills-card {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: start;
     gap: 0.75rem;
     border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
@@ -613,6 +730,46 @@
   .skills-card:focus-within {
     border-color: color-mix(in srgb, var(--line-strong) 78%, transparent);
     background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
+  }
+
+  .skills-card.is-selected {
+    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--color-carbon) 6%, transparent);
+  }
+
+  .skills-card-checkbox {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.18rem;
+    cursor: pointer;
+  }
+
+  .skills-card-checkbox input {
+    width: 0.9rem;
+    height: 0.9rem;
+    cursor: pointer;
+    accent-color: var(--color-carbon);
+  }
+
+  .skills-copy-source-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 72%, transparent);
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--panel-strong) 52%, transparent);
+    padding: 0.35rem 0.55rem;
+  }
+
+  .skills-progress {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--ink-soft-strong);
+    font-size: 0.72rem;
   }
 
   .skills-card-description {
@@ -672,30 +829,6 @@
     display: flex;
     align-items: center;
     gap: 0.65rem;
-  }
-
-  .skills-copy-meta-item {
-    display: grid;
-    min-width: 0;
-    gap: 0.25rem;
-    border-radius: 0.45rem;
-    background: color-mix(in srgb, var(--panel-strong) 48%, transparent);
-    padding: 0.55rem 0.65rem;
-  }
-
-  .skills-copy-meta-item dt {
-    color: var(--ink-faint);
-    font-size: 0.68rem;
-    font-weight: 700;
-  }
-
-  .skills-copy-meta-item dd {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--color-carbon);
-    font-weight: 650;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 
   .skills-copy-target {

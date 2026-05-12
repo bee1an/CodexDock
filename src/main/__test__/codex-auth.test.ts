@@ -142,21 +142,21 @@ describe('CodexAccountStore', () => {
     )
   })
 
-  it('creates, renames, and deletes tags while syncing account tag bindings', async () => {
+  it('creates, renames, and deletes groups while syncing account group bindings', async () => {
     const store = await createStore()
     const account = await store.importAuthPayload(createAuthPayload('a'))
-    const tag = await store.createTag('工作')
+    const group = await store.createGroup('工作')
 
-    await store.updateAccountTags(account.id, [tag.id])
-    expect((await store.getSnapshot(false)).accounts[0]?.tagIds).toEqual([tag.id])
+    await store.updateAccountGroups(account.id, [group.id])
+    expect((await store.getSnapshot(false)).accounts[0]?.groupIds).toEqual([group.id])
 
-    await store.updateTag(tag.id, '重点')
-    expect((await store.getSnapshot(false)).tags[0]?.name).toBe('重点')
+    await store.updateGroup(group.id, '重点')
+    expect((await store.getSnapshot(false)).groups[0]?.name).toBe('重点')
 
-    await store.deleteTag(tag.id)
+    await store.deleteGroup(group.id)
     const snapshot = await store.getSnapshot(false)
-    expect(snapshot.tags).toEqual([])
-    expect(snapshot.accounts[0]?.tagIds).toEqual([])
+    expect(snapshot.groups).toEqual([])
+    expect(snapshot.accounts[0]?.groupIds).toEqual([])
   })
 
   it('migrates wake schedules when refreshed auth changes account identity', async () => {
@@ -231,7 +231,7 @@ describe('CodexAccountStore', () => {
           accounts: [
             {
               id: 'legacy',
-              tagIds: [],
+              groupIds: [],
               createdAt: '2026-03-01T00:00:00.000Z',
               updatedAt: '2026-03-01T00:00:00.000Z',
               authPayload: {
@@ -240,7 +240,7 @@ describe('CodexAccountStore', () => {
               }
             }
           ],
-          tags: [],
+          groups: [],
           settings: {
             usagePollingMinutes: 15,
             statusBarAccountIds: [],

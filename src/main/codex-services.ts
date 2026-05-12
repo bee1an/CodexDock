@@ -106,9 +106,11 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   const localGatewayService = new CodexLocalGatewayService({
     store,
     providerStore,
+    logFilePath: join(options.userDataPath, 'local-gateway-logs.json'),
     platform: options.platform,
     refreshAuthForUse: authRuntime.refreshAuthForUse,
-    refreshStoredAuthGuarded: authRuntime.refreshStoredAuthGuarded
+    refreshStoredAuthGuarded: authRuntime.refreshStoredAuthGuarded,
+    openCodexFromService: (input) => instanceRuntime.openFromService(input)
   })
 
   const {
@@ -130,11 +132,15 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     startDefaultInstance,
     startNamedInstance,
     startProviderInstance,
+    syncLocalGatewayInstanceConfig,
+    startLocalGatewayInstance,
+    openFromService,
     stopInstance,
     toDefaultInstanceSummary,
     toInstanceSummary
   } = instanceRuntime
   const { checkProvider, runDoctor } = diagnosticsRuntime
+  const { probeProviderModels } = diagnosticsRuntime
 
   const getSnapshot = async (): Promise<AppSnapshot> => {
     const snapshot = await getBaseSnapshot()
@@ -335,10 +341,15 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         }
         return getSnapshot()
       },
-      updateTags: async (accountId, tagIds) => {
-        await store.updateAccountTags(accountId, tagIds)
+      updateGroups: async (accountId, groupIds) => {
+        await store.updateAccountGroups(accountId, groupIds)
         return getSnapshot()
       },
+      updateTokens: async (accountId, input) => {
+        await store.updateAccountTokens(accountId, input)
+        return getSnapshot()
+      },
+      getTokens: (accountId) => store.getAccountTokens(accountId),
       getWakeSchedule: (accountId) => store.getAccountWakeSchedule(accountId),
       updateWakeSchedule: async (accountId, input) => {
         await store.updateAccountWakeSchedule(accountId, input)
@@ -354,20 +365,20 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       },
       get: (accountId) => store.getAccountSummary(accountId)
     },
-    tags: {
+    groups: {
       create: async (name) => {
-        await store.createTag(name)
+        await store.createGroup(name)
         return getSnapshot()
       },
-      update: async (tagId, name) => {
-        await store.updateTag(tagId, name)
+      update: async (groupId, name) => {
+        await store.updateGroup(groupId, name)
         return getSnapshot()
       },
-      remove: async (tagId) => {
-        await store.deleteTag(tagId)
+      remove: async (groupId) => {
+        await store.deleteGroup(groupId)
         return getSnapshot()
       },
-      getAll: async () => (await getSnapshot()).tags
+      getAll: async () => (await getSnapshot()).groups
     },
     providers: {
       list: () => providerStore.list(),
@@ -405,6 +416,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         }
       },
       check: checkProvider,
+      probeModels: probeProviderModels,
       open: async (providerId, workspacePath = options.defaultWorkspacePath) => {
         await startProviderInstance(providerId, workspacePath)
         return getSnapshot()
@@ -520,7 +532,16 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return getSnapshot()
       },
       status: () => localGatewayService.status(),
-      rotateKey: () => localGatewayService.rotateKey()
+      rotateKey: async () => {
+        const status = await localGatewayService.rotateKey()
+        await syncLocalGatewayInstanceConfig({
+          baseUrl: status.baseUrl,
+          apiKey: status.apiKey,
+          create: false
+        })
+        return status
+      },
+      getApiKey: () => localGatewayService.getApiKey()
     },
     login: {
       start: (method) => loginCoordinator.start(method),
@@ -543,6 +564,20 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         await startAccountInstance(resolvedAccountId, workspacePath)
         return getSnapshot()
       },
+      openLocalGateway: async (workspacePath = options.defaultWorkspacePath) => {
+        const status = await localGatewayService.status()
+        if (!status.running) {
+          throw new Error('Local gateway is not running.')
+        }
+        const apiKey = await localGatewayService.getApiKey()
+        await startLocalGatewayInstance({
+          baseUrl: status.baseUrl,
+          apiKey,
+          workspacePath
+        })
+        return getSnapshot()
+      },
+      openFromService,
       instances: {
         list: listCodexInstances,
         getDefaults: async () => instanceStore.getDefaults(),
@@ -616,8 +651,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       importDir: (dirPath) => promptService.importDir(dirPath),
       exportDir: (targetDir) => promptService.exportDir(targetDir),
       addAttachment: (promptId, payload) => promptService.addAttachment(promptId, payload),
-      removeAttachment: (promptId, fileName) =>
-        promptService.removeAttachment(promptId, fileName),
+      removeAttachment: (promptId, fileName) => promptService.removeAttachment(promptId, fileName),
       readAttachment: (promptId, fileName) => promptService.readAttachment(promptId, fileName)
     }
   }

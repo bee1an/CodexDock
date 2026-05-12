@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
   AccountWakeSchedule,
+  AccountTokensDetail,
   AccountTransferFormat,
   AppMeta,
   AppSettings,
@@ -21,6 +22,8 @@ import type {
   CodexSkillsResult,
   ListCodexSessionProjectsInput,
   ListCodexSessionsInput,
+  ProbeProviderModelsInput,
+  ProviderModelsProbeResult,
   PromptCategoryList,
   PromptAttachmentData,
   PromptAttachmentPayload,
@@ -37,6 +40,7 @@ import type {
   TokenCostDetail,
   TokenCostReadOptions,
   UpdateAccountWakeScheduleInput,
+  UpdateAccountTokensInput,
   WakeAccountRateLimitsInput
 } from '../shared/codex'
 
@@ -61,17 +65,22 @@ const codexApp = {
     ipcRenderer.invoke('codex:reorder-accounts', accountIds),
   removeAccount: (accountId: string) => ipcRenderer.invoke('codex:remove-account', accountId),
   removeAccounts: (accountIds: string[]) => ipcRenderer.invoke('codex:remove-accounts', accountIds),
-  updateAccountTags: (accountId: string, tagIds: string[]) =>
-    ipcRenderer.invoke('codex:update-account-tags', accountId, tagIds),
+  updateAccountGroups: (accountId: string, groupIds: string[]) =>
+    ipcRenderer.invoke('codex:update-account-groups', accountId, groupIds),
+  updateAccountTokens: (accountId: string, input: UpdateAccountTokensInput) =>
+    ipcRenderer.invoke('codex:update-account-tokens', accountId, input),
+  getAccountTokens: (accountId: string): Promise<AccountTokensDetail> =>
+    ipcRenderer.invoke('codex:get-account-tokens', accountId),
   getAccountWakeSchedule: (accountId: string): Promise<AccountWakeSchedule | null> =>
     ipcRenderer.invoke('codex:get-account-wake-schedule', accountId),
   updateAccountWakeSchedule: (accountId: string, input: UpdateAccountWakeScheduleInput) =>
     ipcRenderer.invoke('codex:update-account-wake-schedule', accountId, input),
   deleteAccountWakeSchedule: (accountId: string) =>
     ipcRenderer.invoke('codex:delete-account-wake-schedule', accountId),
-  createTag: (name: string) => ipcRenderer.invoke('codex:create-tag', name),
-  updateTag: (tagId: string, name: string) => ipcRenderer.invoke('codex:update-tag', tagId, name),
-  deleteTag: (tagId: string) => ipcRenderer.invoke('codex:delete-tag', tagId),
+  createGroup: (name: string) => ipcRenderer.invoke('codex:create-group', name),
+  updateGroup: (groupId: string, name: string) =>
+    ipcRenderer.invoke('codex:update-group', groupId, name),
+  deleteGroup: (groupId: string) => ipcRenderer.invoke('codex:delete-group', groupId),
   listProviders: () => ipcRenderer.invoke('codex:list-providers'),
   getProvider: (providerId: string): Promise<CustomProviderDetail> =>
     ipcRenderer.invoke('codex:get-provider', providerId),
@@ -82,8 +91,11 @@ const codexApp = {
   updateProvider: (providerId: string, input: UpdateCustomProviderInput) =>
     ipcRenderer.invoke('codex:update-provider', providerId, input),
   removeProvider: (providerId: string) => ipcRenderer.invoke('codex:remove-provider', providerId),
+  probeProviderModels: (input: ProbeProviderModelsInput): Promise<ProviderModelsProbeResult> =>
+    ipcRenderer.invoke('codex:probe-provider-models', input),
   openProviderInCodex: (providerId: string) =>
     ipcRenderer.invoke('codex:open-provider-in-codex', providerId),
+  openLocalGatewayInCodex: () => ipcRenderer.invoke('codex:open-local-gateway-in-codex'),
   openAccountInCodex: (accountId: string) =>
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),
   openAccountInIsolatedCodex: (accountId: string) =>
@@ -141,16 +153,14 @@ const codexApp = {
   addPromptAttachment: (
     promptId: string,
     payload: PromptAttachmentPayload
-  ): Promise<PromptDetail> =>
-    ipcRenderer.invoke('codex:prompt-attachment-add', promptId, payload),
+  ): Promise<PromptDetail> => ipcRenderer.invoke('codex:prompt-attachment-add', promptId, payload),
   removePromptAttachment: (promptId: string, fileName: string): Promise<PromptDetail> =>
     ipcRenderer.invoke('codex:prompt-attachment-remove', promptId, fileName),
-  readPromptAttachment: (
-    promptId: string,
-    fileName: string
-  ): Promise<PromptAttachmentData> =>
+  readPromptAttachment: (promptId: string, fileName: string): Promise<PromptAttachmentData> =>
     ipcRenderer.invoke('codex:prompt-attachment-read', promptId, fileName),
   getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
+  getLocalGatewayApiKey: (): Promise<string> =>
+    ipcRenderer.invoke('codex:get-local-gateway-api-key'),
   startLocalGateway: () => ipcRenderer.invoke('codex:start-local-gateway'),
   stopLocalGateway: () => ipcRenderer.invoke('codex:stop-local-gateway'),
   rotateLocalGatewayKey: () => ipcRenderer.invoke('codex:rotate-local-gateway-key'),

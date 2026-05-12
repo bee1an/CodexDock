@@ -2,7 +2,7 @@ import { isLocalMockAccount, type AccountSummary } from '../shared/codex'
 import type { TemplateAccountRecord, TemplateFileRecord } from './codex-account-template'
 import type { CodexServices } from './codex-services'
 
-const localMockTagNames = ['主力', '观察中', '备用', '团队'] as const
+const localMockGroupNames = ['主力', '观察中', '备用', '团队'] as const
 const localMockProviderInputs = [
   {
     name: 'Local Mock Provider',
@@ -151,8 +151,8 @@ function providerKey(value: string): string {
   }
 }
 
-function compactTagIds(tagIds: Array<string | undefined>): string[] {
-  return tagIds.filter((tagId): tagId is string => Boolean(tagId))
+function compactGroupIds(groupIds: Array<string | undefined>): string[] {
+  return groupIds.filter((groupId): groupId is string => Boolean(groupId))
 }
 
 function isLegacyBusinessMockAccount(account: AccountSummary): boolean {
@@ -266,15 +266,15 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     nextSnapshot = await services.getSnapshot()
   }
 
-  for (const tagName of localMockTagNames) {
-    if (!nextSnapshot.tags.some((tag) => tag.name === tagName)) {
-      await services.tags.create(tagName)
+  for (const groupName of localMockGroupNames) {
+    if (!nextSnapshot.groups.some((group) => group.name === groupName)) {
+      await services.groups.create(groupName)
       changed = true
     }
   }
 
   nextSnapshot = await services.getSnapshot()
-  const tagsByName = new Map(nextSnapshot.tags.map((tag) => [tag.name, tag.id]))
+  const groupsByName = new Map(nextSnapshot.groups.map((group) => [group.name, group.id]))
   const findAccountByEmail = (email: string): AccountSummary => {
     const account = nextSnapshot.accounts.find((item) => item.email === email)
     if (!account) {
@@ -283,27 +283,27 @@ export async function seedLocalMockData(services: CodexServices): Promise<boolea
     return account
   }
 
-  await services.accounts.updateTags(
+  await services.accounts.updateGroups(
     findAccountByEmail('local-plus-1@mock.local').id,
-    compactTagIds([tagsByName.get('主力')])
+    compactGroupIds([groupsByName.get('主力')])
   )
-  await services.accounts.updateTags(
+  await services.accounts.updateGroups(
     findAccountByEmail('local-plus-2@mock.local').id,
-    compactTagIds([tagsByName.get('观察中')])
+    compactGroupIds([groupsByName.get('观察中')])
   )
-  await services.accounts.updateTags(
+  await services.accounts.updateGroups(
     findAccountByEmail('local-pro@mock.local').id,
-    compactTagIds([tagsByName.get('备用')])
+    compactGroupIds([groupsByName.get('备用')])
   )
-  await services.accounts.updateTags(
+  await services.accounts.updateGroups(
     findAccountByEmail('local-team@mock.local').id,
-    compactTagIds([tagsByName.get('团队')])
+    compactGroupIds([groupsByName.get('团队')])
   )
-  await services.accounts.updateTags(findAccountByEmail('local-team-2@mock.local').id, [
-    ...compactTagIds([tagsByName.get('主力'), tagsByName.get('团队')])
+  await services.accounts.updateGroups(findAccountByEmail('local-team-2@mock.local').id, [
+    ...compactGroupIds([groupsByName.get('主力'), groupsByName.get('团队')])
   ])
-  await services.accounts.updateTags(findAccountByEmail('local-enterprise@mock.local').id, [
-    ...compactTagIds([tagsByName.get('观察中'), tagsByName.get('团队')])
+  await services.accounts.updateGroups(findAccountByEmail('local-enterprise@mock.local').id, [
+    ...compactGroupIds([groupsByName.get('观察中'), groupsByName.get('团队')])
   ])
 
   const lastTriggeredAt = new Date().toISOString()

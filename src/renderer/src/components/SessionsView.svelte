@@ -82,11 +82,18 @@
   let detailLoading = false
   let detailError = ''
   let copyTargetSession: CodexSessionSummary | null = null
+  let copyTargetSessions: CodexSessionSummary[] = []
   let copyTargetInstanceId = ''
   let copyTargetProviderId = ''
   let copySessionBusy = false
   let copySessionError = ''
   let copySessionNotice = ''
+  let copySessionProgress = { completed: 0, total: 0 }
+  let copySessionResult: {
+    copied: Array<{ sessionTitle: string; targetInstanceName: string; targetModel: string }>
+    failed: Array<{ sessionTitle: string; error: string }>
+  } | null = null
+  let selectedSessionKeys: string[] = []
   let copiedInstancesById: Record<string, CodexInstanceSummary> = {}
   let allKnownInstances: CodexInstanceSummary[] = []
   let sessionProviderContext: SessionProviderContext = {
@@ -402,10 +409,26 @@
 
   function openCopySessionDialog(session: CodexSessionSummary): void {
     copyTargetSession = session
+    copyTargetSessions = [session]
     copySessionError = ''
     copySessionNotice = ''
+    copySessionResult = null
+    copySessionProgress = { completed: 0, total: 0 }
     copyTargetInstanceId = defaultCopyInstanceId(session)
     copyTargetProviderId = defaultCopyProviderId(session, copyTargetInstanceId)
+  }
+
+  function openBulkCopySessionDialog(): void {
+    const sources = collectSelectedSessions()
+    if (!sources.length) return
+    copyTargetSession = sources[0]
+    copyTargetSessions = sources
+    copySessionError = ''
+    copySessionNotice = ''
+    copySessionResult = null
+    copySessionProgress = { completed: 0, total: 0 }
+    copyTargetInstanceId = defaultCopyInstanceId(sources[0])
+    copyTargetProviderId = defaultCopyProviderId(sources[0], copyTargetInstanceId)
   }
 
   function closeCopySessionDialog(): void {
@@ -414,13 +437,53 @@
     }
 
     copyTargetSession = null
+    copyTargetSessions = []
     copyTargetInstanceId = ''
     copyTargetProviderId = ''
     copySessionError = ''
+    copySessionResult = null
+    copySessionProgress = { completed: 0, total: 0 }
+  }
+
+  function sessionKey(session: CodexSessionSummary): string {
+    return session.filePath
+  }
+
+  function isSessionSelected(session: CodexSessionSummary): boolean {
+    return selectedSessionKeys.includes(sessionKey(session))
+  }
+
+  function toggleSessionSelection(session: CodexSessionSummary): void {
+    const key = sessionKey(session)
+    selectedSessionKeys = selectedSessionKeys.includes(key)
+      ? selectedSessionKeys.filter((item) => item !== key)
+      : [...selectedSessionKeys, key]
+  }
+
+  function clearSelectedSessions(): void {
+    selectedSessionKeys = []
+  }
+
+  function collectSelectedSessions(): CodexSessionSummary[] {
+    const keySet = new Set(selectedSessionKeys)
+    const collected: CodexSessionSummary[] = []
+    for (const sessions of Object.values(sessionsByProjectKey)) {
+      for (const session of sessions) {
+        if (keySet.has(sessionKey(session))) {
+          collected.push(session)
+        }
+      }
+    }
+    return collected
   }
 
   async function confirmCopySessionToProvider(): Promise<void> {
-    if (!copyTargetSession || !copyTargetInstanceId || !copyTargetProviderId || copySessionBusy) {
+    if (
+      !copyTargetSessions.length ||
+      !copyTargetInstanceId ||
+      !copyTargetProviderId ||
+      copySessionBusy
+    ) {
       return
     }
 
@@ -434,45 +497,94 @@
     copySessionBusy = true
     copySessionError = ''
     copySessionNotice = ''
-    try {
-      const result = await copyCodexSessionToProvider({
-        sourceInstanceId: copyTargetSession.instanceId,
-        sourceFilePath: copyTargetSession.filePath,
-        targetInstanceId: copyTargetInstanceId,
-        targetProviderId: targetProvider.targetProviderId,
-        targetModelProvider: targetProvider.targetProviderId
-          ? undefined
-          : targetProvider.targetModelProvider,
-        targetModelProviderLabel: targetProvider.targetProviderId
-          ? undefined
-          : targetProvider.targetModelProviderLabel
-      })
-      if (!instances.some((instance) => instance.id === result.targetInstanceId)) {
-        const now = new Date().toISOString()
-        copiedInstancesById = {
-          ...copiedInstancesById,
-          [result.targetInstanceId]: {
-            id: result.targetInstanceId,
-            name: result.targetInstanceName,
-            codexHome: result.targetCodexHome,
-            extraArgs: '',
-            isDefault: false,
-            createdAt: now,
-            updatedAt: now,
-            running: false,
-            initialized: true
+    copySessionResult = null
+    copySessionProgress = { completed: 0, total: copyTargetSessions.length }
+
+    const aggregated = {
+      copied: [] as Array<{
+        sessionTitle: string
+        targetInstanceName: string
+        targetModel: string
+      }>,
+      failed: [] as Array<{ sessionTitle: string; error: string }>
+    }
+
+    for (const source of copyTargetSessions) {
+      const sessionTitle = source.title || source.id
+      try {
+        const result = await copyCodexSessionToProvider({
+          sourceInstanceId: source.instanceId,
+          sourceFilePath: source.filePath,
+          targetInstanceId: copyTargetInstanceId,
+          targetProviderId: targetProvider.targetProviderId,
+          targetModelProvider: targetProvider.targetProviderId
+            ? undefined
+            : targetProvider.targetModelProvider,
+          targetModelProviderLabel: targetProvider.targetProviderId
+            ? undefined
+            : targetProvider.targetModelProviderLabel
+        })
+
+        if (!instances.some((instance) => instance.id === result.targetInstanceId)) {
+          const now = new Date().toISOString()
+          copiedInstancesById = {
+            ...copiedInstancesById,
+            [result.targetInstanceId]: {
+              id: result.targetInstanceId,
+              name: result.targetInstanceName,
+              codexHome: result.targetCodexHome,
+              extraArgs: '',
+              isDefault: false,
+              createdAt: now,
+              updatedAt: now,
+              running: false,
+              initialized: true
+            }
           }
         }
+
+        aggregated.copied.push({
+          sessionTitle,
+          targetInstanceName: result.targetInstanceName,
+          targetModel: result.targetModel
+        })
+      } catch (nextError) {
+        const message = nextError instanceof Error ? nextError.message : copy.sessionsCopyFailed
+        aggregated.failed.push({ sessionTitle, error: message })
+      } finally {
+        copySessionProgress = {
+          completed: copySessionProgress.completed + 1,
+          total: copyTargetSessions.length
+        }
       }
-      copySessionNotice = copy.sessionsCopySuccess(result.targetInstanceName, result.targetModel)
+    }
+
+    copySessionBusy = false
+    copySessionResult = aggregated
+
+    if (!aggregated.failed.length && aggregated.copied.length) {
+      if (aggregated.copied.length === 1) {
+        copySessionNotice = copy.sessionsCopySuccess(
+          aggregated.copied[0].targetInstanceName,
+          aggregated.copied[0].targetModel
+        )
+      } else {
+        copySessionNotice = copy.sessionsBulkCopySuccess(aggregated.copied.length)
+      }
       copyTargetSession = null
+      copyTargetSessions = []
       copyTargetInstanceId = ''
       copyTargetProviderId = ''
+      selectedSessionKeys = []
+    } else if (aggregated.failed.length && !aggregated.copied.length) {
+      copySessionError =
+        aggregated.failed.length === 1 ? aggregated.failed[0].error : copy.sessionsCopyFailed
+    }
+
+    try {
       await loadProjects()
-    } catch (nextError) {
-      copySessionError = nextError instanceof Error ? nextError.message : copy.sessionsCopyFailed
-    } finally {
-      copySessionBusy = false
+    } catch {
+      /* loadProjects 内部处理错误 */
     }
   }
 
@@ -571,8 +683,17 @@
           <p class="text-[11px] text-faint">{copy.sessionsScannedAt(formatDateTime(scannedAt))}</p>
         {/if}
       </div>
-      <AppButton variant="secondary" size="sm" onclick={() => void loadProjects()}>
-        {loading ? copy.refreshing : copy.sessionsRefresh}
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={() => void loadProjects()}
+        disabled={loading}
+      >
+        <span
+          class={`${loading ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+          aria-hidden="true"
+        ></span>
+        <span>{loading ? copy.refreshing : copy.sessionsRefresh}</span>
       </AppButton>
     </div>
 
@@ -626,6 +747,27 @@
       </div>
     {/if}
   </section>
+
+  {#if selectedSessionKeys.length > 0}
+    <section
+      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-black/8 bg-white px-3 py-2"
+    >
+      <div class="text-[12px] text-muted-strong">
+        <span class="font-semibold text-carbon"
+          >{copy.sessionsBulkSelected(selectedSessionKeys.length)}</span
+        >
+      </div>
+      <div class="flex items-center gap-2">
+        <AppButton variant="toolbar" size="xs" onclick={clearSelectedSessions}>
+          {copy.sessionsBulkClear}
+        </AppButton>
+        <AppButton variant="primary" size="sm" onclick={openBulkCopySessionDialog}>
+          <span class="i-lucide-copy h-3.5 w-3.5"></span>
+          <span>{copy.sessionsBulkCopyAction(selectedSessionKeys.length)}</span>
+        </AppButton>
+      </div>
+    </section>
+  {/if}
 
   {#if selectedSummary}
     <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-black/8 px-4 py-4">
@@ -956,8 +1098,21 @@
                                 {:else}
                                   {#each displayedSessions as session (session.filePath)}
                                     <div
-                                      class="session-card grid grid-cols-[minmax(0,1fr)_auto] gap-2 rounded-[0.45rem] border border-black/6 px-3 py-3"
+                                      class={`session-card grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 rounded-[0.45rem] border border-black/6 px-3 py-3 ${
+                                        isSessionSelected(session) ? 'is-selected' : ''
+                                      }`}
                                     >
+                                      <label
+                                        class="session-card-checkbox"
+                                        title={copy.sessionsBulkToggleSelect}
+                                        aria-label={copy.sessionsBulkToggleSelect}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={isSessionSelected(session)}
+                                          onchange={() => toggleSessionSelection(session)}
+                                        />
+                                      </label>
                                       <button
                                         class="session-card-main min-w-0 text-left"
                                         type="button"
@@ -1068,7 +1223,9 @@
               {copy.sessionsCopyToProvider}
             </p>
             <h3 class="session-line-clamp-2 mt-3 text-base font-semibold leading-6 text-carbon">
-              {copyTargetSession.title || copyTargetSession.id}
+              {copyTargetSessions.length > 1
+                ? copy.sessionsBulkCopyDialogTitle(copyTargetSessions.length)
+                : copyTargetSession.title || copyTargetSession.id}
             </h3>
             <p class="mt-1 text-xs leading-5 text-muted-strong">
               {copy.sessionsCopyTargetProviderHelp}
@@ -1093,26 +1250,42 @@
             <span class="i-lucide-file-clock h-3.5 w-3.5 text-faint"></span>
             <span>{copy.sessionsSource}</span>
           </div>
-          <dl class="grid gap-2 text-xs sm:grid-cols-3">
-            <div class="session-copy-meta-item">
-              <dt>{copy.sessionsInstance}</dt>
-              <dd>{copyTargetSession.instanceName}</dd>
+          {#if copyTargetSessions.length > 1}
+            <div class="session-copy-source-list flex max-h-40 flex-col gap-1 overflow-y-auto pr-1">
+              {#each copyTargetSessions as source (source.filePath)}
+                <div class="session-copy-source-item" title={source.filePath}>
+                  <span class="i-lucide-message-square h-3.5 w-3.5 flex-none text-faint"></span>
+                  <span class="min-w-0 truncate text-[12px] font-medium text-carbon">
+                    {source.title || source.id}
+                  </span>
+                  <span class="min-w-0 truncate text-[11px] text-faint">
+                    {source.instanceName} · {source.projectPath || '--'}
+                  </span>
+                </div>
+              {/each}
             </div>
-            <div class="session-copy-meta-item">
-              <dt>{copy.sessionsProvider}</dt>
-              <dd>
-                {providerLabel(
-                  copyTargetSession.modelProvider,
-                  copyTargetSession.modelProviderLabel,
-                  sessionProviderContext
-                )}
-              </dd>
-            </div>
-            <div class="session-copy-meta-item">
-              <dt>{copy.sessionsProject}</dt>
-              <dd>{copyTargetSession.projectPath || '--'}</dd>
-            </div>
-          </dl>
+          {:else}
+            <dl class="grid gap-2 text-xs sm:grid-cols-3">
+              <div class="session-copy-meta-item">
+                <dt>{copy.sessionsInstance}</dt>
+                <dd>{copyTargetSession.instanceName}</dd>
+              </div>
+              <div class="session-copy-meta-item">
+                <dt>{copy.sessionsProvider}</dt>
+                <dd>
+                  {providerLabel(
+                    copyTargetSession.modelProvider,
+                    copyTargetSession.modelProviderLabel,
+                    sessionProviderContext
+                  )}
+                </dd>
+              </div>
+              <div class="session-copy-meta-item">
+                <dt>{copy.sessionsProject}</dt>
+                <dd>{copyTargetSession.projectPath || '--'}</dd>
+              </div>
+            </dl>
+          {/if}
         </div>
 
         {#if !copyProviderOptions.length}
@@ -1204,12 +1377,40 @@
                 {#if copySessionBusy}
                   <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin" aria-hidden="true"
                   ></span>
-                  {copy.refreshing}
+                  {copyTargetSessions.length > 1
+                    ? copy.sessionsBulkCopyProgress(
+                        copySessionProgress.completed,
+                        copySessionProgress.total
+                      )
+                    : copy.refreshing}
                 {:else}
-                  {copy.sessionsCopyConfirm}
+                  {copyTargetSessions.length > 1
+                    ? copy.sessionsBulkCopyConfirm(copyTargetSessions.length)
+                    : copy.sessionsCopyConfirm}
                 {/if}
               </button>
             </div>
+          </div>
+        {/if}
+
+        {#if copySessionResult}
+          <div class="session-copy-result-panel" data-dialog-motion>
+            <span class="text-sm font-semibold text-carbon">{copy.sessionsBulkCopyResult}</span>
+            {#if copySessionResult.copied.length > 0}
+              <span class="text-success">
+                {copy.sessionsBulkCopySuccess(copySessionResult.copied.length)}
+              </span>
+            {/if}
+            {#if copySessionResult.failed.length > 0}
+              <span class="text-danger">
+                {copy.sessionsBulkCopyFailureCount(copySessionResult.failed.length)}
+              </span>
+              {#each copySessionResult.failed as fail, failIndex (`${fail.sessionTitle}-${failIndex}`)}
+                <span class="pl-2 text-[11px] text-danger">
+                  {fail.sessionTitle}: {fail.error}
+                </span>
+              {/each}
+            {/if}
           </div>
         {/if}
 
@@ -1246,6 +1447,49 @@
   .session-card:hover {
     border-color: var(--line-strong);
     background: var(--surface-hover);
+  }
+
+  .session-card.is-selected {
+    border-color: var(--line-strong);
+    background: color-mix(in srgb, var(--color-carbon) 6%, transparent);
+  }
+
+  .session-card-checkbox {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    margin-top: 0.18rem;
+    cursor: pointer;
+  }
+
+  .session-card-checkbox input {
+    width: 0.9rem;
+    height: 0.9rem;
+    cursor: pointer;
+    accent-color: var(--color-carbon);
+  }
+
+  .session-copy-source-item {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 72%, transparent);
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--panel-strong) 52%, transparent);
+    padding: 0.35rem 0.55rem;
+  }
+
+  .session-copy-result-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.45rem;
+    padding: 0.62rem 0.75rem;
+    font-size: 0.72rem;
+    background: color-mix(in srgb, var(--surface-soft) 54%, transparent);
   }
 
   .session-card-main {

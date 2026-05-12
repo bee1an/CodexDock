@@ -13,7 +13,8 @@
   import type {
     AccountRateLimits,
     AccountSummary,
-    AccountTag,
+    AccountGroup,
+    AccountTokensDetail,
     AccountWakeSchedule,
     AppLanguage
   } from '../../../shared/codex'
@@ -21,13 +22,13 @@
     formatRelativeReset,
     isLocalMockAccount,
     remainingPercent,
-    supportsWeeklyQuota,
     supportsWakeSessionQuota
   } from '../../../shared/codex'
   import {
     accountUsageBadge,
     accountEmail,
     accountSubscriptionBadge,
+    aggregateAccountQuotas,
     extraLimits,
     limitLabel,
     planLabel,
@@ -37,12 +38,12 @@
     type LocalizedCopy
   } from './app-view'
   import {
-    accountTagsForDisplay,
-    availableTagsForAccount,
+    accountGroupsForDisplay,
+    availableGroupsForAccount,
     filterChipLabel,
     normalizeSelectedAccountIds,
-    tagFilterLabel,
-    untaggedFilterId,
+    groupFilterLabel,
+    ungroupedFilterId,
     visibleAccountsForFilter
   } from './accounts-panel-account'
   import { animateProgress } from './gsap-motion'
@@ -53,6 +54,7 @@
     stopFloatingPointerPropagation
   } from './floating'
   import AppButton from './AppButton.svelte'
+  import AccountDetailsPanel from './AccountDetailsPanel.svelte'
   import Checkbox from './Checkbox.svelte'
   import {
     formatWakeScheduleLastTriggeredAt,
@@ -65,15 +67,15 @@
   export let copy: LocalizedCopy
   export let language: AppLanguage
   export let accounts: AccountSummary[] = []
-  export let tags: AccountTag[] = []
+  export let groups: AccountGroup[] = []
   export let activeAccountId: string | undefined
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
   export let usageErrorByAccountId: Record<string, string>
   export let wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   export let loginActionBusy: boolean
-  export let tagMutationBusy = false
-  export let activeTagFilter = 'all'
+  export let groupMutationBusy = false
+  export let activeGroupFilter = 'all'
   export let selectedAccountIds: string[] = []
   export let accountWorkbenchExpanded = false
   export let openingAccountId = ''
@@ -82,22 +84,84 @@
   export let openAccountInCodex: (accountId: string) => void
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
+  export let openEditTokensDialog: (account: AccountSummary) => void
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
-  export let updateAccountTags: (account: AccountSummary, tagIds: string[]) => Promise<void>
+  export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
+  export let openGroupManager: () => void = () => {}
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let removeAccount: (account: AccountSummary) => void
   export let removeAccounts: (accountIds: string[]) => Promise<void>
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
+  export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
+
+  let expandedAccountIds: string[] = []
+  let tokensByAccountId: Record<string, AccountTokensDetail> = {}
+  let tokensLoadingAccountId = ''
+  let tokensErrorByAccountId: Record<string, string> = {}
+  let tokensLoadRequestId = 0
+
+  async function loadTokensForAccount(accountId: string): Promise<void> {
+    if (tokensLoadingAccountId === accountId) {
+      return
+    }
+
+    tokensLoadingAccountId = accountId
+    tokensErrorByAccountId = { ...tokensErrorByAccountId, [accountId]: '' }
+    const requestId = ++tokensLoadRequestId
+
+    try {
+      const detail = await getAccountTokens(accountId)
+      if (requestId !== tokensLoadRequestId) {
+        return
+      }
+      tokensByAccountId = { ...tokensByAccountId, [accountId]: detail }
+    } catch (error) {
+      if (requestId !== tokensLoadRequestId) {
+        return
+      }
+      const message = error instanceof Error ? error.message : String(error)
+      tokensErrorByAccountId = {
+        ...tokensErrorByAccountId,
+        [accountId]: copy.accountDetailsTokenLoadFailed(message)
+      }
+    } finally {
+      if (tokensLoadingAccountId === accountId) {
+        tokensLoadingAccountId = ''
+      }
+    }
+  }
+
+  function toggleAccountExpanded(accountId: string): void {
+    if (expandedAccountIds.includes(accountId)) {
+      expandedAccountIds = expandedAccountIds.filter((id) => id !== accountId)
+      return
+    }
+
+    expandedAccountIds = [...expandedAccountIds, accountId]
+    if (!tokensByAccountId[accountId]) {
+      void loadTokensForAccount(accountId)
+    }
+  }
+
+  $: if (accounts) {
+    const accountIds = new Set(accounts.map((account) => account.id))
+    const nextExpanded = expandedAccountIds.filter((id) => accountIds.has(id))
+    if (nextExpanded.length !== expandedAccountIds.length) {
+      expandedAccountIds = nextExpanded
+    }
+  }
 
   let accountActionMenuAccountId: string | null = null
   let accountActionMenuAnchorRect: DOMRect | null = null
-  let accountTagMenuAccountId = ''
-  let accountTagMenuAnchorRect: DOMRect | null = null
+  let accountGroupMenuAccountId = ''
+  let accountGroupMenuAnchorRect: DOMRect | null = null
   let usageErrorPopoverAccountId: string | null = null
   let usageErrorPopoverAnchorRect: DOMRect | null = null
   let sortableAccounts: AccountSummary[] = []
   let sortInteractionActive = false
   let sortDraggedAccountId = ''
+  let removingSelection = false
+  let removingGroupLink = ''
   let accountWorkbenchRendered = accountWorkbenchExpanded
   let accountWorkbenchPanelOpen = accountWorkbenchExpanded
   let lastAccountWorkbenchExpanded = accountWorkbenchExpanded
@@ -105,14 +169,15 @@
   let accountWorkbenchOpenFrame: number | null = null
 
   $: if (
-    activeTagFilter !== 'all' &&
-    activeTagFilter !== untaggedFilterId &&
-    !tags.some((tag) => tag.id === activeTagFilter)
+    activeGroupFilter !== 'all' &&
+    activeGroupFilter !== ungroupedFilterId &&
+    !groups.some((group) => group.id === activeGroupFilter)
   ) {
-    activeTagFilter = 'all'
+    activeGroupFilter = 'all'
   }
 
-  $: visibleAccounts = visibleAccountsForFilter(accounts, activeTagFilter)
+  $: visibleAccounts = visibleAccountsForFilter(accounts, activeGroupFilter)
+  $: quotaSummary = aggregateAccountQuotas(visibleAccounts, usageByAccountId)
 
   $: {
     const nextSelectedAccountIds = normalizeSelectedAccountIds(selectedAccountIds, visibleAccounts)
@@ -137,7 +202,7 @@
   $: selectedVisibleCount = selectedAccountIds.length
   $: allVisibleSelected =
     visibleAccounts.length > 0 && selectedVisibleCount === visibleAccounts.length
-  $: showAccountFilterTools = accounts.length > 0 || tags.length > 0
+  $: showAccountFilterTools = accounts.length > 0 || groups.length > 0
   $: showAccountSelectionTools = visibleAccounts.length > 0 || selectedVisibleCount > 0
   $: if (
     usageErrorPopoverAccountId &&
@@ -181,7 +246,7 @@
     }
 
     closeAccountActionMenu()
-    closeAccountTagMenu()
+    closeAccountGroupMenu()
     usageErrorPopoverAccountId = accountId
     usageErrorPopoverAnchorRect =
       (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() ?? null
@@ -347,12 +412,17 @@
   }
 
   async function removeCurrentSelection(): Promise<void> {
-    if (!selectedAccountIds.length || loginActionBusy) {
+    if (!selectedAccountIds.length || loginActionBusy || removingSelection) {
       return
     }
 
-    await removeAccounts(selectedAccountIds)
-    clearSelectedAccounts()
+    removingSelection = true
+    try {
+      await removeAccounts(selectedAccountIds)
+      clearSelectedAccounts()
+    } finally {
+      removingSelection = false
+    }
   }
 
   function accountActionBusy(accountId: string): boolean {
@@ -396,17 +466,24 @@
     return language === 'en' ? 'More actions' : '更多操作'
   }
 
-  async function addTagToAccount(account: AccountSummary, tagId: string): Promise<void> {
-    await updateAccountTags(account, [...account.tagIds, tagId])
+  async function addGroupToAccount(account: AccountSummary, groupId: string): Promise<void> {
+    await updateAccountGroups(account, [...account.groupIds, groupId])
     closeAccountActionMenu()
-    closeAccountTagMenu()
+    closeAccountGroupMenu()
   }
 
-  async function removeTagFromAccount(account: AccountSummary, tagId: string): Promise<void> {
-    await updateAccountTags(
-      account,
-      account.tagIds.filter((id) => id !== tagId)
-    )
+  async function removeGroupFromAccount(account: AccountSummary, groupId: string): Promise<void> {
+    const linkKey = `${sortableAccountId(account)}:${groupId}`
+    if (removingGroupLink === linkKey) return
+    removingGroupLink = linkKey
+    try {
+      await updateAccountGroups(
+        account,
+        account.groupIds.filter((id) => id !== groupId)
+      )
+    } finally {
+      removingGroupLink = ''
+    }
   }
 
   function toggleAccountActionMenu(event: MouseEvent, accountId: string): void {
@@ -423,7 +500,7 @@
     }
 
     closeUsageErrorPopover()
-    closeAccountTagMenu()
+    closeAccountGroupMenu()
     accountActionMenuAnchorRect = trigger.getBoundingClientRect()
     accountActionMenuAccountId = accountId
   }
@@ -433,29 +510,29 @@
     accountActionMenuAnchorRect = null
   }
 
-  function closeAccountTagMenu(): void {
-    accountTagMenuAccountId = ''
-    accountTagMenuAnchorRect = null
+  function closeAccountGroupMenu(): void {
+    accountGroupMenuAccountId = ''
+    accountGroupMenuAnchorRect = null
   }
 
-  function openAccountTagMenuFromActionMenu(accountId: string): void {
+  function openAccountGroupMenuFromActionMenu(accountId: string): void {
     if (!accountActionMenuAnchorRect) {
       return
     }
 
-    accountTagMenuAnchorRect = accountActionMenuAnchorRect
-    accountTagMenuAccountId = accountId
+    accountGroupMenuAnchorRect = accountActionMenuAnchorRect
+    accountGroupMenuAccountId = accountId
     closeAccountActionMenu()
   }
 
   function returnToAccountActionMenu(): void {
-    if (!accountTagMenuAnchorRect || !accountTagMenuAccountId) {
+    if (!accountGroupMenuAnchorRect || !accountGroupMenuAccountId) {
       return
     }
 
-    accountActionMenuAnchorRect = accountTagMenuAnchorRect
-    accountActionMenuAccountId = accountTagMenuAccountId
-    closeAccountTagMenu()
+    accountActionMenuAnchorRect = accountGroupMenuAnchorRect
+    accountActionMenuAccountId = accountGroupMenuAccountId
+    closeAccountGroupMenu()
   }
 
   function handleSortConsider(event: CustomEvent<SortEvent<AccountSummary>>): void {
@@ -468,7 +545,7 @@
     sortDraggedAccountId = event.detail.info.id
     sortableAccounts = event.detail.items
 
-    if (activeTagFilter !== 'all') {
+    if (activeGroupFilter !== 'all') {
       sortInteractionActive = false
       sortDraggedAccountId = ''
       return
@@ -486,13 +563,13 @@
     const handlePointerDown = (event: PointerEvent): void => {
       if (!eventTargetsFloatingRoot(event)) {
         closeAccountActionMenu()
-        closeAccountTagMenu()
+        closeAccountGroupMenu()
         closeUsageErrorPopover()
       }
     }
     const handleScroll = (): void => {
       closeAccountActionMenu()
-      closeAccountTagMenu()
+      closeAccountGroupMenu()
       closeUsageErrorPopover()
     }
 
@@ -511,7 +588,7 @@
 <svelte:window
   onresize={() => {
     closeAccountActionMenu()
-    closeAccountTagMenu()
+    closeAccountGroupMenu()
     closeUsageErrorPopover()
   }}
 />
@@ -539,7 +616,7 @@
       </span>
     </div>
 
-    {#if !accountWorkbenchExpanded && (selectedVisibleCount || activeTagFilter !== 'all')}
+    {#if !accountWorkbenchExpanded && (selectedVisibleCount || activeGroupFilter !== 'all')}
       <span
         class="theme-workbench-collapsed-summary ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5"
       >
@@ -552,12 +629,13 @@
           </span>
         {/if}
 
-        {#if activeTagFilter !== 'all'}
+        {#if activeGroupFilter !== 'all'}
           <span
             class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
           >
             <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
-            <span class="max-w-[12rem] truncate">{tagFilterLabel(activeTagFilter, tags, copy)}</span
+            <span class="max-w-[12rem] truncate"
+              >{groupFilterLabel(activeGroupFilter, groups, copy)}</span
             >
           </span>
         {/if}
@@ -582,43 +660,56 @@
     >
       {#if showAccountFilterTools}
         <div class="grid gap-1.5">
-          <p class="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-            {copy.filterByTag}
-          </p>
+          <div class="flex items-center justify-between gap-2">
+            <p class="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
+              {copy.filterByGroup}
+            </p>
+            <AppButton
+              variant="secondary"
+              size="xs"
+              class="gap-1.5"
+              onclick={openGroupManager}
+              disabled={loginActionBusy || groupMutationBusy}
+              ariaLabel={copy.manageGroups}
+            >
+              <span class="i-lucide-settings-2 h-3.5 w-3.5"></span>
+              <span>{copy.manageGroups}</span>
+            </AppButton>
+          </div>
           <div class="flex flex-wrap gap-1.5">
             <AppButton
               variant="filter"
               size="xs"
-              selected={activeTagFilter === 'all'}
-              ariaPressed={activeTagFilter === 'all'}
+              selected={activeGroupFilter === 'all'}
+              ariaPressed={activeGroupFilter === 'all'}
               onclick={() => {
-                activeTagFilter = 'all'
+                activeGroupFilter = 'all'
               }}
             >
-              {filterChipLabel(accounts, 'all', tags, copy)}
+              {filterChipLabel(accounts, 'all', groups, copy)}
             </AppButton>
             <AppButton
               variant="filter"
               size="xs"
-              selected={activeTagFilter === untaggedFilterId}
-              ariaPressed={activeTagFilter === untaggedFilterId}
+              selected={activeGroupFilter === ungroupedFilterId}
+              ariaPressed={activeGroupFilter === ungroupedFilterId}
               onclick={() => {
-                activeTagFilter = untaggedFilterId
+                activeGroupFilter = ungroupedFilterId
               }}
             >
-              {filterChipLabel(accounts, untaggedFilterId, tags, copy)}
+              {filterChipLabel(accounts, ungroupedFilterId, groups, copy)}
             </AppButton>
-            {#each tags as tag (tag.id)}
+            {#each groups as group (group.id)}
               <AppButton
                 variant="filter"
                 size="xs"
-                selected={activeTagFilter === tag.id}
-                ariaPressed={activeTagFilter === tag.id}
+                selected={activeGroupFilter === group.id}
+                ariaPressed={activeGroupFilter === group.id}
                 onclick={() => {
-                  activeTagFilter = tag.id
+                  activeGroupFilter = group.id
                 }}
               >
-                {filterChipLabel(accounts, tag.id, tags, copy)}
+                {filterChipLabel(accounts, group.id, groups, copy)}
               </AppButton>
             {/each}
           </div>
@@ -641,12 +732,12 @@
               </span>
             {/if}
 
-            {#if activeTagFilter !== 'all'}
+            {#if activeGroupFilter !== 'all'}
               <span
                 class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-carbon"
               >
                 <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
-                <span>{tagFilterLabel(activeTagFilter, tags, copy)}</span>
+                <span>{groupFilterLabel(activeGroupFilter, groups, copy)}</span>
               </span>
             {/if}
           </div>
@@ -693,9 +784,13 @@
                 size="xs"
                 class="min-w-[104px]"
                 onclick={() => void removeCurrentSelection()}
-                disabled={loginActionBusy}
+                disabled={loginActionBusy || removingSelection}
               >
-                <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+                {#if removingSelection}
+                  <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+                {/if}
                 <span>{copy.deleteSelectedAccounts}</span>
               </AppButton>
             {/if}
@@ -712,6 +807,68 @@
   {/if}
 </div>
 
+{#if visibleAccounts.length && quotaSummary.totalAccounts > 0}
+  <div class="px-4 pt-3">
+    <div
+      class="theme-quota-summary flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[0.55rem] border border-black/8 bg-white px-3.5 py-2.5"
+    >
+      <span class="text-[12px] font-semibold text-carbon">{copy.quotaSummaryTitle}</span>
+
+      <div class="theme-quota-summary-row flex min-w-0 flex-1 items-center gap-3">
+        <div
+          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-black/[0.03] px-2.5 py-1.5"
+        >
+          <span class="i-lucide-timer flex-none text-[13px] text-emerald-600"></span>
+          <span class="flex-none text-[11px] font-medium text-muted-strong"
+            >{copy.quotaSummaryPrimaryLabel}</span
+          >
+          <span
+            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-black/[0.06]"
+          >
+            <span
+              class="theme-quota-summary-bar-fill absolute inset-y-0 left-0 rounded-full bg-emerald-500/80 transition-[width] duration-300 ease-out"
+              style={`width: ${quotaSummary.primary.accountCount ? quotaSummary.primary.averageRemaining : 0}%`}
+            ></span>
+          </span>
+          <span class="flex flex-none items-center gap-1 text-[11px] tabular-nums text-carbon">
+            {#if quotaSummary.primary.accountCount}
+              <span class="font-semibold">{quotaSummary.primary.averageRemaining}%</span>
+            {:else}
+              <span class="text-faint">{copy.quotaSummaryEmpty}</span>
+            {/if}
+          </span>
+        </div>
+
+        <span class="h-6 w-px flex-none bg-black/10" aria-hidden="true"></span>
+
+        <div
+          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-black/[0.03] px-2.5 py-1.5"
+        >
+          <span class="i-lucide-calendar-range flex-none text-[13px] text-sky-600"></span>
+          <span class="flex-none text-[11px] font-medium text-muted-strong"
+            >{copy.quotaSummarySecondaryLabel}</span
+          >
+          <span
+            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-black/[0.06]"
+          >
+            <span
+              class="theme-quota-summary-bar-fill absolute inset-y-0 left-0 rounded-full bg-sky-500/80 transition-[width] duration-300 ease-out"
+              style={`width: ${quotaSummary.secondary.accountCount ? quotaSummary.secondary.averageRemaining : 0}%`}
+            ></span>
+          </span>
+          <span class="flex flex-none items-center gap-1 text-[11px] tabular-nums text-carbon">
+            {#if quotaSummary.secondary.accountCount}
+              <span class="font-semibold">{quotaSummary.secondary.averageRemaining}%</span>
+            {:else}
+              <span class="text-faint">{copy.quotaSummaryEmpty}</span>
+            {/if}
+          </span>
+        </div>
+      </div>
+    </div>
+  </div>
+{/if}
+
 {#if visibleAccounts.length}
   <div class="min-h-0 flex-1 overflow-y-auto px-4">
     <div
@@ -722,8 +879,8 @@
         flipDurationMs,
         dragDisabled:
           loginActionBusy ||
-          tagMutationBusy ||
-          activeTagFilter !== 'all' ||
+          groupMutationBusy ||
+          activeGroupFilter !== 'all' ||
           sortableAccounts.length < 2,
         autoAriaDisabled: false,
         zoneItemTabIndex: -1,
@@ -745,14 +902,30 @@
           language,
           copy
         )}
-        {@const assignableTags = availableTagsForAccount(tags, account)}
+        {@const assignableGroups = availableGroupsForAccount(groups, account)}
         <article
-          class={`theme-account-row group grid items-center gap-3 px-2.5 py-2.5 md:grid-cols-[auto_minmax(0,1fr)_auto_auto] ${accountRowTone(
+          class={`theme-account-row group grid items-center gap-3 px-2.5 py-2.5 md:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] ${accountRowTone(
             actionAccount
           )}`}
           animate:flip={{ duration: flipDurationMs }}
           aria-label={accountEmail(account, copy)}
         >
+          <AppButton
+            variant="icon"
+            size="xs"
+            class={`theme-account-expand-btn ${expandedAccountIds.includes(accountId) ? 'is-expanded' : ''}`}
+            ariaLabel={expandedAccountIds.includes(accountId)
+              ? copy.accountDetailsCollapse
+              : copy.accountDetailsExpand}
+            title={expandedAccountIds.includes(accountId)
+              ? copy.accountDetailsCollapse
+              : copy.accountDetailsExpand}
+            ariaExpanded={expandedAccountIds.includes(accountId)}
+            onclick={() => toggleAccountExpanded(accountId)}
+          >
+            <span class="i-lucide-chevron-down h-4 w-4"></span>
+          </AppButton>
+
           <div class="flex items-center gap-2">
             <label
               class={`theme-account-selector inline-flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border transition-[border-color,background-color,box-shadow] duration-180 ${
@@ -771,14 +944,14 @@
               />
             </label>
             <button
-              class={`account-drag-button self-center ${activeTagFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              class={`account-drag-button self-center ${activeGroupFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
               type="button"
               use:dragHandle
               aria-label={`${copy.dragSortHandle} · ${accountEmail(account, copy)}`}
               title={copy.dragSortHandle}
               disabled={loginActionBusy ||
-                tagMutationBusy ||
-                activeTagFilter !== 'all' ||
+                groupMutationBusy ||
+                activeGroupFilter !== 'all' ||
                 sortableAccounts.length < 2}
             >
               <span class="i-lucide-grip-vertical h-4 w-4"></span>
@@ -831,20 +1004,25 @@
                 </button>
               {/if}
 
-              {#each accountTagsForDisplay(tags, account) as tag (tag.id)}
+              {#each accountGroupsForDisplay(groups, account) as group (group.id)}
+                {@const groupLinkKey = `${accountId}:${group.id}`}
                 <span
                   class="theme-tag-assigned inline-flex max-w-full items-center rounded-[0.32rem] border border-emerald-500/14 bg-emerald-500/10 px-1.75 py-0.5 text-[10px] font-medium leading-none text-emerald-700"
                 >
-                  <span class="max-w-28 truncate">{tag.name}</span>
+                  <span class="max-w-28 truncate">{group.name}</span>
                   <button
                     class="theme-tag-remove ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
                     type="button"
-                    onclick={() => void removeTagFromAccount(actionAccount, tag.id)}
-                    disabled={loginActionBusy || tagMutationBusy}
-                    aria-label={`${copy.removeTag} · ${tag.name}`}
-                    title={copy.removeTag}
+                    onclick={() => void removeGroupFromAccount(actionAccount, group.id)}
+                    disabled={loginActionBusy || groupMutationBusy}
+                    aria-label={`${copy.removeGroup} · ${group.name}`}
+                    title={copy.removeGroup}
                   >
-                    <span class="i-lucide-x h-2.5 w-2.5"></span>
+                    {#if removingGroupLink === groupLinkKey}
+                      <span class="i-lucide-loader-circle h-2.5 w-2.5 animate-spin"></span>
+                    {:else}
+                      <span class="i-lucide-x h-2.5 w-2.5"></span>
+                    {/if}
                   </button>
                 </span>
               {/each}
@@ -914,7 +1092,7 @@
           <div
             class="scroll-row flex min-w-0 flex-wrap items-center justify-start gap-1.5 overflow-x-auto self-center md:justify-end"
           >
-            {#if !usageByAccountId[accountId] || supportsWakeSessionQuota(usageByAccountId[accountId])}
+            {#if !usageByAccountId[accountId] || usageByAccountId[accountId]?.primary}
               <div
                 class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
                 title={`${copy.sessionQuota} · ${
@@ -968,7 +1146,7 @@
               </div>
             {/if}
 
-            {#if !usageByAccountId[accountId] || supportsWeeklyQuota(usageByAccountId[accountId])}
+            {#if !usageByAccountId[accountId] || usageByAccountId[accountId]?.secondary}
               <div
                 class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
                 title={`${copy.weeklyQuota} · ${
@@ -1081,7 +1259,11 @@
               ariaLabel={`${copy.refreshQuota} · ${accountEmail(account, copy)}`}
               title={copy.refreshQuota}
             >
-              <span class="i-lucide-refresh-cw h-4 w-4"></span>
+              {#if usageLoadingByAccountId[accountId]}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {:else}
+                <span class="i-lucide-refresh-cw h-4 w-4"></span>
+              {/if}
             </AppButton>
             <div class="relative" use:stopFloatingPointerPropagation data-floating-root="">
               <AppButton
@@ -1161,6 +1343,23 @@
                   <button
                     class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                     type="button"
+                    onclick={() => {
+                      openEditTokensDialog(actionAccount)
+                      closeAccountActionMenu()
+                    }}
+                    disabled={loginActionBusy}
+                  >
+                    <span
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
+                    >
+                      <span class="i-lucide-pencil h-4 w-4"></span>
+                    </span>
+                    <span class="flex-1">{copy.editAccount}</span>
+                  </button>
+
+                  <button
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    type="button"
                     onclick={() => void exportSingleAccount(actionAccount)}
                     disabled={loginActionBusy}
                   >
@@ -1189,19 +1388,19 @@
                     <span class="flex-1">{copy.deleteSaved}</span>
                   </button>
 
-                  {#if assignableTags.length}
+                  {#if assignableGroups.length}
                     <div class="mx-2 my-1.5 border-t border-[var(--color-arctic-mist)]"></div>
                     <button
                       class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
                       type="button"
-                      onclick={() => openAccountTagMenuFromActionMenu(accountId)}
+                      onclick={() => openAccountGroupMenuFromActionMenu(accountId)}
                     >
                       <span
                         class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                       >
                         <span class="i-lucide-tags h-4 w-4"></span>
                       </span>
-                      <span class="flex-1">{copy.addTag}</span>
+                      <span class="flex-1">{copy.addGroup}</span>
                       <span
                         class="i-lucide-chevron-right h-4 w-4 text-[var(--ink-faint)] transition-colors"
                       ></span>
@@ -1210,11 +1409,11 @@
                 </div>
               {/if}
 
-              {#if accountTagMenuAccountId === accountId}
+              {#if accountGroupMenuAccountId === accountId}
                 <div
                   use:portal
                   use:floatingAnchor={{
-                    anchorRect: accountTagMenuAnchorRect,
+                    anchorRect: accountGroupMenuAnchorRect,
                     minWidth: 220,
                     matchAnchorWidth: true
                   }}
@@ -1231,18 +1430,18 @@
                   >
                     <span class="i-lucide-chevron-left h-3.5 w-3.5 flex-none transition-colors"
                     ></span>
-                    {copy.addTag}
+                    {copy.addGroup}
                   </button>
                   <div class="mx-2 my-1 border-t border-[var(--color-arctic-mist)]"></div>
                   <div class="mt-1 max-h-[300px] overflow-y-auto pr-1">
-                    {#each assignableTags as tag (tag.id)}
+                    {#each assignableGroups as group (group.id)}
                       <button
                         class="theme-tag-picker-item group flex w-full appearance-none items-center justify-between gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                         type="button"
-                        onclick={() => void addTagToAccount(actionAccount, tag.id)}
-                        disabled={loginActionBusy || tagMutationBusy}
+                        onclick={() => void addGroupToAccount(actionAccount, group.id)}
+                        disabled={loginActionBusy || groupMutationBusy}
                       >
-                        <span class="flex-1 truncate">{tag.name}</span>
+                        <span class="flex-1 truncate">{group.name}</span>
                         <span
                           class="theme-tag-picker-plus inline-flex h-6 w-6 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
                         >
@@ -1255,6 +1454,22 @@
               {/if}
             </div>
           </div>
+
+          {#if expandedAccountIds.includes(accountId)}
+            <div id={`account-details-${accountId}`} class="col-span-full pt-1" data-no-dnd="true">
+              <AccountDetailsPanel
+                {copy}
+                {language}
+                account={actionAccount}
+                rateLimits={usageByAccountId[accountId]}
+                wakeSchedule={wakeSchedulesByAccountId[accountId]}
+                tokens={tokensByAccountId[accountId] ?? null}
+                tokensLoading={tokensLoadingAccountId === accountId}
+                tokensError={tokensErrorByAccountId[accountId] ?? ''}
+                onReloadTokens={() => void loadTokensForAccount(accountId)}
+              />
+            </div>
+          {/if}
 
           {#if accountIndex < sortableAccounts.length - 1}
             <div class="theme-account-divider col-span-full"></div>
@@ -1284,6 +1499,14 @@
   .theme-account-divider {
     height: 1px;
     background: rgba(24, 24, 27, 0.08);
+  }
+
+  .theme-account-expand-btn :global(.i-lucide-chevron-down) {
+    transition: transform 180ms ease;
+  }
+
+  .theme-account-expand-btn.is-expanded :global(.i-lucide-chevron-down) {
+    transform: rotate(180deg);
   }
 
   .theme-selection-toolbar-idle,
@@ -1417,6 +1640,23 @@
 
   .theme-reset-time-neutral {
     color: var(--ink-soft-strong);
+  }
+
+  .theme-quota-summary {
+    background: color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft));
+  }
+
+  .theme-quota-summary-bar {
+    background: color-mix(in srgb, var(--color-carbon) 8%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .theme-quota-summary {
+    background: var(--panel-strong) !important;
+    border-color: var(--color-arctic-mist) !important;
+  }
+
+  :global(html[data-theme='dark']) .theme-quota-summary-bar {
+    background: color-mix(in srgb, var(--color-snow) 14%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .account-drag-button {

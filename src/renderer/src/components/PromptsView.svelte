@@ -64,6 +64,8 @@
   let lightbox: { url: string; name: string } | null = null
   let saving = false
   let copiedId = ''
+  let deletingPromptId = ''
+  let removingCategoryName = ''
   let showCategoryManager = false
   let newCategoryName = ''
   let renamingCategory = ''
@@ -164,12 +166,16 @@
 
   async function deletePrompt(prompt: PromptSummary): Promise<void> {
     if (!window.confirm(copy.promptsDeleteConfirm(prompt.title))) return
+    if (deletingPromptId) return
+    deletingPromptId = prompt.id
     try {
       await removePrompt(prompt.id)
       backToList()
       await refresh()
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to delete'
+    } finally {
+      deletingPromptId = ''
     }
   }
 
@@ -210,6 +216,8 @@
 
   async function doRemoveCategory(name: string): Promise<void> {
     if (!window.confirm(copy.promptsCategoryRemoveConfirm(name))) return
+    if (removingCategoryName) return
+    removingCategoryName = name
     try {
       const result = await removePromptCategory(name)
       categories = result.categories
@@ -217,6 +225,8 @@
       await refresh()
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to remove category'
+    } finally {
+      removingCategoryName = ''
     }
   }
 
@@ -314,7 +324,8 @@
       editAttachments = [...detail.attachments]
       const previewUrl = attachmentPreviews[fileName]
       if (previewUrl?.startsWith('blob:')) URL.revokeObjectURL(previewUrl)
-      const { [fileName]: _removed, ...rest } = attachmentPreviews
+      const rest = { ...attachmentPreviews }
+      delete rest[fileName]
       attachmentPreviews = rest
     } catch (e) {
       error = e instanceof Error ? e.message : 'Failed to remove image'
@@ -338,10 +349,6 @@
 
   function closeLightbox(): void {
     lightbox = null
-  }
-
-  function handleLightboxBackdropClick(event: MouseEvent): void {
-    if (event.target === event.currentTarget) closeLightbox()
   }
 
   function handleLightboxKey(event: KeyboardEvent): void {
@@ -553,8 +560,13 @@
                   size="xs"
                   ariaLabel={copy.promptsDelete}
                   onclick={() => void deletePrompt(prompt)}
+                  disabled={deletingPromptId === prompt.id}
                 >
-                  <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+                  {#if deletingPromptId === prompt.id}
+                    <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+                  {:else}
+                    <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+                  {/if}
                 </AppButton>
               </div>
             </article>
@@ -679,10 +691,15 @@
                     variant="icon"
                     size="xs"
                     onclick={() => void doRemoveCategory(cat)}
+                    disabled={removingCategoryName === cat}
                     ariaLabel={copy.promptsCategoryRemove}
                     title={copy.promptsCategoryRemove}
                   >
-                    <span class="i-lucide-trash-2 h-4 w-4"></span>
+                    {#if removingCategoryName === cat}
+                      <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                    {:else}
+                      <span class="i-lucide-trash-2 h-4 w-4"></span>
+                    {/if}
                   </AppButton>
                 {/if}
               {/if}
@@ -946,40 +963,19 @@
 {/if}
 
 {#if lightbox}
-  <div
-    class="prompts-lightbox"
-    role="dialog"
-    aria-modal="true"
-    aria-label={lightbox.name}
-    tabindex="-1"
-    onclick={handleLightboxBackdropClick}
-    onkeydown={handleLightboxKey}
+  <AppDialog
+    ariaLabel={lightbox.name}
+    maxWidthClass="max-w-[min(92vw,72rem)]"
+    maxHeightClass="max-h-[calc(100vh-2rem)]"
+    panelClass="prompts-lightbox-panel p-2 sm:p-2"
+    backdropClass="prompts-lightbox-backdrop"
+    zIndexClass="z-[80]"
+    closeLabel={copy.closeDialog}
+    showClose
+    onclose={closeLightbox}
   >
     <img src={lightbox.url} alt={lightbox.name} class="prompts-lightbox-image" />
-    <button
-      type="button"
-      class="prompts-lightbox-close"
-      onclick={closeLightbox}
-      aria-label={copy.closeDialog}
-      title={copy.closeDialog}
-    >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        width="20"
-        height="20"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="2"
-        stroke-linecap="round"
-        stroke-linejoin="round"
-        aria-hidden="true"
-      >
-        <path d="M18 6 6 18" />
-        <path d="m6 6 12 12" />
-      </svg>
-    </button>
-  </div>
+  </AppDialog>
 {/if}
 
 <style>
@@ -1095,52 +1091,23 @@
     cursor: default;
   }
 
-  .prompts-lightbox {
-    position: fixed;
-    inset: 0;
-    z-index: 120;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 3rem;
-    background: rgba(12, 16, 24, 0.82);
+  :global(.prompts-lightbox-backdrop) {
+    background: rgba(12, 16, 24, 0.82) !important;
     backdrop-filter: blur(6px);
-    cursor: zoom-out;
+  }
+
+  :global(.prompts-lightbox-panel) {
+    background: rgba(0, 0, 0, 0.24) !important;
+    border-color: rgba(255, 255, 255, 0.18) !important;
+    box-shadow: 0 28px 72px -20px rgba(0, 0, 0, 0.6) !important;
   }
 
   .prompts-lightbox-image {
-    max-width: 96vw;
-    max-height: 92vh;
-    border-radius: 0.5rem;
-    box-shadow: 0 28px 72px -20px rgba(0, 0, 0, 0.6);
-    cursor: default;
-  }
-
-  .prompts-lightbox-close {
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    width: 2.25rem;
-    height: 2.25rem;
-    padding: 0;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    border: 0;
-    border-radius: 999px;
-    background: rgba(255, 255, 255, 0.18);
-    color: white;
-    cursor: pointer;
-    transition: background-color 140ms ease;
-  }
-
-  .prompts-lightbox-close:hover,
-  .prompts-lightbox-close:focus-visible {
-    background: rgba(255, 255, 255, 0.32);
-  }
-
-  .prompts-lightbox-close svg {
     display: block;
+    max-width: min(88vw, 72rem);
+    max-height: calc(100vh - 7rem);
+    border-radius: 0.5rem;
+    cursor: default;
   }
 
   .prompts-attachment-caption {

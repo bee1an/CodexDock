@@ -5,11 +5,13 @@ import { dirname, join } from 'node:path'
 import type {
   AccountRateLimits,
   AccountSummary,
-  AccountTag,
+  AccountGroup,
+  AccountTokensDetail,
   AccountWakeSchedule,
   AppSettings,
   AppSnapshot,
   CurrentSessionSummary,
+  UpdateAccountTokensInput,
   UpdateAccountWakeScheduleInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
@@ -24,16 +26,28 @@ import {
   type PersistedAccount,
   type PersistedState,
   defaultState,
-  dedupeAccountTagIds,
+  dedupeAccountGroupIds,
   describeError,
   findMatchingAccount,
   normalizePersistedState,
-  normalizeTagName,
+  normalizeGroupName,
   normalizeWakeSchedule,
   resolveAccountId,
   summarizeAuth,
   toAccountSummary
 } from './codex-auth-shared'
+
+function normalizeTokenInput(
+  value: string | undefined,
+  fallback: string | undefined
+): string | undefined {
+  if (value === undefined) {
+    return fallback
+  }
+
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
 
 export class CodexAccountStore {
   private readonly stateFile: string
@@ -65,7 +79,7 @@ export class CodexAccountStore {
       return {
         accounts: state.accounts.map((account) => this.toAccountSummary(account)),
         providers: [],
-        tags: state.tags,
+        groups: state.groups,
         codexInstances: [],
         codexInstanceDefaults: {
           rootDir: '',
@@ -286,82 +300,95 @@ export class CodexAccountStore {
     })
   }
 
-  async createTag(name: string): Promise<AccountTag> {
+  async createGroup(name: string): Promise<AccountGroup> {
     return this.runStateTask(async () => {
       const state = await this.readState()
-      const normalizedName = normalizeTagName(name)
+      const normalizedName = normalizeGroupName(name)
 
       if (!normalizedName) {
-        throw new Error('Tag name is required.')
+        throw new Error('Group name is required.')
       }
 
       if (
-        state.tags.some(
-          (tag) =>
-            tag.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
+        state.groups.some(
+          (group) =>
+            group.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
         )
       ) {
-        throw new Error('Tag name already exists.')
+        throw new Error('Group name already exists.')
       }
 
       const now = new Date().toISOString()
-      const tag: AccountTag = {
+      const group: AccountGroup = {
         id: randomUUID(),
         name: normalizedName,
         createdAt: now,
         updatedAt: now
       }
 
-      state.tags = [...state.tags, tag]
+      state.groups = [...state.groups, group]
       await this.writeState(state)
-      return tag
+      return group
     })
   }
 
-  async updateTag(tagId: string, name: string): Promise<AccountTag> {
+  async updateGroup(groupId: string, name: string): Promise<AccountGroup> {
     return this.runStateTask(async () => {
       const state = await this.readState()
-      const tag = state.tags.find((item) => item.id === tagId)
-      const normalizedName = normalizeTagName(name)
+      const group = state.groups.find((item) => item.id === groupId)
+      const normalizedName = normalizeGroupName(name)
 
-      if (!tag) {
-        throw new Error('Tag not found.')
+      if (!group) {
+        throw new Error('Group not found.')
       }
 
       if (!normalizedName) {
-        throw new Error('Tag name is required.')
+        throw new Error('Group name is required.')
       }
 
       if (
-        state.tags.some(
+        state.groups.some(
           (item) =>
-            item.id !== tagId &&
+            item.id !== groupId &&
             item.name.localeCompare(normalizedName, undefined, { sensitivity: 'accent' }) === 0
         )
       ) {
-        throw new Error('Tag name already exists.')
+        throw new Error('Group name already exists.')
       }
 
-      tag.name = normalizedName
-      tag.updatedAt = new Date().toISOString()
+      group.name = normalizedName
+      group.updatedAt = new Date().toISOString()
       await this.writeState(state)
-      return tag
+      return group
     })
   }
 
-  async deleteTag(tagId: string): Promise<void> {
+  async deleteGroup(groupId: string): Promise<void> {
     await this.runStateTask(async () => {
       const state = await this.readState()
 
-      if (!state.tags.some((tag) => tag.id === tagId)) {
-        throw new Error('Tag not found.')
+      if (!state.groups.some((group) => group.id === groupId)) {
+        throw new Error('Group not found.')
       }
 
-      state.tags = state.tags.filter((tag) => tag.id !== tagId)
+      state.groups = state.groups.filter((group) => group.id !== groupId)
       state.accounts = state.accounts.map((account) => ({
         ...account,
-        tagIds: account.tagIds.filter((item) => item !== tagId)
+        groupIds: account.groupIds.filter((item) => item !== groupId)
       }))
+      const gateway = state.settings.localGateway
+      if (gateway && Array.isArray(gateway.allowedGroupIds) && gateway.allowedGroupIds.length) {
+        const nextAllowed = gateway.allowedGroupIds.filter((item) => item !== groupId)
+        if (nextAllowed.length !== gateway.allowedGroupIds.length) {
+          state.settings = {
+            ...state.settings,
+            localGateway: normalizeLocalGatewaySettings({
+              ...gateway,
+              allowedGroupIds: nextAllowed
+            })
+          }
+        }
+      }
 
       await this.writeState(state)
     })
@@ -571,7 +598,7 @@ export class CodexAccountStore {
       existing.accountId = summary.accountId
       existing.subscriptionExpiresAt =
         summary.subscriptionExpiresAt ?? existing.subscriptionExpiresAt
-      existing.tagIds = dedupeAccountTagIds(existing.tagIds ?? [])
+      existing.groupIds = dedupeAccountGroupIds(existing.groupIds ?? [])
       existing.updatedAt = now
       existing.authPayload = this.protect(rawAuth)
       state.activeAccountId = identity
@@ -603,7 +630,27 @@ export class CodexAccountStore {
     })
   }
 
-  async updateAccountTags(accountId: string, tagIds: string[]): Promise<void> {
+  async getAccountTokens(accountId: string): Promise<AccountTokensDetail> {
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const account = state.accounts.find((item) => item.id === accountId)
+
+      if (!account) {
+        throw new Error('Account not found.')
+      }
+
+      const auth = JSON.parse(this.unprotect(account.authPayload)) as CodexAuthPayload
+      const tokens = auth.tokens ?? {}
+      return {
+        accessToken: tokens.access_token,
+        refreshToken: tokens.refresh_token,
+        idToken: tokens.id_token,
+        accountId: tokens.account_id
+      }
+    })
+  }
+
+  async updateAccountGroups(accountId: string, groupIds: string[]): Promise<void> {
     await this.runStateTask(async () => {
       const state = await this.readState()
       const account = state.accounts.find((item) => item.id === accountId)
@@ -612,14 +659,125 @@ export class CodexAccountStore {
         throw new Error('Account not found.')
       }
 
-      const nextTagIds = dedupeAccountTagIds(tagIds)
-      if (!nextTagIds.every((tagId) => state.tags.some((tag) => tag.id === tagId))) {
-        throw new Error('One or more tags do not exist.')
+      const nextGroupIds = dedupeAccountGroupIds(groupIds)
+      if (!nextGroupIds.every((groupId) => state.groups.some((group) => group.id === groupId))) {
+        throw new Error('One or more groups do not exist.')
       }
 
-      account.tagIds = nextTagIds
+      account.groupIds = nextGroupIds
       account.updatedAt = new Date().toISOString()
       await this.writeState(state)
+    })
+  }
+
+  async updateAccountTokens(
+    accountId: string,
+    input: UpdateAccountTokensInput
+  ): Promise<AccountSummary> {
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      const existing = state.accounts.find((item) => item.id === accountId)
+
+      if (!existing) {
+        throw new Error('Account not found.')
+      }
+
+      const currentAuth = JSON.parse(this.unprotect(existing.authPayload)) as CodexAuthPayload
+      const previousTokens = currentAuth.tokens ?? {}
+
+      const nextAccessToken = normalizeTokenInput(input.accessToken, previousTokens.access_token)
+      const nextRefreshToken = normalizeTokenInput(input.refreshToken, previousTokens.refresh_token)
+      const nextIdToken = normalizeTokenInput(input.idToken, previousTokens.id_token)
+      const nextAccountIdHint = normalizeTokenInput(input.accountId, previousTokens.account_id)
+
+      if (!nextAccessToken && !nextRefreshToken && !nextIdToken) {
+        throw new Error('At least one of access_token, refresh_token, or id_token is required.')
+      }
+
+      const nextAuth: CodexAuthPayload = {
+        ...currentAuth,
+        auth_mode: currentAuth.auth_mode ?? 'chatgpt',
+        last_refresh: new Date().toISOString(),
+        tokens: {
+          ...previousTokens,
+          access_token: nextAccessToken,
+          refresh_token: nextRefreshToken,
+          id_token: nextIdToken,
+          account_id: nextAccountIdHint
+        }
+      }
+
+      const previousId = existing.id
+      const identity = resolveAccountId(nextAuth)
+      const summary = summarizeAuth(nextAuth)
+      const now = new Date().toISOString()
+      const payload = this.protect(JSON.stringify(nextAuth))
+
+      if (previousId !== identity) {
+        if (state.accounts.some((item) => item.id === identity)) {
+          throw new Error(
+            'Token payload matches another saved account. Remove the duplicate first.'
+          )
+        }
+
+        if (state.activeAccountId === previousId) {
+          state.activeAccountId = identity
+        }
+
+        state.settings.statusBarAccountIds = state.settings.statusBarAccountIds.map((storedId) =>
+          storedId === previousId ? identity : storedId
+        )
+
+        if (state.usageByAccountId[previousId]) {
+          state.usageByAccountId = {
+            ...state.usageByAccountId,
+            [identity]: state.usageByAccountId[previousId]
+          }
+          delete state.usageByAccountId[previousId]
+        }
+
+        if (state.usageErrorByAccountId[previousId]) {
+          state.usageErrorByAccountId = {
+            ...state.usageErrorByAccountId,
+            [identity]: state.usageErrorByAccountId[previousId]
+          }
+          delete state.usageErrorByAccountId[previousId]
+        }
+
+        if (state.wakeSchedulesByAccountId[previousId]) {
+          state.wakeSchedulesByAccountId = {
+            ...state.wakeSchedulesByAccountId,
+            [identity]: state.wakeSchedulesByAccountId[previousId]
+          }
+          delete state.wakeSchedulesByAccountId[previousId]
+        }
+      }
+
+      existing.id = identity
+      existing.email = summary.email ?? existing.email
+      existing.name = summary.name ?? existing.name
+      existing.accountId = summary.accountId ?? existing.accountId
+      existing.subscriptionExpiresAt =
+        summary.subscriptionExpiresAt ?? existing.subscriptionExpiresAt
+      existing.groupIds = dedupeAccountGroupIds(existing.groupIds ?? [])
+      existing.updatedAt = now
+      existing.authPayload = payload
+
+      if (state.usageErrorByAccountId[identity]) {
+        delete state.usageErrorByAccountId[identity]
+      }
+
+      await this.writeState(state)
+
+      if (state.activeAccountId === identity) {
+        try {
+          await this.writeCodexAuthFile(nextAuth)
+        } catch (error) {
+          console.warn(`Failed to sync updated auth to codex auth file: ${describeError(error)}`)
+        }
+      }
+
+      return this.toAccountSummary(existing)
     })
   }
 
@@ -755,7 +913,7 @@ export class CodexAccountStore {
       existing.name = summary.name
       existing.accountId = summary.accountId
       existing.subscriptionExpiresAt = subscriptionExpiresAt
-      existing.tagIds = dedupeAccountTagIds(existing.tagIds ?? [])
+      existing.groupIds = dedupeAccountGroupIds(existing.groupIds ?? [])
       existing.updatedAt = now
       existing.authPayload = payload
       if (makeActive) {
@@ -768,7 +926,7 @@ export class CodexAccountStore {
         name: summary.name,
         accountId: summary.accountId,
         subscriptionExpiresAt,
-        tagIds: [],
+        groupIds: [],
         createdAt: now,
         updatedAt: now,
         lastUsedAt: makeActive ? now : undefined,

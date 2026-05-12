@@ -12,7 +12,7 @@ import type {
 function createAccount(id: string, overrides: Partial<AccountSummary> = {}): AccountSummary {
   return {
     id,
-    tagIds: [],
+    groupIds: [],
     createdAt: '2026-03-01T00:00:00.000Z',
     updatedAt: '2026-03-01T00:00:00.000Z',
     ...overrides
@@ -71,7 +71,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
   return {
     accounts: [createAccount('a', { email: 'a@example.com' })],
     providers: [],
-    tags: [],
+    groups: [],
     codexInstances: [],
     codexInstanceDefaults: {
       rootDir: '/tmp/codex-instance-homes',

@@ -196,7 +196,7 @@ function renderSessionsView(
         targetInstanceId: 'provider-target-instance',
         targetInstanceName: 'Provider Target Provider',
         targetCodexHome: '/tmp/target',
-        targetFilePath: '/tmp/target/sessions/imported/default.imported.jsonl',
+        targetFilePath: '/tmp/target/sessions/2026/04/22/default.jsonl',
         targetModelProvider: 'custom',
         targetModel: 'gpt-5.4-mini',
         session: sessionResult.sessions[0]!
@@ -332,7 +332,7 @@ describe('SessionsView', () => {
       targetInstanceId: 'provider-target-instance',
       targetInstanceName: 'Provider Target Provider',
       targetCodexHome: '/tmp/target',
-      targetFilePath: '/tmp/target/sessions/imported/default.imported.jsonl',
+      targetFilePath: '/tmp/target/sessions/2026/04/22/default.jsonl',
       targetModelProvider: 'custom',
       targetModel: 'gpt-5.4-mini',
       session: sessionResult.sessions[0]!
@@ -380,7 +380,7 @@ describe('SessionsView', () => {
       targetInstanceId: '__default__',
       targetInstanceName: 'Default',
       targetCodexHome: '/Users/bee/.codex',
-      targetFilePath: '/Users/bee/.codex/sessions/imported/default.imported.jsonl',
+      targetFilePath: '/Users/bee/.codex/sessions/2026/04/22/default.jsonl',
       targetModelProvider: 'custom',
       targetModel: 'gpt-5.4-mini',
       session: defaultProviderSession
@@ -446,7 +446,7 @@ describe('SessionsView', () => {
       targetInstanceId: '__default__',
       targetInstanceName: 'Default',
       targetCodexHome: '/Users/bee/.codex',
-      targetFilePath: '/Users/bee/.codex/sessions/imported/default.imported.jsonl',
+      targetFilePath: '/Users/bee/.codex/sessions/2026/04/22/default.jsonl',
       targetModelProvider: 'custom',
       targetModel: 'gpt-5.4-mini',
       session: sessionResult.sessions[0]!

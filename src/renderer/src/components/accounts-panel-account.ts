@@ -1,22 +1,22 @@
-import type { AccountSummary, AccountTag } from '../../../shared/codex'
+import type { AccountSummary, AccountGroup } from '../../../shared/codex'
 
 import type { LocalizedCopy } from './app-view'
 
-export const untaggedFilterId = '__untagged__'
+export const ungroupedFilterId = '__ungrouped__'
 
 export function visibleAccountsForFilter(
   accounts: AccountSummary[],
-  activeTagFilter: string
+  activeGroupFilter: string
 ): AccountSummary[] {
-  if (activeTagFilter === 'all') {
+  if (activeGroupFilter === 'all') {
     return accounts
   }
 
-  if (activeTagFilter === untaggedFilterId) {
-    return accounts.filter((account) => account.tagIds.length === 0)
+  if (activeGroupFilter === ungroupedFilterId) {
+    return accounts.filter((account) => account.groupIds.length === 0)
   }
 
-  return accounts.filter((account) => account.tagIds.includes(activeTagFilter))
+  return accounts.filter((account) => account.groupIds.includes(activeGroupFilter))
 }
 
 export function normalizeSelectedAccountIds(
@@ -27,50 +27,60 @@ export function normalizeSelectedAccountIds(
   return selectedAccountIds.filter((accountId) => visibleAccountIds.has(accountId))
 }
 
-export function accountTagsForDisplay(tags: AccountTag[], account: AccountSummary): AccountTag[] {
-  return tags.filter((tag) => account.tagIds.includes(tag.id))
+export function accountGroupsForDisplay(
+  groups: AccountGroup[],
+  account: AccountSummary
+): AccountGroup[] {
+  return groups.filter((group) => account.groupIds.includes(group.id))
 }
 
-export function availableTagsForAccount(tags: AccountTag[], account: AccountSummary): AccountTag[] {
-  return tags.filter((tag) => !account.tagIds.includes(tag.id))
+export function availableGroupsForAccount(
+  groups: AccountGroup[],
+  account: AccountSummary
+): AccountGroup[] {
+  return groups.filter((group) => !account.groupIds.includes(group.id))
 }
 
-export function accountFilterCount(accounts: AccountSummary[], tagId: string): number {
-  if (tagId === 'all') {
+export function accountFilterCount(accounts: AccountSummary[], groupId: string): number {
+  if (groupId === 'all') {
     return accounts.length
   }
 
-  if (tagId === untaggedFilterId) {
-    return accounts.filter((account) => account.tagIds.length === 0).length
+  if (groupId === ungroupedFilterId) {
+    return accounts.filter((account) => account.groupIds.length === 0).length
   }
 
-  return accounts.filter((account) => account.tagIds.includes(tagId)).length
+  return accounts.filter((account) => account.groupIds.includes(groupId)).length
 }
 
-export function tagFilterLabel(tagId: string, tags: AccountTag[], copy: LocalizedCopy): string {
-  if (tagId === 'all') {
-    return copy.allTags
+export function groupFilterLabel(
+  groupId: string,
+  groups: AccountGroup[],
+  copy: LocalizedCopy
+): string {
+  if (groupId === 'all') {
+    return copy.allGroups
   }
 
-  if (tagId === untaggedFilterId) {
-    return copy.untagged
+  if (groupId === ungroupedFilterId) {
+    return copy.ungrouped
   }
 
-  return tags.find((tag) => tag.id === tagId)?.name ?? copy.allTags
+  return groups.find((group) => group.id === groupId)?.name ?? copy.allGroups
 }
 
 export function filterChipLabel(
   accounts: AccountSummary[],
-  tagId: string,
-  tags: AccountTag[],
+  groupId: string,
+  groups: AccountGroup[],
   copy: LocalizedCopy
 ): string {
-  const label = tagFilterLabel(tagId, tags, copy)
-  const count = accountFilterCount(accounts, tagId)
+  const label = groupFilterLabel(groupId, groups, copy)
+  const count = accountFilterCount(accounts, groupId)
 
   return count > 0 ? `${label} · ${count}` : label
 }
 
-export function taggedAccountCount(accounts: AccountSummary[], tagId: string): number {
-  return accounts.filter((account) => account.tagIds.includes(tagId)).length
+export function groupMemberCount(accounts: AccountSummary[], groupId: string): number {
+  return accounts.filter((account) => account.groupIds.includes(groupId)).length
 }

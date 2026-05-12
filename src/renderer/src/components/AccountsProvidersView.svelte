@@ -1,10 +1,16 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
   import { dragHandle, dragHandleZone, type DndEvent as SortEvent } from 'svelte-dnd-action'
-  import type { CustomProviderSummary } from '../../../shared/codex'
+  import type {
+    CreateCustomProviderInput,
+    CustomProviderSummary,
+    ProbeProviderModelsInput,
+    ProviderModelsProbeResult
+  } from '../../../shared/codex'
   import { providerLabel, type LocalizedCopy } from './app-view'
   import type { ProviderDraft } from './accounts-panel-provider'
   import AppButton from './AppButton.svelte'
+  import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
 
@@ -18,6 +24,10 @@
   export let providerDrafts: Record<string, ProviderDraft> = {}
   export let openingProviderId = ''
   export let providerActionBusy: (providerId: string) => boolean = () => false
+  export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
+  export let probeProviderModels: (
+    input: ProbeProviderModelsInput
+  ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
   export let startEditingProvider: (provider: CustomProviderSummary) => Promise<void>
   export let saveProvider: (provider: CustomProviderSummary) => Promise<void>
@@ -29,7 +39,122 @@
   export let handleProviderSortFinalize: (
     event: CustomEvent<SortEvent<CustomProviderSummary>>
   ) => Promise<void>
+
+  let savingProviderId = ''
+  let removingProviderId = ''
+  let showCreateDialog = false
+  let creatingProvider = false
+  let probingModels = false
+  let probeError = ''
+  let probedModels: string[] = []
+  let newProviderName = ''
+  let newProviderBaseUrl = ''
+  let newProviderApiKey = ''
+  let newProviderModel = '5.4'
+
+  function resetCreateDialog(): void {
+    creatingProvider = false
+    probingModels = false
+    probeError = ''
+    probedModels = []
+    newProviderName = ''
+    newProviderBaseUrl = ''
+    newProviderApiKey = ''
+    newProviderModel = '5.4'
+  }
+
+  function openCreateDialog(): void {
+    resetCreateDialog()
+    showCreateDialog = true
+  }
+
+  function closeCreateDialog(): void {
+    if (creatingProvider || probingModels) return
+    showCreateDialog = false
+    resetCreateDialog()
+  }
+
+  async function handleProbeModels(): Promise<void> {
+    const baseUrl = newProviderBaseUrl.trim()
+    const apiKey = newProviderApiKey.trim()
+    if (!baseUrl || !apiKey || probingModels || creatingProvider) return
+    probingModels = true
+    probeError = ''
+    probedModels = []
+    try {
+      const result = await probeProviderModels({ baseUrl, apiKey, protocol: 'openai' })
+      probedModels = result.availableModels
+      if (result.availableModels.length && (!newProviderModel.trim() || newProviderModel === '5.4')) {
+        newProviderModel = result.availableModels[0]
+      }
+      if (!result.ok) {
+        probeError = result.error || copy.providerModelProbeFailed
+      }
+    } catch (error) {
+      probeError = error instanceof Error ? error.message : copy.providerModelProbeFailed
+    } finally {
+      probingModels = false
+    }
+  }
+
+  async function handleCreateProvider(): Promise<void> {
+    const baseUrl = newProviderBaseUrl.trim()
+    const apiKey = newProviderApiKey.trim()
+    if (!baseUrl || !apiKey || creatingProvider || probingModels) return
+
+    creatingProvider = true
+    try {
+      await createProvider({
+        name: newProviderName.trim() || undefined,
+        baseUrl,
+        apiKey,
+        protocol: 'openai',
+        model: newProviderModel.trim() || '5.4'
+      })
+      showCreateDialog = false
+      resetCreateDialog()
+    } finally {
+      creatingProvider = false
+    }
+  }
+
+  async function handleSaveProvider(provider: CustomProviderSummary): Promise<void> {
+    if (savingProviderId) return
+    savingProviderId = provider.id
+    try {
+      await saveProvider(provider)
+    } finally {
+      savingProviderId = ''
+    }
+  }
+
+  async function handleRemoveProvider(provider: CustomProviderSummary): Promise<void> {
+    if (removingProviderId) return
+    removingProviderId = provider.id
+    try {
+      await confirmRemoveProvider(provider)
+    } finally {
+      removingProviderId = ''
+    }
+  }
 </script>
+
+<div class="flex flex-none items-center justify-between gap-3 px-4 pb-3">
+  <div class="min-w-0">
+    <p class="text-sm font-semibold text-carbon">{copy.createProvider}</p>
+    <p class="mt-0.5 text-xs text-muted-strong">{copy.providerCreateDialogDescription}</p>
+  </div>
+  <AppButton
+    variant="primary"
+    size="sm"
+    onclick={openCreateDialog}
+    disabled={loginActionBusy || providerMutationBusy}
+    ariaLabel={copy.createProvider}
+  >
+    <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
+    <span>{copy.createProvider}</span>
+  </AppButton>
+</div>
 
 {#if providers.length}
   <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
@@ -158,12 +283,16 @@
               <AppButton
                 variant="icon"
                 size="xs"
-                onclick={() => void saveProvider(provider)}
+                onclick={() => void handleSaveProvider(provider)}
                 disabled={loginActionBusy || providerMutationBusy}
                 ariaLabel={`${copy.saveProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.saveProvider}
               >
-                <span class="i-lucide-check h-4 w-4"></span>
+                {#if savingProviderId === provider.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-check h-4 w-4"></span>
+                {/if}
               </AppButton>
               <AppButton
                 variant="icon"
@@ -203,12 +332,16 @@
               <AppButton
                 variant="icon"
                 size="xs"
-                onclick={() => void confirmRemoveProvider(provider)}
+                onclick={() => void handleRemoveProvider(provider)}
                 disabled={loginActionBusy || providerMutationBusy}
                 ariaLabel={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
                 title={copy.deleteProvider}
               >
-                <span class="i-lucide-trash-2 h-4 w-4"></span>
+                {#if removingProviderId === provider.id}
+                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                {:else}
+                  <span class="i-lucide-trash-2 h-4 w-4"></span>
+                {/if}
               </AppButton>
             {/if}
           </div>
@@ -222,6 +355,126 @@
   >
     <p class="text-sm text-muted-strong">{copy.noProviders}</p>
   </div>
+{/if}
+
+{#if showCreateDialog}
+  <AppDialog
+    title={copy.createProvider}
+    description={copy.providerCreateDialogDescription}
+    closeLabel={copy.closeDialog}
+    showClose
+    scrollable
+    closeDisabled={creatingProvider || probingModels}
+    maxWidthClass="max-w-2xl"
+    onclose={closeCreateDialog}
+  >
+    <div class="grid gap-4">
+      <div class="grid gap-3 md:grid-cols-2" data-dialog-motion>
+        <AppInput
+          bind:value={newProviderName}
+          placeholder={copy.providerNamePlaceholder}
+          disabled={creatingProvider || probingModels}
+        />
+        <AppInput
+          bind:value={newProviderBaseUrl}
+          placeholder={copy.providerBaseUrlPlaceholder}
+          disabled={creatingProvider || probingModels}
+        />
+        <AppInput
+          type="password"
+          bind:value={newProviderApiKey}
+          placeholder={copy.providerApiKeyPlaceholder}
+          disabled={creatingProvider || probingModels}
+          onkeydown={(event) => {
+            if (event.key === 'Enter') {
+              void handleProbeModels()
+            }
+          }}
+        />
+        <AppInput
+          bind:value={newProviderModel}
+          placeholder={copy.providerModelPlaceholder}
+          disabled={creatingProvider}
+          onkeydown={(event) => {
+            if (event.key === 'Enter') {
+              void handleCreateProvider()
+            }
+          }}
+        />
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2" data-dialog-motion>
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={() => void handleProbeModels()}
+          disabled={creatingProvider ||
+            probingModels ||
+            !newProviderBaseUrl.trim() ||
+            !newProviderApiKey.trim()}
+        >
+          <span
+            class={`${probingModels ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-list-search'} h-3.5 w-3.5`}
+            aria-hidden="true"
+          ></span>
+          <span>{probingModels ? copy.providerModelProbeLoading : copy.providerModelProbe}</span>
+        </AppButton>
+        {#if probedModels.length}
+          <span class="text-xs text-muted-strong">
+            {copy.providerModelProbeFound(probedModels.length)}
+          </span>
+        {/if}
+      </div>
+
+      {#if probeError}
+        <p class="text-sm text-danger" role="alert" data-dialog-motion>{probeError}</p>
+      {/if}
+
+      {#if probedModels.length}
+        <div class="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto pr-1" data-dialog-motion>
+          {#each probedModels as model (model)}
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected={newProviderModel === model}
+              ariaPressed={newProviderModel === model}
+              onclick={() => {
+                newProviderModel = model
+              }}
+            >
+              <span class="font-mono">{model}</span>
+            </AppButton>
+          {/each}
+        </div>
+      {/if}
+    </div>
+
+    <svelte:fragment slot="footer">
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={closeCreateDialog}
+        disabled={creatingProvider || probingModels}
+      >
+        {copy.cancel}
+      </AppButton>
+      <AppButton
+        variant="primary"
+        size="sm"
+        onclick={() => void handleCreateProvider()}
+        disabled={creatingProvider ||
+          probingModels ||
+          !newProviderBaseUrl.trim() ||
+          !newProviderApiKey.trim()}
+      >
+        <span
+          class={`${creatingProvider ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-3.5 w-3.5`}
+          aria-hidden="true"
+        ></span>
+        <span>{copy.createProvider}</span>
+      </AppButton>
+    </svelte:fragment>
+  </AppDialog>
 {/if}
 
 <style>

@@ -1,5 +1,5 @@
 import type {
-  AccountTag,
+  AccountGroup,
   AccountSummary,
   AppSnapshot,
   CliLoginResult,
@@ -151,13 +151,13 @@ function getSnapshotAccount(snapshot: AppSnapshot, accountId: string): AccountSu
   return account
 }
 
-function getSnapshotTag(snapshot: AppSnapshot, tagId: string): AccountTag {
-  const tag = snapshot.tags.find((item) => item.id === tagId)
-  if (!tag) {
-    throw new CliError(`Unknown tag-id: ${tagId}`, EXIT_USAGE)
+function getSnapshotGroup(snapshot: AppSnapshot, groupId: string): AccountGroup {
+  const group = snapshot.groups.find((item) => item.id === groupId)
+  if (!group) {
+    throw new CliError(`Unknown group-id: ${groupId}`, EXIT_USAGE)
   }
 
-  return tag
+  return group
 }
 
 function getSnapshotInstance(snapshot: AppSnapshot, instanceId: string): CodexInstanceSummary {
@@ -178,6 +178,6 @@ export {
   normalizeInstanceId,
   waitForLoginResult,
   getSnapshotAccount,
-  getSnapshotTag,
+  getSnapshotGroup,
   getSnapshotInstance
 }

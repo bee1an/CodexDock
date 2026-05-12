@@ -44,9 +44,11 @@ import {
   type LoginMethod,
   type ListCodexSessionProjectsInput,
   type ListCodexSessionsInput,
+  type ProbeProviderModelsInput,
   type ReadCodexSessionDetailInput,
   type TokenCostReadOptions,
   type UpdateAccountWakeScheduleInput,
+  type UpdateAccountTokensInput,
   type WakeAccountRateLimitsInput
 } from '../shared/codex'
 import {
@@ -433,7 +435,7 @@ function createTray(): void {
       ? buildTrayImage({
           accounts: [],
           providers: [],
-          tags: [],
+          groups: [],
           codexInstances: [],
           codexInstanceDefaults: {
             rootDir: '',
@@ -453,7 +455,9 @@ function createTray(): void {
               port: 11456,
               apiKey: '',
               stickyTtlMinutes: 360,
-              requestTimeoutMs: 120_000
+              requestTimeoutMs: 120_000,
+              modelMappings: [],
+              allowedGroupIds: []
             }
           },
           usageByAccountId: {},
@@ -736,10 +740,23 @@ app.whenReady().then(async () => {
     await codexServices.accounts.removeMany(accountIds)
     return refreshTrayTitle()
   })
-  ipcMain.handle('codex:update-account-tags', async (_, accountId: string, tagIds: string[]) => {
-    await codexServices.accounts.updateTags(accountId, tagIds)
-    return refreshTrayTitle()
-  })
+  ipcMain.handle(
+    'codex:update-account-groups',
+    async (_, accountId: string, groupIds: string[]) => {
+      await codexServices.accounts.updateGroups(accountId, groupIds)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle(
+    'codex:update-account-tokens',
+    async (_, accountId: string, input: UpdateAccountTokensInput) => {
+      await codexServices.accounts.updateTokens(accountId, input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle('codex:get-account-tokens', (_, accountId: string) =>
+    codexServices.accounts.getTokens(accountId)
+  )
   ipcMain.handle('codex:get-account-wake-schedule', (_, accountId: string) =>
     codexServices.accounts.getWakeSchedule(accountId)
   )
@@ -754,16 +771,16 @@ app.whenReady().then(async () => {
     await codexServices.accounts.deleteWakeSchedule(accountId)
     return refreshTrayTitle()
   })
-  ipcMain.handle('codex:create-tag', async (_, name: string) => {
-    await codexServices.tags.create(name)
+  ipcMain.handle('codex:create-group', async (_, name: string) => {
+    await codexServices.groups.create(name)
     return refreshTrayTitle()
   })
-  ipcMain.handle('codex:update-tag', async (_, tagId: string, name: string) => {
-    await codexServices.tags.update(tagId, name)
+  ipcMain.handle('codex:update-group', async (_, groupId: string, name: string) => {
+    await codexServices.groups.update(groupId, name)
     return refreshTrayTitle()
   })
-  ipcMain.handle('codex:delete-tag', async (_, tagId: string) => {
-    await codexServices.tags.remove(tagId)
+  ipcMain.handle('codex:delete-group', async (_, groupId: string) => {
+    await codexServices.groups.remove(groupId)
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:list-providers', () => codexServices.providers.list())
@@ -811,8 +828,15 @@ app.whenReady().then(async () => {
     await codexServices.providers.remove(providerId)
     return refreshTrayTitle()
   })
+  ipcMain.handle('codex:probe-provider-models', (_, input: ProbeProviderModelsInput) =>
+    codexServices.providers.probeModels(input)
+  )
   ipcMain.handle('codex:open-provider-in-codex', async (_, providerId: string) => {
     await codexServices.providers.open(providerId)
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:open-local-gateway-in-codex', async () => {
+    await codexServices.codex.openLocalGateway()
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:open-account-in-codex', async (_, accountId: string) => {
@@ -956,6 +980,7 @@ app.whenReady().then(async () => {
   )
 
   ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())
+  ipcMain.handle('codex:get-local-gateway-api-key', () => codexServices.gateway.getApiKey())
   ipcMain.handle('codex:start-local-gateway', async () => {
     await codexServices.gateway.start()
     return refreshTrayTitle()

@@ -12,7 +12,8 @@ import { AccountRateLimitLookupError } from './codex-app-server'
 import {
   type AccountRateLimits,
   type AccountSummary,
-  type AccountTag,
+  type AccountGroup,
+  type AccountTokensDetail,
   type AccountTransferFormat,
   type AccountWakeSchedule,
   type AppSettings,
@@ -39,11 +40,16 @@ import {
   type ListCodexSessionsInput,
   type LoginEvent,
   type LocalGatewayStatus,
+  type OpenCodexFromServiceInput,
+  type OpenCodexFromServiceResult,
+  type ProbeProviderModelsInput,
   type ProviderCheckReport,
+  type ProviderModelsProbeResult,
   type ReadCodexSessionDetailInput,
   type TokenCostDetail,
   type TokenCostReadOptions,
   type UpdateAccountWakeScheduleInput,
+  type UpdateAccountTokensInput,
   type UpdateCodexInstanceInput,
   type UpdateCustomProviderInput,
   type WakeAccountRateLimitsInput,
@@ -311,7 +317,9 @@ export interface CodexServices {
     reorder(accountIds: string[]): Promise<AppSnapshot>
     remove(accountId: string): Promise<AppSnapshot>
     removeMany(accountIds: string[]): Promise<AppSnapshot>
-    updateTags(accountId: string, tagIds: string[]): Promise<AppSnapshot>
+    updateGroups(accountId: string, groupIds: string[]): Promise<AppSnapshot>
+    updateTokens(accountId: string, input: UpdateAccountTokensInput): Promise<AppSnapshot>
+    getTokens(accountId: string): Promise<AccountTokensDetail>
     getWakeSchedule(accountId: string): Promise<AccountWakeSchedule | null>
     updateWakeSchedule(
       accountId: string,
@@ -324,11 +332,11 @@ export interface CodexServices {
     ): Promise<AppSnapshot>
     get(accountId: string): Promise<AccountSummary>
   }
-  tags: {
+  groups: {
     create(name: string): Promise<AppSnapshot>
-    update(tagId: string, name: string): Promise<AppSnapshot>
-    remove(tagId: string): Promise<AppSnapshot>
-    getAll(): Promise<AccountTag[]>
+    update(groupId: string, name: string): Promise<AppSnapshot>
+    remove(groupId: string): Promise<AppSnapshot>
+    getAll(): Promise<AccountGroup[]>
   }
   providers: {
     list(): Promise<CustomProviderSummary[]>
@@ -338,6 +346,7 @@ export interface CodexServices {
     remove(providerId: string): Promise<AppSnapshot>
     get(providerId: string): Promise<CustomProviderDetail>
     check(providerId: string): Promise<ProviderCheckReport>
+    probeModels(input: ProbeProviderModelsInput): Promise<ProviderModelsProbeResult>
     open(providerId: string, workspacePath?: string): Promise<AppSnapshot>
   }
   doctor: {
@@ -371,6 +380,7 @@ export interface CodexServices {
     stop(): Promise<AppSnapshot>
     status(): Promise<LocalGatewayStatus>
     rotateKey(): Promise<LocalGatewayStatus & { apiKey: string }>
+    getApiKey(): Promise<string>
   }
   login: {
     start(
@@ -384,6 +394,8 @@ export interface CodexServices {
     show(workspacePath?: string): Promise<AppSnapshot>
     open(accountId?: string, workspacePath?: string): Promise<AppSnapshot>
     openIsolated(accountId: string, workspacePath?: string): Promise<AppSnapshot>
+    openLocalGateway(workspacePath?: string): Promise<AppSnapshot>
+    openFromService(input?: OpenCodexFromServiceInput): Promise<OpenCodexFromServiceResult>
     instances: {
       list(): Promise<CodexInstanceSummary[]>
       getDefaults(): Promise<CodexInstanceDefaults>

@@ -1,13 +1,22 @@
 import { EventEmitter } from 'node:events'
 import { mkdtemp, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises'
+import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { LoginEvent } from '../../shared/codex'
+import type {
+  LocalGatewayLogEntry,
+  LoginEvent,
+  OpenCodexFromServiceInput,
+  OpenCodexFromServiceResult
+} from '../../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../../shared/codex-platform'
+import { CodexAccountStore } from '../codex-auth'
 import { CodexInstanceStore } from '../codex-instances'
+import { CodexProviderStore } from '../codex-providers'
+import { CodexLocalGatewayService } from '../local-gateway'
 
 const mockedProcessState = vi.hoisted(() => {
   return {
@@ -119,6 +128,55 @@ function createJsonResponse(payload: unknown, status = 200): Response {
     headers: {
       'content-type': 'application/json'
     }
+  })
+}
+
+async function getFreePort(): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const server = createNetServer()
+    server.once('error', reject)
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address()
+      server.close(() => {
+        if (address && typeof address === 'object') {
+          resolve(address.port)
+          return
+        }
+        reject(new Error('Failed to allocate a free port.'))
+      })
+    })
+  })
+}
+
+function createLocalGatewayForTest(
+  env: { userDataPath: string },
+  platform: CodexPlatformAdapter,
+  openCodexFromService: (
+    input?: OpenCodexFromServiceInput
+  ) => Promise<OpenCodexFromServiceResult> = vi.fn(async () => ({
+    ok: true as const,
+    pid: 4321,
+    codexHome: join(env.userDataPath, 'codex-home'),
+    workspacePath: join(env.userDataPath, 'workspace'),
+    multi: false,
+    target: {
+      type: 'default' as const,
+      name: 'Default'
+    }
+  }))
+): CodexLocalGatewayService {
+  return new CodexLocalGatewayService({
+    store: new CodexAccountStore(env.userDataPath, platform, join(env.userDataPath, '.codex')),
+    providerStore: new CodexProviderStore(env.userDataPath, platform),
+    logFilePath: join(env.userDataPath, 'local-gateway-logs.json'),
+    platform,
+    refreshAuthForUse: vi.fn(async () => {
+      throw new Error('unused')
+    }),
+    refreshStoredAuthGuarded: vi.fn(async () => {
+      throw new Error('unused')
+    }),
+    openCodexFromService
   })
 }
 
@@ -867,6 +925,59 @@ describe('createCodexServices', () => {
     )
   })
 
+  it('opens the local gateway as a single reusable provider instance and refreshes rotated keys', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const port = await getFreePort()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: ['group-1']
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      await services.codex.openLocalGateway(env.workspacePath)
+      const localGatewayHome = join(env.userDataPath, 'codex-instance-homes', 'local-gateway')
+      const firstPid = [...mockedProcessState.runningPids].find(
+        (pid) => mockedProcessState.pidHomes.get(pid) === localGatewayHome
+      )
+
+      expect(firstPid).toBeDefined()
+      await expect(readFile(join(localGatewayHome, 'auth.json'), 'utf8')).resolves.toContain(
+        '"OPENAI_API_KEY": "gateway-secret-a"'
+      )
+      await expect(readFile(join(localGatewayHome, 'config.toml'), 'utf8')).resolves.toContain(
+        `base_url = "http://127.0.0.1:${port}/v1"`
+      )
+
+      const rotated = await services.gateway.rotateKey()
+      await expect(readFile(join(localGatewayHome, 'auth.json'), 'utf8')).resolves.toContain(
+        `"OPENAI_API_KEY": "${rotated.apiKey}"`
+      )
+
+      await services.codex.openLocalGateway(env.workspacePath)
+      const localGatewayHomes = [...mockedProcessState.pidHomes.values()].filter(
+        (value) => value === localGatewayHome
+      )
+      expect(localGatewayHomes).toHaveLength(1)
+      expect(mockedProcessState.runningPids.has(firstPid ?? -1)).toBe(false)
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
   it('lists default and named instances in service results and snapshots', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -948,6 +1059,175 @@ describe('createCodexServices', () => {
     )
   })
 
+  it('probes provider model lists before a provider is saved', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async () =>
+      createJsonResponse({
+        data: [{ id: 'gpt-5.4' }, { id: 'gpt-5.4-mini' }]
+      })
+    )
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    const report = await services.providers.probeModels({
+      baseUrl: 'https://api.example.com/v1',
+      apiKey: 'provider-secret'
+    })
+
+    expect(platform.fetch).toHaveBeenCalledWith('https://api.example.com/v1/models', {
+      method: 'GET',
+      headers: {
+        authorization: 'Bearer provider-secret'
+      }
+    })
+    expect(report).toMatchObject({
+      ok: true,
+      httpStatus: 200,
+      availableModels: ['gpt-5.4', 'gpt-5.4-mini']
+    })
+  })
+
+  it('reveals the local gateway API key without exposing it in status', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    const apiKey = await services.gateway.getApiKey()
+    const status = await services.gateway.status()
+
+    expect(apiKey).toMatch(/^sk-cdock-/)
+    expect(status.apiKeyPreview).not.toBe(apiKey)
+    expect(status.apiKeyPreview).toContain('…')
+  })
+
+  it('persists the latest local gateway logs across service instances', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const gateway = createLocalGatewayForTest(env, platform)
+    const writableGateway = gateway as unknown as {
+      pushLog(input: Omit<LocalGatewayLogEntry, 'id' | 'timestamp'>): Promise<void>
+    }
+
+    for (let index = 0; index < 85; index += 1) {
+      await writableGateway.pushLog({
+        method: 'GET',
+        path: `/v1/models/${index}`,
+        status: 200,
+        durationMs: index,
+        model: `model-${index}`
+      })
+    }
+
+    const reloaded = createLocalGatewayForTest(env, platform)
+    const logs = (await reloaded.status()).logs ?? []
+
+    expect(logs).toHaveLength(80)
+    expect(logs[0]).toMatchObject({
+      method: 'GET',
+      path: '/v1/models/84',
+      model: 'model-84'
+    })
+    expect(logs.at(-1)?.path).toBe('/v1/models/5')
+  })
+
+  it('protects and routes local gateway /codex/open requests', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const port = await getFreePort()
+    const openCodexFromService = vi.fn(async (input?: OpenCodexFromServiceInput) => ({
+      ok: true as const,
+      pid: 4567,
+      codexHome: join(env.userDataPath, 'codex-instance-homes', 'service-launch-account-abcd1234'),
+      workspacePath:
+        typeof input?.workspacePath === 'string' ? input.workspacePath : env.workspacePath,
+      multi: input?.multi === true,
+      target: {
+        type: input?.target ?? ('default' as const),
+        id: input?.accountId,
+        name: 'Gateway Account'
+      }
+    }))
+    const gateway = createLocalGatewayForTest(env, platform, openCodexFromService)
+    const writableGateway = gateway as unknown as {
+      options: { store: CodexAccountStore }
+    }
+    await writableGateway.options.store.updateSettings({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'test-gateway-key',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: ['all']
+      }
+    })
+
+    await gateway.start()
+    try {
+      const baseUrl = `http://127.0.0.1:${port}`
+      const unauthorized = await fetch(`${baseUrl}/codex/open`, {
+        method: 'POST',
+        body: '{}'
+      })
+      expect(unauthorized.status).toBe(401)
+
+      const wrongMethod = await fetch(`${baseUrl}/codex/open`, {
+        method: 'GET',
+        headers: {
+          authorization: 'Bearer test-gateway-key'
+        }
+      })
+      expect(wrongMethod.status).toBe(405)
+
+      const authorized = await fetch(`${baseUrl}/codex/open`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer test-gateway-key',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({
+          target: 'account',
+          accountId: 'acct-a',
+          multi: true,
+          workspacePath: env.workspacePath
+        })
+      })
+      const payload = (await authorized.json()) as {
+        ok?: boolean
+        pid?: number
+        codexHome?: string
+        target?: { type?: string; id?: string }
+      }
+
+      expect(authorized.status).toBe(200)
+      expect(payload).toMatchObject({
+        ok: true,
+        pid: 4567,
+        target: {
+          type: 'account',
+          id: 'acct-a'
+        }
+      })
+      expect(openCodexFromService).toHaveBeenCalledTimes(1)
+      expect(openCodexFromService).toHaveBeenCalledWith({
+        target: 'account',
+        accountId: 'acct-a',
+        multi: true,
+        workspacePath: env.workspacePath
+      })
+    } finally {
+      await gateway.stop()
+    }
+  })
+
   it('runs doctor checks for current session and desktop resolution', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -1013,6 +1293,57 @@ describe('createCodexServices', () => {
     expect(terminationCalls).toContain(defaultPid)
     expect(terminationCalls).not.toContain(isolatedPid)
     expect(mockedProcessState.runningPids.has(isolatedPid ?? -1)).toBe(true)
+  })
+
+  it('opens account targets from the local service in multi mode without stopping existing instances', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+    const account = (await services.getSnapshot()).accounts[0]
+
+    await services.codex.openIsolated(account.id, env.workspacePath)
+    const existingPid = [...mockedProcessState.runningPids].find((pid) =>
+      mockedProcessState.pidHomes.get(pid)?.includes('account-')
+    )
+    expect(existingPid).toBeDefined()
+
+    processKillSpy.mockClear()
+    const result = await services.codex.openFromService({
+      target: 'account',
+      accountId: account.id,
+      multi: true,
+      workspacePath: env.workspacePath
+    })
+    const terminationCalls = processKillSpy.mock.calls.filter(
+      ([, signal]) => signal && signal !== 0
+    )
+    const instanceRoot = join(env.userDataPath, 'codex-instance-homes')
+    const serviceLaunchPrefix = join(instanceRoot, 'service-launch-account-')
+    const serviceAuth = JSON.parse(await readFile(join(result.codexHome, 'auth.json'), 'utf8')) as {
+      tokens?: { account_id?: string }
+    }
+
+    expect(terminationCalls).toHaveLength(0)
+    expect(mockedProcessState.runningPids.has(existingPid ?? -1)).toBe(true)
+    expect(result).toMatchObject({
+      ok: true,
+      pid: expect.any(Number),
+      workspacePath: env.workspacePath,
+      multi: true,
+      target: {
+        type: 'account',
+        id: account.id
+      }
+    })
+    expect(result.pid).not.toBe(existingPid)
+    expect(result.codexHome.startsWith(serviceLaunchPrefix)).toBe(true)
+    expect(serviceAuth.tokens?.account_id).toBe('acct-a')
   })
 
   it('clears stale usage after an expired usage refresh fails', async () => {
@@ -1384,6 +1715,52 @@ describe('createCodexServices', () => {
         })
       )
     ).rejects.toThrow('missing required field: credentials')
+  })
+
+  it('imports grouped templates when id_token is absent by deriving identity from access_token', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    const accessToken = createJwt({
+      exp: Math.floor(Date.now() / 1000) + 3600,
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-no-id-token',
+        chatgpt_plan_type: 'plus'
+      },
+      'https://api.openai.com/profile': {
+        email: 'no-id-token@example.com'
+      }
+    })
+
+    await services.accounts.importFromTemplate(
+      JSON.stringify({
+        exported_at: '2026-03-24T08:00:00.000Z',
+        proxies: [],
+        accounts: [
+          {
+            name: 'no-id-token@example.com',
+            platform: 'openai',
+            type: 'oauth',
+            credentials: {
+              access_token: accessToken,
+              refresh_token: 'refresh-no-id-token',
+              chatgpt_account_id: 'acct-no-id-token',
+              email: 'no-id-token@example.com',
+              plan_type: 'plus'
+            }
+          }
+        ]
+      })
+    )
+
+    const snapshot = await services.getSnapshot()
+    expect(snapshot.accounts).toHaveLength(1)
+    expect(snapshot.accounts[0]?.email).toBe('no-id-token@example.com')
+    expect(snapshot.accounts[0]?.accountId).toBe('acct-no-id-token')
   })
 
   it('imports cockpit tools compatible payloads', async () => {

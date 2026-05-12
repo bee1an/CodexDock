@@ -3,8 +3,10 @@
   import brandMark from './assets/brand-mark.png'
   import AccountsPanel from './components/AccountsPanel.svelte'
   import AppButton from './components/AppButton.svelte'
+  import AppDialog from './components/AppDialog.svelte'
   import AppSider from './components/AppSider.svelte'
-  import { cascadeIn, reveal } from './components/gsap-motion'
+  import { reveal } from './components/gsap-motion'
+  import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
   import WakeDialog from './components/WakeDialog.svelte'
@@ -26,16 +28,19 @@
     AppTheme,
     AppUpdateState,
     AccountWakeSchedule,
-    AccountTag,
+    AccountGroup,
     AccountTransferFormat,
     AccountRateLimits,
     AccountSummary,
     AppSnapshot,
     CustomProviderDetail,
     CreateCustomProviderInput,
+    LocalGatewayModelMapping,
     LoginEvent,
     LoginMethod,
     PortOccupant,
+    ProbeProviderModelsInput,
+    ProviderModelsProbeResult,
     StatsDisplaySettings,
     UpdateAccountWakeScheduleInput,
     WakeAccountRequestResult,
@@ -76,7 +81,7 @@
   let snapshot: AppSnapshot = {
     accounts: [],
     providers: [],
-    tags: [],
+    groups: [],
     codexInstances: [],
     codexInstanceDefaults: {
       rootDir: '',
@@ -135,6 +140,7 @@
   let windowFocused = true
   let killingLoginPortOccupant = false
   let accountActionKey = ''
+  let providerOpeningId = ''
   let updateState: AppUpdateState = {
     status: 'idle',
     delivery: 'auto',
@@ -159,7 +165,6 @@
   let exportDialogMotionState: TransitionMotionState = 'closed'
   let exportDialogCloseTimer: number | null = null
   let exportDialogOpenFrame: number | null = null
-  let exportDialogBackdropPointerStarted = false
   let exportDialogBusy = false
   let exportDialogError = ''
   let exportDialogAccountIds: string[] | null = null
@@ -172,6 +177,15 @@
   let wakeScheduleModelDraft = defaultWakeModel
   let wakeScheduleError = ''
   let wakeScheduleSaving = false
+  let editTokensDialogAccount: AccountSummary | null = null
+  let editTokensAccessTokenDraft = ''
+  let editTokensRefreshTokenDraft = ''
+  let editTokensIdTokenDraft = ''
+  let editTokensAccountIdHintDraft = ''
+  let editTokensError = ''
+  let editTokensSaving = false
+  let editTokensLoading = false
+  let editTokensLoadRequestId = 0
   const isTrayView =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tray') === '1'
   let prefersDark = false
@@ -184,7 +198,6 @@
     'antialiased'
   ]
 
-  const heroClass = 'theme-surface rounded-[1.1rem] border border-black/8 bg-white p-5 sm:p-6'
   const panelClass = 'theme-workspace bg-snow p-0'
 
   const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
@@ -369,26 +382,6 @@
       finishExportFormatDialogClose,
       modalCloseDurationMs()
     )
-  }
-
-  const handleExportDialogBackdropPointerDown = (event: PointerEvent): void => {
-    exportDialogBackdropPointerStarted = event.target === event.currentTarget
-  }
-
-  const clearExportDialogBackdropPointerIntentSoon = (): void => {
-    window.setTimeout(() => {
-      exportDialogBackdropPointerStarted = false
-    }, 0)
-  }
-
-  const handleExportDialogBackdropClick = (event: MouseEvent): void => {
-    const shouldClose = event.target === event.currentTarget && exportDialogBackdropPointerStarted
-
-    exportDialogBackdropPointerStarted = false
-
-    if (shouldClose) {
-      closeExportFormatDialog()
-    }
   }
 
   const toolbarDialogOpen = (): boolean =>
@@ -692,6 +685,10 @@
     closeProviderComposer()
   }
 
+  const probeProviderModels = (
+    input: ProbeProviderModelsInput
+  ): Promise<ProviderModelsProbeResult> => window.codexApp.probeProviderModels(input)
+
   const updateProvider = async (
     providerId: string,
     input: UpdateCustomProviderInput
@@ -743,6 +740,37 @@
       }
     })
 
+  const openLocalGatewayInCodex = async (): Promise<void> =>
+    runLocalGatewayAction(async () => {
+      await runAction('gateway:open-codex', () => window.codexApp.openLocalGatewayInCodex())
+    })
+
+  const updateLocalGatewayModelMappings = async (
+    mappings: LocalGatewayModelMapping[]
+  ): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-mappings', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          modelMappings: mappings
+        }
+      })
+    )
+  }
+
+  const updateLocalGatewayAllowedGroups = async (groupIds: string[]): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-groups', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          allowedGroupIds: groupIds
+        }
+      })
+    )
+  }
+
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
     window.codexApp.getProvider(providerId)
 
@@ -758,9 +786,18 @@
   }
 
   const openProviderInCodex = async (providerId: string): Promise<void> => {
-    await runAccountAction(`provider:open:${providerId}`, () =>
-      window.codexApp.openProviderInCodex(providerId)
-    )
+    if (providerOpeningId) {
+      return
+    }
+
+    providerOpeningId = providerId
+    try {
+      await runAction(`provider:open:${providerId}`, () =>
+        window.codexApp.openProviderInCodex(providerId)
+      )
+    } finally {
+      providerOpeningId = ''
+    }
   }
 
   const startLogin = async (method: LoginMethod): Promise<void> => {
@@ -828,6 +865,89 @@
     }
 
     await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
+  }
+
+  const openEditTokensDialog = (account: AccountSummary): void => {
+    editTokensDialogAccount = account
+    editTokensAccessTokenDraft = ''
+    editTokensRefreshTokenDraft = ''
+    editTokensIdTokenDraft = ''
+    editTokensAccountIdHintDraft = ''
+    editTokensError = ''
+    editTokensSaving = false
+    editTokensLoading = true
+
+    const requestId = ++editTokensLoadRequestId
+    void (async () => {
+      try {
+        const detail = await window.codexApp.getAccountTokens(account.id)
+        if (requestId !== editTokensLoadRequestId || editTokensDialogAccount?.id !== account.id) {
+          return
+        }
+        editTokensAccessTokenDraft = detail.accessToken ?? ''
+        editTokensRefreshTokenDraft = detail.refreshToken ?? ''
+        editTokensIdTokenDraft = detail.idToken ?? ''
+        editTokensAccountIdHintDraft = detail.accountId ?? ''
+      } catch (error) {
+        if (requestId !== editTokensLoadRequestId || editTokensDialogAccount?.id !== account.id) {
+          return
+        }
+        editTokensError = copyForLanguage().editAccountTokensLoadFailed(
+          error instanceof Error ? error.message : String(error)
+        )
+      } finally {
+        if (requestId === editTokensLoadRequestId) {
+          editTokensLoading = false
+        }
+      }
+    })()
+  }
+
+  const closeEditTokensDialog = (): void => {
+    if (editTokensSaving) {
+      return
+    }
+    editTokensLoadRequestId += 1
+    editTokensDialogAccount = null
+    editTokensLoading = false
+    editTokensError = ''
+  }
+
+  const saveAccountTokens = async (): Promise<void> => {
+    const target = editTokensDialogAccount
+    if (!target || editTokensSaving || editTokensLoading) {
+      return
+    }
+
+    const access = editTokensAccessTokenDraft.trim()
+    const refresh = editTokensRefreshTokenDraft.trim()
+    const idToken = editTokensIdTokenDraft.trim()
+    const accountIdHint = editTokensAccountIdHintDraft.trim()
+
+    if (!access && !refresh && !idToken && !accountIdHint) {
+      editTokensError = copyForLanguage().editAccountTokensEmptyError
+      return
+    }
+
+    editTokensSaving = true
+    editTokensError = ''
+
+    try {
+      const nextSnapshot = await window.codexApp.updateAccountTokens(target.id, {
+        accessToken: access || undefined,
+        refreshToken: refresh || undefined,
+        idToken: idToken || undefined,
+        accountId: accountIdHint || undefined
+      })
+      applySnapshot(nextSnapshot)
+      editTokensDialogAccount = null
+    } catch (error) {
+      editTokensError = copyForLanguage().editAccountTokensFailed(
+        error instanceof Error ? error.message : String(error)
+      )
+    } finally {
+      editTokensSaving = false
+    }
   }
 
   const removeAccounts = async (accountIds: string[]): Promise<void> => {
@@ -920,28 +1040,31 @@
     })
   }
 
-  const createTag = async (name: string): Promise<void> => {
-    await runAction(`tags:create:${name}`, () => window.codexApp.createTag(name))
+  const createGroup = async (name: string): Promise<void> => {
+    await runAction(`groups:create:${name}`, () => window.codexApp.createGroup(name))
   }
 
-  const updateTag = async (tag: AccountTag, name: string): Promise<void> => {
-    await runAction(`tags:update:${tag.id}`, () => window.codexApp.updateTag(tag.id, name))
+  const updateGroup = async (group: AccountGroup, name: string): Promise<void> => {
+    await runAction(`groups:update:${group.id}`, () => window.codexApp.updateGroup(group.id, name))
   }
 
-  const deleteTag = async (tag: AccountTag): Promise<void> => {
-    await runAction(`tags:delete:${tag.id}`, () => window.codexApp.deleteTag(tag.id))
+  const deleteGroup = async (group: AccountGroup): Promise<void> => {
+    await runAction(`groups:delete:${group.id}`, () => window.codexApp.deleteGroup(group.id))
   }
 
-  const updateAccountTags = async (account: AccountSummary, tagIds: string[]): Promise<void> => {
+  const updateAccountGroups = async (
+    account: AccountSummary,
+    groupIds: string[]
+  ): Promise<void> => {
     if (
-      tagIds.length === account.tagIds.length &&
-      tagIds.every((tagId, index) => tagId === account.tagIds[index])
+      groupIds.length === account.groupIds.length &&
+      groupIds.every((groupId, index) => groupId === account.groupIds[index])
     ) {
       return
     }
 
-    await runAction(`account-tags:${account.id}`, () =>
-      window.codexApp.updateAccountTags(account.id, tagIds)
+    await runAction(`account-groups:${account.id}`, () =>
+      window.codexApp.updateAccountGroups(account.id, groupIds)
     )
   }
 
@@ -1500,7 +1623,9 @@
               }}
               {localGatewayBusy}
               {localGatewayApiKey}
-              tags={snapshot.tags}
+              localGatewayModelMappings={snapshot.settings.localGateway?.modelMappings ?? []}
+              localGatewayAllowedGroupIds={snapshot.settings.localGateway?.allowedGroupIds ?? []}
+              groups={snapshot.groups}
               activeAccountId={snapshot.activeAccountId}
               {usageByAccountId}
               {usageLoadingByAccountId}
@@ -1528,9 +1653,9 @@
                 ? accountActionKey.slice('open-isolated:'.length)
                 : ''}
               {wakingAccountId}
-              openingProviderId={accountActionKey.startsWith('provider:open:')
-                ? accountActionKey.slice('provider:open:'.length)
-                : ''}
+              openingProviderId={providerOpeningId}
+              {createProvider}
+              {probeProviderModels}
               {getProvider}
               {reorderProviders}
               {updateProvider}
@@ -1538,16 +1663,21 @@
               {startLocalGateway}
               {stopLocalGateway}
               {rotateLocalGatewayKey}
+              {openLocalGatewayInCodex}
+              {updateLocalGatewayModelMappings}
+              {updateLocalGatewayAllowedGroups}
               {openProviderInCodex}
               {reorderAccounts}
-              {createTag}
-              {updateTag}
-              {deleteTag}
-              {updateAccountTags}
+              {createGroup}
+              {updateGroup}
+              {deleteGroup}
+              {updateAccountGroups}
               refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
               {updateShowLocalMockData}
               {updateStatsDisplay}
               {openWakeDialog}
+              {openEditTokensDialog}
+              getAccountTokens={(accountId) => window.codexApp.getAccountTokens(accountId)}
               {removeAccount}
               {removeAccounts}
               {exportSelectedAccounts}
@@ -1662,95 +1792,79 @@
 </div>
 
 {#if renderExportFormatDialog}
-  <div
-    class="theme-dialog-backdrop fixed inset-0 z-[60] flex items-center justify-center bg-black/38 px-4 py-6"
-    role="presentation"
-    tabindex="-1"
-    on:pointerdown={handleExportDialogBackdropPointerDown}
-    on:pointerup={clearExportDialogBackdropPointerIntentSoon}
-    on:pointercancel={() => {
-      exportDialogBackdropPointerStarted = false
-    }}
-    on:click={handleExportDialogBackdropClick}
-    on:keydown={(event) => {
-      if (event.key === 'Escape') {
-        closeExportFormatDialog()
-      }
-    }}
+  <AppDialog
+    ariaLabelledby="export-format-dialog-title"
+    maxWidthClass="max-w-xl"
+    panelClass="rounded-[1.25rem]"
+    zIndexClass="z-[60]"
+    closeDisabled={exportDialogBusy}
+    closeOnBackdrop={!exportDialogBusy}
+    motionSelector="[data-motion-item]"
+    onclose={closeExportFormatDialog}
   >
-    <div
-      class={`theme-surface theme-dialog-surface t-modal ${exportDialogMotionState === 'open' ? 'is-open' : exportDialogMotionState === 'closing' ? 'is-closing' : ''} w-full max-w-xl rounded-[1.25rem] border border-black/8 bg-white p-5 sm:p-6`}
-      use:cascadeIn={{
-        selector: '[data-motion-item]'
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="export-format-dialog-title"
-    >
-      <div class="grid gap-1" data-motion-item>
-        <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
-          {exportDialogScopeLabel()}
-        </p>
-        <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
-          {copyForLanguage().exportFormatDialogTitle}
-        </h2>
-        <p class="text-sm leading-6 text-muted-strong">
-          {copyForLanguage().exportFormatDialogDescription}
-        </p>
-      </div>
-
-      <div class="mt-5 grid gap-3">
-        {#each exportFormatOptionOrder as format (format)}
-          <label
-            data-motion-item
-            class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-black/14 bg-black/[0.045]' : 'border-black/8 bg-transparent'}`}
-          >
-            <div class="flex items-start gap-3">
-              <input
-                class="mt-1 h-4 w-4 accent-black"
-                type="radio"
-                name="account-export-format"
-                value={format}
-                checked={exportDialogFormat === format}
-                on:change={() => {
-                  exportDialogFormat = format
-                }}
-              />
-              <div class="grid gap-1">
-                <span class="text-sm font-medium text-carbon">{exportFormatLabel(format)}</span>
-                <span class="text-xs leading-5 text-muted-strong">
-                  {exportFormatDescription(format)}
-                </span>
-              </div>
-            </div>
-          </label>
-        {/each}
-      </div>
-
-      {#if exportDialogError}
-        <p class="mt-4 text-sm text-danger" data-motion-item>{exportDialogError}</p>
-      {/if}
-
-      <div class="mt-6 flex flex-wrap justify-end gap-3" data-motion-item>
-        <AppButton
-          variant="secondary"
-          size="sm"
-          onclick={closeExportFormatDialog}
-          disabled={exportDialogBusy}
-        >
-          {copyForLanguage().exportFormatCancel}
-        </AppButton>
-        <AppButton
-          variant="primary"
-          size="sm"
-          onclick={submitExportFormatDialog}
-          disabled={exportDialogBusy}
-        >
-          {copyForLanguage().exportFormatConfirm}
-        </AppButton>
-      </div>
+    <div class="grid gap-1" data-motion-item>
+      <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
+        {exportDialogScopeLabel()}
+      </p>
+      <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
+        {copyForLanguage().exportFormatDialogTitle}
+      </h2>
+      <p class="text-sm leading-6 text-muted-strong">
+        {copyForLanguage().exportFormatDialogDescription}
+      </p>
     </div>
-  </div>
+
+    <div class="mt-5 grid gap-3">
+      {#each exportFormatOptionOrder as format (format)}
+        <label
+          data-motion-item
+          class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-black/14 bg-black/[0.045]' : 'border-black/8 bg-transparent'}`}
+        >
+          <div class="flex items-start gap-3">
+            <input
+              class="mt-1 h-4 w-4 accent-black"
+              type="radio"
+              name="account-export-format"
+              value={format}
+              checked={exportDialogFormat === format}
+              on:change={() => {
+                exportDialogFormat = format
+              }}
+            />
+            <div class="grid gap-1">
+              <span class="text-sm font-medium text-carbon">{exportFormatLabel(format)}</span>
+              <span class="text-xs leading-5 text-muted-strong">
+                {exportFormatDescription(format)}
+              </span>
+            </div>
+          </div>
+        </label>
+      {/each}
+    </div>
+
+    {#if exportDialogError}
+      <p class="mt-4 text-sm text-danger" data-motion-item>{exportDialogError}</p>
+    {/if}
+
+    <svelte:fragment slot="footer">
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={closeExportFormatDialog}
+        disabled={exportDialogBusy}
+      >
+        {copyForLanguage().exportFormatCancel}
+      </AppButton>
+      <AppButton
+        variant="primary"
+        size="sm"
+        onclick={submitExportFormatDialog}
+        disabled={exportDialogBusy}
+      >
+        {copyForLanguage().exportFormatConfirm}
+      </AppButton>
+    </svelte:fragment>
+  </AppDialog>
 {/if}
 
 {#if wakeDialogAccount}
@@ -1781,9 +1895,24 @@
   />
 {/if}
 
+{#if editTokensDialogAccount}
+  <EditAccountTokensDialog
+    copy={copyForLanguage()}
+    accountLabelText={accountLabel(editTokensDialogAccount, copyForLanguage())}
+    bind:accessToken={editTokensAccessTokenDraft}
+    bind:refreshToken={editTokensRefreshTokenDraft}
+    bind:idToken={editTokensIdTokenDraft}
+    bind:accountIdHint={editTokensAccountIdHintDraft}
+    errorMessage={editTokensError}
+    loading={editTokensLoading}
+    saving={editTokensSaving}
+    onClose={closeEditTokensDialog}
+    onSave={saveAccountTokens}
+  />
+{/if}
+
 <div use:reveal={{ delay: 0.02 }}>
   <HeroPanel
-    {heroClass}
     copy={copyForLanguage()}
     {loginEvent}
     onClose={() => closeExpandablePanels()}
@@ -1878,37 +2007,15 @@
   :global(.theme-surface[role='dialog']),
   :global(.wake-dialog-panel) {
     border-radius: 0.75rem !important;
-    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent) !important;
+    border-color: color-mix(in srgb, var(--line-strong) 58%, transparent) !important;
     background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft)) !important;
     box-shadow:
-      var(--elevation-2),
-      0 0 0 1px color-mix(in srgb, var(--line-strong) 44%, transparent),
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 62%, transparent) !important;
+      0 28px 84px -40px rgba(0, 0, 0, 0.48),
+      0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
   }
 
   :global(.wake-dialog-backdrop) {
     background: color-mix(in srgb, black 34%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-dialog-backdrop) {
-    background: color-mix(in srgb, black 70%, transparent) !important;
-    backdrop-filter: blur(6px) saturate(0.82);
-  }
-
-  :global(html[data-theme='dark'] .theme-surface.theme-dialog-surface[role='dialog']) {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 66%, white 34%) !important;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel-strong) 82%, var(--surface-soft)),
-      color-mix(in srgb, var(--panel-strong) 74%, var(--color-fog))
-    ) !important;
-    box-shadow:
-      0 34px 120px rgba(0, 0, 0, 0.92),
-      0 18px 54px rgba(0, 0, 0, 0.68),
-      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 72%, transparent),
-      0 0 0 8px rgba(255, 255, 255, 0.035),
-      inset 0 1px 0 rgba(255, 255, 255, 0.12),
-      inset 0 0 0 1px rgba(255, 255, 255, 0.055) !important;
   }
 
   :global(.theme-toolbar),

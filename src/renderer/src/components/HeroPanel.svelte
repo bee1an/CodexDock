@@ -7,11 +7,10 @@
   } from '../../../shared/codex'
   import { type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
-  import { cascadeIn, reveal } from './gsap-motion'
 
-  export let heroClass: string
   export let copy: LocalizedCopy
   export let loginEvent: LoginEvent | null = null
   export let showSettings = false
@@ -83,7 +82,6 @@
   let newProviderBaseUrl = ''
   let newProviderApiKey = ''
   let newProviderModel = '5.4'
-  let newProviderFastMode = true
   let codexDesktopExecutablePathDraft = ''
   let lastSyncedCodexDesktopExecutablePath = ''
   let showCodexDesktopExecutableEditor = false
@@ -111,14 +109,12 @@
         baseUrl,
         apiKey,
         protocol: 'openai',
-        model: newProviderModel.trim() || '5.4',
-        fastMode: newProviderFastMode
+        model: newProviderModel.trim() || '5.4'
       })
       newProviderName = ''
       newProviderBaseUrl = ''
       newProviderApiKey = ''
       newProviderModel = '5.4'
-      newProviderFastMode = true
     } finally {
       providerMutationBusy = false
     }
@@ -179,32 +175,15 @@
 </script>
 
 {#if hasDetailContent}
-  <div
-    class="fixed inset-0 z-[55] flex items-center justify-center bg-black/38 px-4 py-6"
-    use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.15 }}
-    role="presentation"
-    tabindex="-1"
-    onclick={(event) => {
-      if (event.target === event.currentTarget) {
-        onClose()
-      }
-    }}
-    onkeydown={(event) => {
-      if (event.key === 'Escape') {
-        onClose()
-      }
-    }}
+  <AppDialog
+    ariaLabelledby="hero-panel-dialog-title"
+    maxWidthClass="max-w-4xl"
+    panelClass="max-h-[calc(100vh-3rem)] overflow-hidden rounded-[1.1rem] p-5 sm:p-6"
+    zIndexClass="z-[55]"
+    scrollable
+    motionSelector="[data-hero-motion]"
+    onclose={onClose}
   >
-    <div
-      class={`${heroClass} w-full max-w-4xl max-h-[calc(100vh-3rem)] overflow-y-auto`}
-      use:reveal={{ delay: 0.05 }}
-      use:cascadeIn={{
-        selector: '[data-hero-motion]'
-      }}
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="hero-panel-dialog-title"
-    >
       <div
         class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4"
         data-hero-motion
@@ -257,7 +236,10 @@
               onclick={runUpdateAction}
               disabled={updateActionDisabled()}
             >
-              {updateActionLabel()}
+              {#if updateState.status === 'checking' || updateState.status === 'downloading'}
+                <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+              {/if}
+              <span>{updateActionLabel()}</span>
             </AppButton>
           </div>
 
@@ -373,7 +355,7 @@
             />
           </div>
 
-          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
+          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <AppInput
               type="password"
               bind:value={newProviderApiKey}
@@ -385,15 +367,6 @@
                 }
               }}
             />
-            <label
-              class="theme-provider-toggle inline-flex items-center gap-2 rounded-xl border border-black/10 bg-white px-3 py-2.5 text-sm text-carbon"
-            >
-              <Checkbox
-                bind:checked={newProviderFastMode}
-                disabled={loginActionBusy || providerMutationBusy}
-              />
-              <span>{copy.providerFastMode}</span>
-            </label>
             <AppButton
               variant="secondary"
               size="sm"
@@ -492,6 +465,5 @@
           {/if}
         </div>
       {/if}
-    </div>
-  </div>
+  </AppDialog>
 {/if}

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from 'svelte'
+  import { tick } from 'svelte'
 
   import type {
     AccountWakeSchedule,
@@ -9,9 +9,10 @@
   import { defaultWakeModel } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
-  import { cascadeIn, reveal } from './gsap-motion'
+  import { reveal } from './gsap-motion'
   import { formatWakeScheduleLastTriggeredAt, nextWakeScheduleLabel } from './wake-schedule'
 
   export let copy: LocalizedCopy
@@ -41,54 +42,26 @@
   export let onSaveSchedule: () => void | Promise<void> = () => {}
   export let onDeleteSchedule: () => void | Promise<void> = () => {}
 
+  let scheduleDeleting = false
+
+  const handleDeleteSchedule = async (): Promise<void> => {
+    if (scheduleDeleting) return
+    scheduleDeleting = true
+    try {
+      await onDeleteSchedule()
+    } finally {
+      scheduleDeleting = false
+    }
+  }
+
   let logPanel: HTMLPreElement | null = null
-  type ModalMotionState = 'closed' | 'open' | 'closing'
-
-  let modalMotionState: ModalMotionState = 'closed'
-  let closeTimer: number | null = null
-  let openFrame: number | null = null
-
-  $: modalMotionClass =
-    modalMotionState === 'open' ? 'is-open' : modalMotionState === 'closing' ? 'is-closing' : ''
-
-  const modalCloseDurationMs = (): number => {
-    if (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      return 0
-    }
-
-    return (
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--modal-close-dur')
-      ) || 150
-    )
-  }
-
-  const clearMotionTimers = (): void => {
-    if (closeTimer != null) {
-      window.clearTimeout(closeTimer)
-      closeTimer = null
-    }
-    if (openFrame != null) {
-      window.cancelAnimationFrame(openFrame)
-      openFrame = null
-    }
-  }
 
   const requestClose = (): void => {
-    if (dialogBusy() || modalMotionState === 'closing') {
+    if (dialogBusy()) {
       return
     }
 
-    clearMotionTimers()
-    modalMotionState = 'closing'
-    closeTimer = window.setTimeout(() => {
-      closeTimer = null
-      onClose()
-    }, modalCloseDurationMs())
+    onClose()
   }
 
   const statusToneClass = (value: typeof sessionStatus): string => {
@@ -162,7 +135,7 @@
     }
   }
 
-  const dialogBusy = (): boolean => sessionBusy || scheduleSaving
+  const dialogBusy = (): boolean => sessionBusy || scheduleSaving || scheduleDeleting
 
   $: if (sessionLogs.length && activeTab === 'session') {
     void tick().then(() => {
@@ -170,29 +143,21 @@
     })
   }
 
-  onMount(() => {
-    openFrame = window.requestAnimationFrame(() => {
-      openFrame = null
-      modalMotionState = 'open'
-    })
-  })
-
-  onDestroy(clearMotionTimers)
 </script>
 
-<div
-  class="wake-dialog-backdrop fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 py-6"
-  use:reveal={{ y: 0, scale: 1, blur: 0, duration: 0.18 }}
+<AppDialog
+  ariaLabelledby="wake-dialog-title"
+  maxWidthClass="max-w-4xl"
+  maxHeightClass="max-h-[calc(100vh-3rem)]"
+  panelClass="wake-dialog-panel flex w-full flex-col overflow-hidden rounded-[0.65rem] p-4 md:p-5"
+  backdropClass="wake-dialog-backdrop"
+  zIndexClass="z-50"
+  closeOnBackdrop={false}
+  closeDisabled={dialogBusy()}
+  motionSelector="[data-wake-motion]"
+  scrollable
+  onclose={requestClose}
 >
-  <div
-    class={`theme-surface t-modal ${modalMotionClass} wake-dialog-panel flex w-full max-w-4xl flex-col overflow-hidden rounded-[0.65rem] border border-black/8 bg-white p-4 md:p-5`}
-    use:cascadeIn={{
-      selector: '[data-wake-motion]'
-    }}
-    role="dialog"
-    aria-modal="true"
-    aria-labelledby="wake-dialog-title"
-  >
     <div class="grid gap-4">
       <div class="wake-dialog-heading grid gap-1" data-wake-motion>
         <p id="wake-dialog-title" class="text-base font-semibold tracking-[-0.015em] text-carbon">
@@ -491,10 +456,13 @@
             <AppButton
               variant="danger"
               size="sm"
-              onclick={onDeleteSchedule}
-              disabled={dialogBusy() || !schedule}
+              onclick={() => void handleDeleteSchedule()}
+              disabled={dialogBusy() || scheduleDeleting || !schedule}
             >
-              {copy.wakeScheduleDelete}
+              {#if scheduleDeleting}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {/if}
+              <span>{copy.wakeScheduleDelete}</span>
             </AppButton>
 
             <div class="flex justify-end gap-2">
@@ -522,8 +490,7 @@
         </div>
       {/if}
     </div>
-  </div>
-</div>
+</AppDialog>
 
 <style>
   .wake-status-running {
@@ -553,7 +520,9 @@
   }
 
   .wake-dialog-panel.wake-dialog-panel {
-    box-shadow: 0 12px 30px -28px rgb(20 20 18 / 0.34) !important;
+    box-shadow:
+      0 28px 84px -40px rgba(0, 0, 0, 0.48),
+      0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
   }
 
   .wake-tab-list {
@@ -574,17 +543,22 @@
   }
 
   :global(html[data-theme='dark']) .wake-dialog-backdrop {
-    background: color-mix(in srgb, black 72%, transparent) !important;
-    backdrop-filter: blur(5px);
+    background:
+      radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.08), transparent 32rem),
+      color-mix(in srgb, black 76%, transparent) !important;
+    backdrop-filter: blur(7px) saturate(0.78);
   }
 
   :global(html[data-theme='dark']) .wake-dialog-panel {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 92%, white 8%) !important;
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--color-fog) 16%) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, white 22%) !important;
+    background: linear-gradient(
+      180deg,
+      color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)),
+      color-mix(in srgb, var(--panel-strong) 78%, var(--color-fog))
+    ) !important;
     box-shadow:
-      0 28px 90px rgb(0 0 0 / 0.88),
-      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 62%, transparent),
-      inset 0 1px 0 rgb(255 255 255 / 0.06) !important;
+      0 36px 132px rgba(0, 0, 0, 0.94),
+      0 18px 58px rgba(0, 0, 0, 0.72) !important;
   }
 
   :global(html[data-theme='dark']) .wake-status-running {

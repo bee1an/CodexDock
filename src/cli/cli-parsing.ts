@@ -343,6 +343,80 @@ export function parseFileOption(argv: string[]): {
   return { filePath, positionals }
 }
 
+export interface UpdateTokensCliOptions {
+  accessToken?: string
+  refreshToken?: string
+  idToken?: string
+  accountIdHint?: string
+  filePath?: string
+  positionals: string[]
+}
+
+export function parseUpdateTokensOptions(argv: string[]): UpdateTokensCliOptions {
+  const options: UpdateTokensCliOptions = { positionals: [] }
+
+  const consumeFlag = (
+    arg: string,
+    longFlag: string,
+    assign: (value: string) => void,
+    argv: string[],
+    index: number
+  ): number | null => {
+    if (arg === longFlag) {
+      const value = argv[index + 1]
+      if (!value) {
+        throw new CliError(`Missing value for ${longFlag}`, EXIT_USAGE)
+      }
+      assign(value)
+      return index + 1
+    }
+
+    if (arg.startsWith(`${longFlag}=`)) {
+      const value = arg.slice(longFlag.length + 1)
+      if (!value) {
+        throw new CliError(`Missing value for ${longFlag}`, EXIT_USAGE)
+      }
+      assign(value)
+      return index
+    }
+
+    return null
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const assignments: Array<[string, (value: string) => void]> = [
+      ['--access-token', (value) => (options.accessToken = value)],
+      ['--refresh-token', (value) => (options.refreshToken = value)],
+      ['--id-token', (value) => (options.idToken = value)],
+      ['--account-id', (value) => (options.accountIdHint = value)],
+      ['--file', (value) => (options.filePath = value)]
+    ]
+
+    let handled = false
+    for (const [flag, assign] of assignments) {
+      const nextIndex = consumeFlag(arg, flag, assign, argv, index)
+      if (nextIndex != null) {
+        index = nextIndex
+        handled = true
+        break
+      }
+    }
+
+    if (handled) {
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    options.positionals.push(arg)
+  }
+
+  return options
+}
+
 export function parseCostOptions(argv: string[]): CostReadOptions {
   const options: CostReadOptions = {
     refresh: false

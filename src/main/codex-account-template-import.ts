@@ -25,7 +25,7 @@ export interface TemplateCredentialsRecord {
   _token_version?: number
   access_token: string
   refresh_token?: string
-  id_token: string
+  id_token?: string
   chatgpt_account_id: string
   chatgpt_user_id?: string
   client_id?: string | null
@@ -98,7 +98,7 @@ interface ResolvedExportAccount {
   planType?: string | null
   accessToken: string
   refreshToken?: string
-  idToken: string
+  idToken?: string
   lastRefresh: string
   expiresAt?: string
   subscriptionExpiresAt?: string
@@ -328,9 +328,7 @@ function resolveOpenAiAuthStringClaimFromTokens(
 }
 
 function hasTopLevelTokens(record: JsonRecord): boolean {
-  return Boolean(
-    readOptionalString(record['id_token']) && readOptionalString(record['access_token'])
-  )
+  return Boolean(readOptionalString(record['access_token']))
 }
 
 function hasNestedTokens(record: JsonRecord): boolean {
@@ -430,7 +428,7 @@ function parseTemplateCredentials(
     label('access_token'),
     accountIndex
   )
-  const idToken = readRequiredString(record['id_token'], label('id_token'), accountIndex)
+  const idToken = readOptionalString(record['id_token'])
   const parent = options.parent
   const idPayload = decodeJwtPayload(idToken)
   const accessPayload = decodeJwtPayload(accessToken)
@@ -772,7 +770,7 @@ export function buildAuthPayloadFromTemplate(
         'credentials.access_token'
       ),
       refresh_token: readOptionalString(account.credentials?.refresh_token),
-      id_token: readRequiredString(account.credentials?.id_token, 'credentials.id_token'),
+      id_token: readOptionalString(account.credentials?.id_token),
       account_id: readRequiredString(
         account.credentials?.chatgpt_account_id,
         'credentials.chatgpt_account_id'
