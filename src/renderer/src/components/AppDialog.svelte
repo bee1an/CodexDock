@@ -168,7 +168,7 @@
         {#if showClose}
           <button
             type="button"
-            class="theme-dialog-close-button inline-flex h-8 w-8 flex-none items-center justify-center rounded-[0.45rem] border border-black/8 bg-white text-muted-strong transition-colors duration-140 hover:bg-black/[0.045] hover:text-carbon focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-carbon disabled:cursor-not-allowed disabled:opacity-50"
+            class="theme-dialog-close-button inline-flex h-8 w-8 flex-none items-center justify-center rounded-[0.45rem] border border-black/8 text-muted-strong transition-colors duration-140 hover:text-carbon focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-carbon disabled:cursor-not-allowed disabled:opacity-50"
             aria-label={closeLabel}
             title={closeLabel}
             disabled={closeDisabled}
@@ -242,6 +242,15 @@
     box-shadow:
       inset 0 1px 0 rgba(255, 255, 255, 0.14),
       inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
+  }
+
+  .theme-dialog-close-button {
+    background: white;
+  }
+
+  .theme-dialog-close-button:hover,
+  .theme-dialog-close-button:focus-visible {
+    background: rgba(0, 0, 0, 0.045);
   }
 
   :global(html[data-theme='dark']) .theme-dialog-close-button {

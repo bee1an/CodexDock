@@ -139,27 +139,29 @@
   }
 </script>
 
-<div class="flex flex-none items-center justify-between gap-3 px-4 pb-3">
-  <div class="min-w-0">
-    <p class="text-sm font-semibold text-carbon">{copy.createProvider}</p>
-    <p class="mt-0.5 text-xs text-muted-strong">{copy.providerCreateDialogDescription}</p>
+<div class="flex flex-none px-4 pb-3">
+  <div class="theme-soft-panel flex w-full flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-black/8 px-4 py-3">
+    <div class="min-w-0">
+      <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.createProvider}</p>
+      <p class="mt-0.5 text-xs leading-5 text-muted-strong">{copy.providerCreateDialogDescription}</p>
+    </div>
+    <AppButton
+      variant="primary"
+      size="sm"
+      onclick={openCreateDialog}
+      disabled={loginActionBusy || providerMutationBusy}
+      ariaLabel={copy.createProvider}
+    >
+      <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
+      <span>{copy.createProvider}</span>
+    </AppButton>
   </div>
-  <AppButton
-    variant="primary"
-    size="sm"
-    onclick={openCreateDialog}
-    disabled={loginActionBusy || providerMutationBusy}
-    ariaLabel={copy.createProvider}
-  >
-    <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
-    <span>{copy.createProvider}</span>
-  </AppButton>
 </div>
 
 {#if providers.length}
-  <div class="min-h-0 flex-1 overflow-y-auto px-4 pb-4">
+  <div class="provider-list-panel min-h-0 flex-1 overflow-y-auto px-4 pb-4">
     <div
-      class="grid gap-2"
+      class="grid"
       use:dragHandleZone={{
         items: sortableProviders,
         type: 'providers',
@@ -168,8 +170,7 @@
         autoAriaDisabled: false,
         zoneItemTabIndex: -1,
         dropTargetStyle: {
-          outline: '2px solid rgba(0,0,0,0.16)',
-          borderRadius: '0.875rem'
+          outline: '2px solid rgba(0,0,0,0.16)'
         },
         delayTouchStart: true
       }}
@@ -177,9 +178,9 @@
       onfinalize={(event) => void handleProviderSortFinalize(event)}
       aria-label={copy.providerCount(sortableProviders.length)}
     >
-      {#each sortableProviders as provider (provider.id)}
+      {#each sortableProviders as provider, providerIndex (provider.id)}
         <article
-          class="theme-provider-card group grid items-center gap-3 rounded-[0.35rem] border border-black/8 bg-white px-3 py-2 transition-colors duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+          class="theme-provider-card group grid items-center gap-3 px-2.5 py-2.5 transition-colors duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
           animate:flip={{ duration: flipDurationMs }}
           aria-label={providerLabel(provider, copy)}
         >
@@ -345,6 +346,10 @@
               </AppButton>
             {/if}
           </div>
+
+          {#if providerIndex < sortableProviders.length - 1}
+            <div class="theme-provider-divider col-span-full"></div>
+          {/if}
         </article>
       {/each}
     </div>
@@ -478,15 +483,45 @@
 {/if}
 
 <style>
+  .provider-list-panel {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
+  }
+
+  .provider-list-panel::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .provider-list-panel::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .provider-list-panel::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
+  }
+
+  .provider-list-panel::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
+  }
+
+  .theme-provider-divider {
+    height: 1px;
+    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
+  }
+
   .provider-drag-button {
     appearance: none;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    min-width: 2rem;
-    height: 2rem;
-    min-height: 2rem;
+    width: 1.5rem;
+    min-width: 1.5rem;
+    height: 1.5rem;
+    min-height: 1.5rem;
     border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
     border-radius: 0.38rem;
     background: transparent;
@@ -514,6 +549,22 @@
   :global(html[data-theme='dark']) .provider-drag-button {
     border-color: var(--color-arctic-mist);
     color: var(--ink-soft);
+  }
+
+  :global(html[data-theme='dark']) .provider-list-panel {
+    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
+  }
+
+  :global(html[data-theme='dark']) .provider-list-panel::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .provider-list-panel::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .theme-provider-divider {
+    background: var(--color-arctic-mist) !important;
   }
 
   :global(html[data-theme='dark']) .theme-tag-empty {

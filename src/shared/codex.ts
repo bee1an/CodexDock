@@ -25,6 +25,7 @@ export interface LocalGatewaySettings {
   requestTimeoutMs: number
   modelMappings: LocalGatewayModelMapping[]
   allowedGroupIds: string[]
+  allowedAccountIds: string[]
 }
 
 export interface LocalGatewayStatus {
@@ -714,7 +715,8 @@ export function defaultLocalGatewaySettings(): LocalGatewaySettings {
     stickyTtlMinutes: 360,
     requestTimeoutMs: 120_000,
     modelMappings: [],
-    allowedGroupIds: []
+    allowedGroupIds: [],
+    allowedAccountIds: []
   }
 }
 
@@ -757,6 +759,22 @@ function normalizeAllowedGroupIds(value: unknown): string[] {
   return result
 }
 
+function normalizeAllowedAccountIds(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const entry of value) {
+    if (typeof entry !== 'string') continue
+    const trimmed = entry.trim()
+    if (!trimmed || seen.has(trimmed)) continue
+    seen.add(trimmed)
+    result.push(trimmed)
+  }
+  return result
+}
+
 export function normalizeLocalGatewaySettings(
   settings?: Partial<LocalGatewaySettings> | null
 ): LocalGatewaySettings {
@@ -783,7 +801,8 @@ export function normalizeLocalGatewaySettings(
         ? Math.floor(requestTimeoutMs)
         : defaults.requestTimeoutMs,
     modelMappings: normalizeModelMappings(settings?.modelMappings),
-    allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds)
+    allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds),
+    allowedAccountIds: normalizeAllowedAccountIds(settings?.allowedAccountIds)
   }
 }
 

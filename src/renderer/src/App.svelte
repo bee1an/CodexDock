@@ -4,7 +4,6 @@
   import AccountsPanel from './components/AccountsPanel.svelte'
   import AppButton from './components/AppButton.svelte'
   import AppDialog from './components/AppDialog.svelte'
-  import AppSider from './components/AppSider.svelte'
   import { reveal } from './components/gsap-motion'
   import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
@@ -132,10 +131,8 @@
   let loginStarting = false
   let showCallbackLoginDetails = true
   let showDeviceLoginDetails = true
-  let showProviderComposer = false
   let refreshingAllUsage = false
   let pageError = ''
-  let showSettings = false
   let loginPortOccupant: PortOccupant | null = null
   let windowFocused = true
   let killingLoginPortOccupant = false
@@ -385,8 +382,6 @@
   }
 
   const toolbarDialogOpen = (): boolean =>
-    showSettings ||
-    showProviderComposer ||
     (showCallbackLoginDetails &&
       loginEvent?.method === 'browser' &&
       Boolean(loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput)) ||
@@ -408,19 +403,9 @@
     applySnapshot(await window.codexApp.getSnapshot())
   }
 
-  const closeProviderComposer = (): void => {
-    showProviderComposer = false
-  }
-
   const closeExpandablePanels = (
-    except?: 'provider' | 'settings' | 'browser-login' | 'device-login'
+    except?: 'browser-login' | 'device-login'
   ): void => {
-    if (except !== 'provider') {
-      showProviderComposer = false
-    }
-    if (except !== 'settings') {
-      showSettings = false
-    }
     if (except !== 'browser-login') {
       showCallbackLoginDetails = false
     }
@@ -682,7 +667,6 @@
 
   const createProvider = async (input: CreateCustomProviderInput): Promise<void> => {
     await runAction(`provider:create:${input.baseUrl}`, () => window.codexApp.createProvider(input))
-    closeProviderComposer()
   }
 
   const probeProviderModels = (
@@ -766,6 +750,18 @@
         localGateway: {
           ...(currentGateway ?? {}),
           allowedGroupIds: groupIds
+        }
+      })
+    )
+  }
+
+  const updateLocalGatewayAllowedAccounts = async (accountIds: string[]): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-accounts', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          allowedAccountIds: accountIds
         }
       })
     )
@@ -1384,26 +1380,6 @@
     )
   }
 
-  const updateToolbarIconMovable = async (enabled: boolean): Promise<void> => {
-    if ((snapshot.settings.toolbarIconMovable ?? true) === enabled) {
-      return
-    }
-
-    await runAction('settings:toolbar-icon-movable', () =>
-      window.codexApp.updateSettings({ toolbarIconMovable: enabled })
-    )
-  }
-
-  const updateCollapsedToolbarIconDefaultPosition = async (enabled: boolean): Promise<void> => {
-    if ((snapshot.settings.collapsedToolbarIconDefaultPosition ?? true) === enabled) {
-      return
-    }
-
-    await runAction('settings:toolbar-icon-default-position', () =>
-      window.codexApp.updateSettings({ collapsedToolbarIconDefaultPosition: enabled })
-    )
-  }
-
   const updateCodexDesktopExecutablePath = async (value: string): Promise<void> => {
     const normalized = value.trim()
     if (snapshot.settings.codexDesktopExecutablePath === normalized) {
@@ -1625,6 +1601,7 @@
               {localGatewayApiKey}
               localGatewayModelMappings={snapshot.settings.localGateway?.modelMappings ?? []}
               localGatewayAllowedGroupIds={snapshot.settings.localGateway?.allowedGroupIds ?? []}
+              localGatewayAllowedAccountIds={snapshot.settings.localGateway?.allowedAccountIds ?? []}
               groups={snapshot.groups}
               activeAccountId={snapshot.activeAccountId}
               {usageByAccountId}
@@ -1666,6 +1643,7 @@
               {openLocalGatewayInCodex}
               {updateLocalGatewayModelMappings}
               {updateLocalGatewayAllowedGroups}
+              {updateLocalGatewayAllowedAccounts}
               {openProviderInCodex}
               {reorderAccounts}
               {createGroup}
@@ -1694,6 +1672,35 @@
               {startLogin}
               importCurrent={() =>
                 runAction('import', () => window.codexApp.importCurrentAccount())}
+              importAccountsFile={() =>
+                runAction('import:file', () => window.codexApp.importAccountsFromFile())}
+              exportAccountsFile={() => openExportFormatDialog()}
+              {refreshAllRateLimits}
+              {refreshingAllUsage}
+              activateBestAccount={() => {
+                const target = bestAccount()
+                if (!target || target.id === snapshot.activeAccountId) {
+                  return
+                }
+                void runAccountAction(`activate:${target.id}`, () =>
+                  window.codexApp.activateAccount(target.id)
+                )
+              }}
+              bestAccount={bestAccount()}
+              {appMeta}
+              appSettings={snapshot.settings}
+              theme={snapshot.settings.theme}
+              {updateState}
+              {updateLanguage}
+              {updateTheme}
+              {updatePollingInterval}
+              {updateCheckForUpdatesOnStartup}
+              {checkForUpdates}
+              {downloadUpdate}
+              {installUpdate}
+              {openExternalLink}
+              {updateCodexDesktopExecutablePath}
+              showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
             />
           </div>
         </div>
@@ -1728,64 +1735,6 @@
             </div>
           </section>
         {/if}
-
-        <div
-          class="app-bottom-toolbar fixed bottom-4 left-1/2 z-50 flex -translate-x-1/2 items-center justify-center"
-          use:reveal={{ delay: 0.08 }}
-        >
-          <AppSider
-            copy={copyForLanguage()}
-            {appMeta}
-            language={snapshot.settings.language}
-            theme={snapshot.settings.theme}
-            {loginStarting}
-            loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
-            {refreshingAllUsage}
-            {showProviderComposer}
-            toolbarIconMovable={snapshot.settings.toolbarIconMovable !== false}
-            collapsedToolbarIconDefaultPosition={snapshot.settings
-              .collapsedToolbarIconDefaultPosition !== false}
-            bestAccount={bestAccount()}
-            activeAccountId={snapshot.activeAccountId}
-            {startLogin}
-            importCurrent={() => {
-              closeExpandablePanels()
-              return runAction('import', () => window.codexApp.importCurrentAccount())
-            }}
-            importAccountsFile={() => {
-              closeExpandablePanels()
-              return runAction('import:file', () => window.codexApp.importAccountsFromFile())
-            }}
-            exportAccountsFile={() => {
-              closeExpandablePanels()
-              openExportFormatDialog()
-            }}
-            {refreshAllRateLimits}
-            activateBestAccount={() => {
-              closeExpandablePanels()
-              const target = bestAccount()
-              if (!target || target.id === snapshot.activeAccountId) {
-                return Promise.resolve()
-              }
-              return runAccountAction(`activate:${target.id}`, () =>
-                window.codexApp.activateAccount(target.id)
-              )
-            }}
-            toggleSettings={() => {
-              const nextOpen = !showSettings
-              closeExpandablePanels(nextOpen ? 'settings' : undefined)
-              showSettings = nextOpen
-            }}
-            toggleProviderComposer={() => {
-              const nextOpen = !showProviderComposer
-              closeExpandablePanels(nextOpen ? 'provider' : undefined)
-              showProviderComposer = nextOpen
-            }}
-            {updateLanguage}
-            {updateTheme}
-            {openExternalLink}
-          />
-        </div>
       </div>
     {/if}
   </div>
@@ -1916,26 +1865,8 @@
     copy={copyForLanguage()}
     {loginEvent}
     onClose={() => closeExpandablePanels()}
-    {showSettings}
-    {showProviderComposer}
     {showCallbackLoginDetails}
     {showDeviceLoginDetails}
-    loginActionBusy={loginActionBusy() || (!snapshot.accounts.length && refreshingAllUsage)}
-    {pollingOptions}
-    settings={snapshot.settings}
-    {updateState}
-    {createProvider}
-    {updatePollingInterval}
-    {updateCheckForUpdatesOnStartup}
-    {updateShowLocalMockData}
-    {updateToolbarIconMovable}
-    {updateCollapsedToolbarIconDefaultPosition}
-    {updateCodexDesktopExecutablePath}
-    showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
-    showLocalMockToggle={appMeta.isPackaged === false}
-    {checkForUpdates}
-    {downloadUpdate}
-    {installUpdate}
     {copyAuthUrl}
     {copyDeviceCode}
     {openExternalLink}
@@ -2116,11 +2047,17 @@
 
   :global(.theme-provider-card),
   :global(.theme-tag-manager-card) {
-    border-width: 0 0 1px !important;
+    border: 0 !important;
+    outline: 0 !important;
     border-radius: 0 !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 88%, transparent) !important;
     background: transparent !important;
     box-shadow: none;
+    position: relative;
+  }
+
+  :global(.theme-provider-card::before),
+  :global(.theme-provider-card::after) {
+    content: none !important;
   }
 
   :global(.theme-tag-empty),
@@ -2275,9 +2212,8 @@
   }
 
   :global(html[data-theme='dark'] .theme-provider-card) {
-    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-fog) 8%) !important;
-    box-shadow: var(--elevation-1) !important;
+    background: transparent !important;
+    box-shadow: none !important;
   }
 
   :global(html[data-theme='dark'] .theme-provider-input),

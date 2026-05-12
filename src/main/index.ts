@@ -457,7 +457,8 @@ function createTray(): void {
               stickyTtlMinutes: 360,
               requestTimeoutMs: 120_000,
               modelMappings: [],
-              allowedGroupIds: []
+              allowedGroupIds: [],
+              allowedAccountIds: []
             }
           },
           usageByAccountId: {},

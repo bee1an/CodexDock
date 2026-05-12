@@ -942,7 +942,8 @@ describe('createCodexServices', () => {
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
-        allowedGroupIds: ['group-1']
+        allowedGroupIds: ['group-1'],
+        allowedAccountIds: []
       }
     })
 
@@ -1166,7 +1167,8 @@ describe('createCodexServices', () => {
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
-        allowedGroupIds: ['all']
+        allowedGroupIds: ['all'],
+        allowedAccountIds: []
       }
     })
 

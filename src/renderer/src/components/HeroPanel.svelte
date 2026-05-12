@@ -1,127 +1,17 @@
 <script lang="ts">
-  import type {
-    AppSettings,
-    AppUpdateState,
-    CreateCustomProviderInput,
-    LoginEvent
-  } from '../../../shared/codex'
+  import type { LoginEvent } from '../../../shared/codex'
   import { type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
-  import AppInput from './AppInput.svelte'
-  import Checkbox from './Checkbox.svelte'
 
   export let copy: LocalizedCopy
   export let loginEvent: LoginEvent | null = null
-  export let showSettings = false
-  export let showProviderComposer = false
   export let onClose: () => void = () => {}
-  export let showCodexDesktopExecutablePath = false
   export let showCallbackLoginDetails = true
   export let showDeviceLoginDetails = true
-  export let loginActionBusy: boolean
-  export let pollingOptions: readonly number[]
-  export let settings: AppSettings
-  export let updateState: AppUpdateState
-  export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
-  export let updatePollingInterval: (minutes: number) => void
-  export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void
-  export let updateShowLocalMockData: (enabled: boolean) => void
-  export let updateToolbarIconMovable: (enabled: boolean) => void = () => {}
-  export let updateCollapsedToolbarIconDefaultPosition: (enabled: boolean) => void = () => {}
-  export let updateCodexDesktopExecutablePath: (value: string) => Promise<void>
-  export let showLocalMockToggle = false
-  export let checkForUpdates: () => void
-  export let downloadUpdate: () => Promise<void>
-  export let installUpdate: () => Promise<void>
   export let copyAuthUrl: () => void
   export let copyDeviceCode: () => void
   export let openExternalLink: (url?: string) => void
-
-  const updateActionLabel = (): string => {
-    switch (updateState.status) {
-      case 'checking':
-        return copy.checkingUpdates
-      case 'available':
-        return updateState.delivery === 'external'
-          ? updateState.externalAction === 'homebrew'
-            ? copy.updateViaHomebrew(updateState.availableVersion)
-            : copy.openReleasePage(updateState.availableVersion)
-          : copy.downloadUpdate(updateState.availableVersion)
-      case 'downloaded':
-        return copy.restartToInstallUpdate
-      default:
-        return copy.checkUpdates
-    }
-  }
-
-  const updateActionDisabled = (): boolean =>
-    updateState.status === 'checking' ||
-    updateState.status === 'downloading' ||
-    updateState.status === 'unsupported'
-
-  const runUpdateAction = (): void => {
-    switch (updateState.status) {
-      case 'available':
-        void downloadUpdate()
-        return
-      case 'downloaded':
-        void installUpdate()
-        return
-      case 'checking':
-      case 'downloading':
-      case 'unsupported':
-        return
-      default:
-        void checkForUpdates()
-    }
-  }
-
-  let providerMutationBusy = false
-  let newProviderName = ''
-  let newProviderBaseUrl = ''
-  let newProviderApiKey = ''
-  let newProviderModel = '5.4'
-  let codexDesktopExecutablePathDraft = ''
-  let lastSyncedCodexDesktopExecutablePath = ''
-  let showCodexDesktopExecutableEditor = false
-  $: if (settings.codexDesktopExecutablePath !== lastSyncedCodexDesktopExecutablePath) {
-    lastSyncedCodexDesktopExecutablePath = settings.codexDesktopExecutablePath
-    codexDesktopExecutablePathDraft = settings.codexDesktopExecutablePath
-  }
-
-  $: if (settings.codexDesktopExecutablePath.trim()) {
-    showCodexDesktopExecutableEditor = true
-  }
-
-  const submitProvider = async (): Promise<void> => {
-    const baseUrl = newProviderBaseUrl.trim()
-    const apiKey = newProviderApiKey.trim()
-    if (!baseUrl || !apiKey || providerMutationBusy || loginActionBusy) {
-      return
-    }
-
-    providerMutationBusy = true
-
-    try {
-      await createProvider({
-        name: newProviderName.trim() || undefined,
-        baseUrl,
-        apiKey,
-        protocol: 'openai',
-        model: newProviderModel.trim() || '5.4'
-      })
-      newProviderName = ''
-      newProviderBaseUrl = ''
-      newProviderApiKey = ''
-      newProviderModel = '5.4'
-    } finally {
-      providerMutationBusy = false
-    }
-  }
-
-  $: hasDetailContent =
-    showSettings || showProviderComposer || showBrowserLoginDetails || showDeviceLoginDetailsPanel
 
   $: showBrowserLoginDetails =
     showCallbackLoginDetails &&
@@ -133,43 +23,15 @@
     loginEvent?.method === 'device' &&
     Boolean(loginEvent?.verificationUrl || loginEvent?.userCode || loginEvent?.rawOutput)
 
+  $: hasDetailContent = showBrowserLoginDetails || showDeviceLoginDetailsPanel
+
   const dialogTitle = (): string => {
-    if (
-      showSettings &&
-      !showProviderComposer &&
-      !showBrowserLoginDetails &&
-      !showDeviceLoginDetailsPanel
-    ) {
-      return copy.settings
-    }
-
-    if (
-      !showSettings &&
-      showProviderComposer &&
-      !showBrowserLoginDetails &&
-      !showDeviceLoginDetailsPanel
-    ) {
-      return copy.createProvider
-    }
-
-    if (
-      !showSettings &&
-      !showProviderComposer &&
-      showBrowserLoginDetails &&
-      !showDeviceLoginDetailsPanel
-    ) {
+    if (showBrowserLoginDetails && !showDeviceLoginDetailsPanel) {
       return copy.callbackLogin
     }
-
-    if (
-      !showSettings &&
-      !showProviderComposer &&
-      !showBrowserLoginDetails &&
-      showDeviceLoginDetailsPanel
-    ) {
+    if (!showBrowserLoginDetails && showDeviceLoginDetailsPanel) {
       return copy.deviceLogin
     }
-
     return copy.toolbarDialogTitle
   }
 </script>
@@ -184,286 +46,95 @@
     motionSelector="[data-hero-motion]"
     onclose={onClose}
   >
-      <div
-        class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4"
-        data-hero-motion
-      >
-        <div class="grid gap-1">
-          <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
-            {copy.toolbarDialogTitle}
-          </p>
-          <h2 id="hero-panel-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
-            {dialogTitle()}
-          </h2>
-        </div>
-
-        <AppButton variant="secondary" size="sm" onclick={onClose}>
-          {copy.closeDialog}
-        </AppButton>
+    <div
+      class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4"
+      data-hero-motion
+    >
+      <div class="grid gap-1">
+        <h2 id="hero-panel-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
+          {dialogTitle()}
+        </h2>
       </div>
 
-      {#if showSettings}
-        <div class="grid gap-3" data-hero-motion>
-          <div class="grid gap-1">
-            <p class="text-sm font-medium text-carbon">{copy.generalSettings}</p>
-            <p class="text-xs leading-5 text-muted-strong">{copy.generalSettingsDescription}</p>
-          </div>
+      <AppButton variant="secondary" size="sm" onclick={onClose}>
+        {copy.closeDialog}
+      </AppButton>
+    </div>
 
-          <div class="flex flex-wrap items-center gap-3">
-            <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
-            <select
-              class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-              value={settings.usagePollingMinutes}
-              onchange={(event) =>
-                updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
-            >
-              {#each pollingOptions as option (option)}
-                <option value={option}>{option} {copy.minutes}</option>
-              {/each}
-            </select>
-
-            <label class="ml-auto inline-flex items-center gap-2 text-xs text-muted-strong">
-              <Checkbox
-                checked={settings.checkForUpdatesOnStartup}
-                onCheckedChange={(checked) => updateCheckForUpdatesOnStartup(checked)}
-              />
-              <span>{copy.autoCheckUpdates}</span>
-            </label>
-
-            <AppButton
-              variant="secondary"
-              size="sm"
-              onclick={runUpdateAction}
-              disabled={updateActionDisabled()}
-            >
-              {#if updateState.status === 'checking' || updateState.status === 'downloading'}
-                <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
-              {/if}
-              <span>{updateActionLabel()}</span>
-            </AppButton>
-          </div>
-
-          {#if showLocalMockToggle}
-            <label class="inline-flex items-center gap-2 text-xs text-muted-strong">
-              <Checkbox
-                checked={settings.showLocalMockData !== false}
-                onCheckedChange={(checked) => updateShowLocalMockData(checked)}
-              />
-              <span>{copy.showLocalMockData}</span>
-            </label>
-          {/if}
-
-          <div
-            class="theme-soft-panel grid gap-3 rounded-xl border border-black/8 bg-black/[0.02] px-3 py-3"
+    <div class="grid gap-2" data-hero-motion>
+      {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
+        <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+          <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
+          <code
+            class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
           >
-            <div class="grid gap-1">
-              <p class="text-sm font-medium text-carbon">{copy.toolbarSettings}</p>
-              <p class="text-xs leading-5 text-muted-strong">{copy.toolbarSettingsDescription}</p>
-            </div>
-
-            <label class="inline-flex items-start gap-2 text-xs text-muted-strong">
-              <Checkbox
-                className="mt-0.5"
-                checked={settings.toolbarIconMovable !== false}
-                onCheckedChange={(checked) => updateToolbarIconMovable(checked)}
-              />
-              <span class="grid gap-0.5">
-                <span class="font-medium text-carbon">{copy.toolbarIconMovable}</span>
-                <span>{copy.toolbarIconMovableDescription}</span>
-              </span>
-            </label>
-
-            <label class="inline-flex items-start gap-2 text-xs text-muted-strong">
-              <Checkbox
-                className="mt-0.5"
-                checked={settings.collapsedToolbarIconDefaultPosition !== false}
-                onCheckedChange={(checked) => updateCollapsedToolbarIconDefaultPosition(checked)}
-              />
-              <span class="grid gap-0.5">
-                <span class="font-medium text-carbon">
-                  {copy.collapsedToolbarIconDefaultPosition}
-                </span>
-                <span>{copy.collapsedToolbarIconDefaultPositionDescription}</span>
-              </span>
-            </label>
-          </div>
-
-          {#if showCodexDesktopExecutablePath}
-            <div class="flex flex-wrap items-center gap-3">
-              <span class="text-xs text-muted-strong">{copy.codexDesktopExecutablePath}</span>
-              <AppButton
-                variant="secondary"
-                size="sm"
-                onclick={() => {
-                  showCodexDesktopExecutableEditor = !showCodexDesktopExecutableEditor
-                }}
-              >
-                {showCodexDesktopExecutableEditor
-                  ? copy.hideCodexDesktopExecutablePath
-                  : copy.showCodexDesktopExecutablePath}
-              </AppButton>
-            </div>
-
-            {#if showCodexDesktopExecutableEditor}
-              <div
-                class="flex flex-wrap items-center gap-3 rounded-2xl border border-black/7 bg-white"
-              >
-                <span class="w-[168px] shrink-0 text-xs font-medium text-carbon">
-                  {copy.codexDesktopExecutablePath}
-                </span>
-                <AppInput
-                  class="min-w-[320px] flex-1"
-                  size="md"
-                  bind:value={codexDesktopExecutablePathDraft}
-                  placeholder={copy.codexDesktopExecutablePlaceholder}
-                  onblur={() =>
-                    void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)}
-                  onkeydown={(event) => {
-                    if (event.key === 'Enter') {
-                      void updateCodexDesktopExecutablePath(codexDesktopExecutablePathDraft)
-                    }
-                  }}
-                />
-              </div>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-
-      {#if showProviderComposer}
-        <div
-          class={`grid gap-3 ${showSettings ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
-          data-hero-motion
-        >
-          <p class="text-sm font-medium text-carbon">{copy.createProvider}</p>
-
-          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]">
-            <AppInput
-              bind:value={newProviderName}
-              placeholder={copy.providerNamePlaceholder}
-              disabled={loginActionBusy || providerMutationBusy}
-            />
-            <AppInput
-              bind:value={newProviderBaseUrl}
-              placeholder={copy.providerBaseUrlPlaceholder}
-              disabled={loginActionBusy || providerMutationBusy}
-            />
-            <AppInput
-              bind:value={newProviderModel}
-              placeholder={copy.providerModelPlaceholder}
-              disabled={loginActionBusy || providerMutationBusy}
-            />
-          </div>
-
-          <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <AppInput
-              type="password"
-              bind:value={newProviderApiKey}
-              placeholder={copy.providerApiKeyPlaceholder}
-              disabled={loginActionBusy || providerMutationBusy}
-              onkeydown={(event) => {
-                if (event.key === 'Enter') {
-                  void submitProvider()
-                }
-              }}
-            />
+            {loginEvent.authUrl}
+          </code>
+          <div class="flex flex-wrap items-center gap-2">
+            <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
+              {copy.copyLink}
+            </AppButton>
             <AppButton
               variant="secondary"
               size="sm"
-              onclick={() => void submitProvider()}
-              disabled={loginActionBusy ||
-                providerMutationBusy ||
-                !newProviderBaseUrl.trim() ||
-                !newProviderApiKey.trim()}
+              onclick={() => openExternalLink(loginEvent?.authUrl)}
             >
-              <span
-                class={`${providerMutationBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-plug-zap'} h-4.5 w-4.5`}
-              ></span>
-              <span>{copy.createProvider}</span>
+              {copy.openBrowser}
             </AppButton>
           </div>
         </div>
       {/if}
 
-      {#if showBrowserLoginDetails || showDeviceLoginDetailsPanel}
-        <div
-          class={`grid gap-2 ${showSettings || showProviderComposer ? 'border-t border-black/6 pt-4 mt-4' : ''}`}
-          data-hero-motion
-        >
-          {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
-            <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
-              <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
+      {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
+        <p class="text-sm text-muted-strong">{copy.waitingCallback}</p>
+      {/if}
+
+      {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.verificationUrl}
+        <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+          <p class="text-sm text-muted-strong">{copy.deviceLoginLink}</p>
+          <code
+            class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+          >
+            {loginEvent.verificationUrl}
+          </code>
+          {#if loginEvent.userCode}
+            <div class="grid gap-1">
+              <p class="text-sm text-muted-strong">{copy.deviceCode}</p>
               <code
-                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
               >
-                {loginEvent.authUrl}
+                {loginEvent.userCode}
               </code>
-              <div class="flex flex-wrap items-center gap-2">
-                <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
-                  {copy.copyLink}
-                </AppButton>
-                <AppButton
-                  variant="secondary"
-                  size="sm"
-                  onclick={() => openExternalLink(loginEvent?.authUrl)}
-                >
-                  {copy.openBrowser}
-                </AppButton>
-              </div>
             </div>
           {/if}
-
-          {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.localCallbackUrl}
-            <p class="text-sm text-muted-strong">{copy.waitingCallback}</p>
-          {/if}
-
-          {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.verificationUrl}
-            <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
-              <p class="text-sm text-muted-strong">{copy.deviceLoginLink}</p>
-              <code
-                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
-              >
-                {loginEvent.verificationUrl}
-              </code>
-              {#if loginEvent.userCode}
-                <div class="grid gap-1">
-                  <p class="text-sm text-muted-strong">{copy.deviceCode}</p>
-                  <code
-                    class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
-                  >
-                    {loginEvent.userCode}
-                  </code>
-                </div>
-              {/if}
-              <div class="flex flex-wrap items-center gap-2">
-                <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
-                  {copy.copyLink}
-                </AppButton>
-                {#if loginEvent.userCode}
-                  <AppButton variant="secondary" size="sm" onclick={copyDeviceCode}>
-                    {copy.copyCode}
-                  </AppButton>
-                {/if}
-                <AppButton
-                  variant="secondary"
-                  size="sm"
-                  onclick={() => openExternalLink(loginEvent?.verificationUrl)}
-                >
-                  {copy.openBrowser}
-                </AppButton>
-              </div>
-            </div>
-          {/if}
-
-          {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.userCode}
-            <p class="text-sm text-muted-strong">{copy.waitingDeviceCode}</p>
-          {/if}
-
-          {#if loginEvent?.phase === 'error' && loginEvent.rawOutput}
-            <pre
-              class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
-          {/if}
+          <div class="flex flex-wrap items-center gap-2">
+            <AppButton variant="secondary" size="sm" onclick={copyAuthUrl}>
+              {copy.copyLink}
+            </AppButton>
+            {#if loginEvent.userCode}
+              <AppButton variant="secondary" size="sm" onclick={copyDeviceCode}>
+                {copy.copyCode}
+              </AppButton>
+            {/if}
+            <AppButton
+              variant="secondary"
+              size="sm"
+              onclick={() => openExternalLink(loginEvent?.verificationUrl)}
+            >
+              {copy.openBrowser}
+            </AppButton>
+          </div>
         </div>
       {/if}
+
+      {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.userCode}
+        <p class="text-sm text-muted-strong">{copy.waitingDeviceCode}</p>
+      {/if}
+
+      {#if loginEvent?.phase === 'error' && loginEvent.rawOutput}
+        <pre
+          class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
+      {/if}
+    </div>
   </AppDialog>
 {/if}

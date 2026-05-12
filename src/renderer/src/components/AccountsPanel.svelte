@@ -8,6 +8,10 @@
     AccountTokensDetail,
     AccountWakeSchedule,
     AppLanguage,
+    AppMeta,
+    AppSettings,
+    AppTheme,
+    AppUpdateState,
     CodexInstanceSummary,
     CodexSessionDetail,
     CodexSessionProjectsResult,
@@ -24,6 +28,7 @@
     LocalGatewayStatus,
     LocalGatewayModelMapping,
     ListCodexSessionsInput,
+    LoginMethod,
     ProbeProviderModelsInput,
     ProviderModelsProbeResult,
     StatsDisplaySettings,
@@ -43,6 +48,7 @@
   import LocalGatewayView from './LocalGatewayView.svelte'
   import MotionNumber from './MotionNumber.svelte'
   import SessionsView from './SessionsView.svelte'
+  import SettingsView from './SettingsView.svelte'
   import SkillsView from './SkillsView.svelte'
   import PromptsView from './PromptsView.svelte'
   import { groupMemberCount as groupMemberCountForAccounts } from './accounts-panel-account'
@@ -114,7 +120,9 @@
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
   export let localGatewayAllowedGroupIds: string[] = []
+  export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
+  export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let createGroup: (name: string) => Promise<void>
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
@@ -141,8 +149,28 @@
     skillDirName: string
   ) => Promise<CodexSkillDetail>
   export let copyCodexSkill: (input: CopyCodexSkillInput) => Promise<CopyCodexSkillResult>
-  export let startLogin: (method: 'browser' | 'device') => void
+  export let startLogin: (method: LoginMethod) => void
   export let importCurrent: () => void
+  export let importAccountsFile: () => void = () => {}
+  export let exportAccountsFile: () => void = () => {}
+  export let refreshAllRateLimits: () => void = () => {}
+  export let refreshingAllUsage = false
+  export let activateBestAccount: () => void = () => {}
+  export let bestAccount: AccountSummary | null = null
+  export let appMeta: AppMeta
+  export let appSettings: AppSettings
+  export let theme: AppTheme = 'light'
+  export let updateState: AppUpdateState
+  export let updateLanguage: (language: AppLanguage) => void = () => {}
+  export let updateTheme: (theme: AppTheme, origin?: { x?: number; y?: number; target?: HTMLElement | null }) => void = () => {}
+  export let updatePollingInterval: (minutes: number) => void = () => {}
+  export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void = () => {}
+  export let checkForUpdates: () => void = () => {}
+  export let downloadUpdate: () => Promise<void> = async () => {}
+  export let installUpdate: () => Promise<void> = async () => {}
+  export let openExternalLink: (url?: string) => void = () => {}
+  export let updateCodexDesktopExecutablePath: (value: string) => Promise<void> = async () => {}
+  export let showCodexDesktopExecutablePath = false
 
   let currentView:
     | 'accounts'
@@ -151,7 +179,8 @@
     | 'stats'
     | 'sessions'
     | 'skills'
-    | 'prompts' = 'accounts'
+    | 'prompts'
+    | 'settings' = 'accounts'
   let activeGroupFilter = 'all'
   let groupMutationBusy = false
   let showGroupManagerDialog = false
@@ -456,6 +485,18 @@
           <span class="i-lucide-file-text h-3.5 w-3.5"></span>
           <span>{copy.prompts}</span>
         </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={currentView === 'settings'}
+          ariaPressed={currentView === 'settings'}
+          onclick={() => {
+            currentView = 'settings'
+          }}
+        >
+          <span class="i-lucide-cog h-3.5 w-3.5"></span>
+          <span>{copy.settings}</span>
+        </AppButton>
       </div>
     </div>
   </div>
@@ -511,6 +552,27 @@
         window.codexApp.removePromptAttachment(id, fileName)}
       readPromptAttachment={(id, fileName) => window.codexApp.readPromptAttachment(id, fileName)}
     />
+  {:else if currentView === 'settings'}
+    <SettingsView
+      {copy}
+      {language}
+      {theme}
+      settings={appSettings}
+      {updateState}
+      {appMeta}
+      showLocalMockToggle={appMeta.isPackaged === false}
+      {showCodexDesktopExecutablePath}
+      {updatePollingInterval}
+      {updateCheckForUpdatesOnStartup}
+      {updateShowLocalMockData}
+      {updateLanguage}
+      {updateTheme}
+      {updateCodexDesktopExecutablePath}
+      {checkForUpdates}
+      {downloadUpdate}
+      {installUpdate}
+      {openExternalLink}
+    />
   {:else if currentView === 'accounts'}
     <AccountsListView
       bind:activeGroupFilter
@@ -526,7 +588,16 @@
       {usageErrorByAccountId}
       {wakeSchedulesByAccountId}
       {loginActionBusy}
+      {loginStarting}
       {groupMutationBusy}
+      {refreshingAllUsage}
+      {bestAccount}
+      {startLogin}
+      {importCurrent}
+      {importAccountsFile}
+      {exportAccountsFile}
+      {refreshAllRateLimits}
+      {activateBestAccount}
       openGroupManager={() => {
         showGroupManagerDialog = true
       }}
@@ -553,13 +624,16 @@
       {localGatewayApiKey}
       modelMappings={localGatewayModelMappings}
       allowedGroupIds={localGatewayAllowedGroupIds}
+      allowedAccountIds={localGatewayAllowedAccountIds}
       {groups}
+      {accounts}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
       {openLocalGatewayInCodex}
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
+      updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
     />
   {:else if currentView === 'providers'}
     <AccountsProvidersView

@@ -16,7 +16,8 @@
     AccountGroup,
     AccountTokensDetail,
     AccountWakeSchedule,
-    AppLanguage
+    AppLanguage,
+    LoginMethod
   } from '../../../shared/codex'
   import {
     formatRelativeReset,
@@ -74,7 +75,16 @@
   export let usageErrorByAccountId: Record<string, string>
   export let wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   export let loginActionBusy: boolean
+  export let loginStarting = false
   export let groupMutationBusy = false
+  export let refreshingAllUsage = false
+  export let bestAccount: AccountSummary | null = null
+  export let startLogin: (method: LoginMethod) => void = () => {}
+  export let importCurrent: () => void = () => {}
+  export let importAccountsFile: () => void = () => {}
+  export let exportAccountsFile: () => void = () => {}
+  export let refreshAllRateLimits: () => void = () => {}
+  export let activateBestAccount: () => void = () => {}
   export let activeGroupFilter = 'all'
   export let selectedAccountIds: string[] = []
   export let accountWorkbenchExpanded = false
@@ -593,6 +603,85 @@
   }}
 />
 
+<div class="flex flex-none flex-wrap items-center gap-1.5 border-b border-black/8 px-4 py-2">
+  <AppButton
+    variant="secondary"
+    size="xs"
+    onclick={() => startLogin('browser')}
+    disabled={loginActionBusy}
+    ariaLabel={copy.callbackLogin}
+    title={copy.callbackLogin}
+  >
+    <span class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-3.5 w-3.5`}></span>
+    <span>{copy.callbackLogin}</span>
+  </AppButton>
+  <AppButton
+    variant="secondary"
+    size="xs"
+    onclick={() => startLogin('device')}
+    disabled={loginActionBusy}
+    ariaLabel={copy.deviceLogin}
+    title={copy.deviceLogin}
+  >
+    <span class="i-lucide-key-round h-3.5 w-3.5"></span>
+    <span>{copy.deviceLogin}</span>
+  </AppButton>
+  <AppButton
+    variant="secondary"
+    size="xs"
+    onclick={importCurrent}
+    disabled={loginActionBusy}
+    ariaLabel={copy.importCurrent}
+    title={copy.importCurrent}
+  >
+    <span class="i-lucide-monitor-down h-3.5 w-3.5"></span>
+    <span>{copy.importCurrent}</span>
+  </AppButton>
+  <AppButton
+    variant="icon"
+    size="xs"
+    onclick={importAccountsFile}
+    disabled={loginActionBusy}
+    ariaLabel={copy.importAccountsFile}
+    title={copy.importAccountsFile}
+  >
+    <span class="i-lucide-file-up h-3.5 w-3.5"></span>
+  </AppButton>
+  <AppButton
+    variant="icon"
+    size="xs"
+    onclick={exportAccountsFile}
+    disabled={loginActionBusy}
+    ariaLabel={copy.exportAccountsFile}
+    title={copy.exportAccountsFile}
+  >
+    <span class="i-lucide-file-down h-3.5 w-3.5"></span>
+  </AppButton>
+
+  <div class="ml-auto flex items-center gap-1.5">
+    <AppButton
+      variant="secondary"
+      size="xs"
+      onclick={refreshAllRateLimits}
+      disabled={loginActionBusy || refreshingAllUsage}
+      ariaLabel={copy.refreshAllQuota}
+      title={copy.refreshAllQuota}
+    >
+      <span class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}></span>
+    </AppButton>
+    <AppButton
+      variant="secondary"
+      size="xs"
+      onclick={activateBestAccount}
+      disabled={loginActionBusy || !bestAccount || bestAccount.id === activeAccountId}
+      ariaLabel={copy.switchBest}
+      title={copy.switchBest}
+    >
+      <span class="i-lucide-sparkles h-3.5 w-3.5"></span>
+    </AppButton>
+  </div>
+</div>
+
 <div class="theme-workbench-toolbar border-b border-black/8 px-4 py-1.5">
   <button
     class="theme-workbench-toggle flex w-full items-center justify-between gap-3 rounded-[0.35rem] border-0 bg-transparent px-1.5 py-1 text-left transition-colors duration-140 hover:bg-black/[0.03]"
@@ -870,7 +959,7 @@
 {/if}
 
 {#if visibleAccounts.length}
-  <div class="min-h-0 flex-1 overflow-y-auto px-4">
+  <div class="accounts-scrollbar min-h-0 flex-1 overflow-y-auto px-4">
     <div
       class="grid"
       use:dragHandleZone={{
@@ -1496,9 +1585,34 @@
     display: none;
   }
 
+  .accounts-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
+  }
+
   .theme-account-divider {
     height: 1px;
-    background: rgba(24, 24, 27, 0.08);
+    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
   }
 
   .theme-account-expand-btn :global(.i-lucide-chevron-down) {
@@ -1551,6 +1665,18 @@
   .account-drag-button:disabled {
     cursor: not-allowed;
     opacity: 0.48;
+  }
+
+  :global(html[data-theme='dark']) .accounts-scrollbar {
+    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
+  }
+
+  :global(html[data-theme='dark']) .accounts-scrollbar::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
+  }
+
+  :global(html[data-theme='dark']) .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
   }
 
   :global(html[data-theme='dark']) .theme-account-divider {

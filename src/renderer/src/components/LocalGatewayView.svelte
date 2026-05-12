@@ -2,11 +2,12 @@
   import { onDestroy, onMount } from 'svelte'
   import type {
     AccountGroup,
+    AccountSummary,
     LocalGatewayLogEntry,
     LocalGatewayModelMapping,
     LocalGatewayStatus
   } from '../../../shared/codex'
-  import type { LocalizedCopy } from './app-view'
+  import { accountEmail, type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
@@ -19,7 +20,9 @@
   export let localGatewayApiKey = ''
   export let modelMappings: LocalGatewayModelMapping[] = []
   export let allowedGroupIds: string[] = []
+  export let allowedAccountIds: string[] = []
   export let groups: AccountGroup[] = []
+  export let accounts: AccountSummary[] = []
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
@@ -28,8 +31,11 @@
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
   export let updateAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
+  export let updateAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
 
   let allowedGroupsBusy = false
+  let allowedAccountsBusy = false
+  let showAccountPicker = false
 
   const toggleAllowedGroup = async (groupId: string): Promise<void> => {
     if (allowedGroupsBusy) return
@@ -41,6 +47,19 @@
       await updateAllowedGroups(next)
     } finally {
       allowedGroupsBusy = false
+    }
+  }
+
+  const toggleAllowedAccount = async (accountId: string): Promise<void> => {
+    if (allowedAccountsBusy) return
+    const next = allowedAccountIds.includes(accountId)
+      ? allowedAccountIds.filter((id) => id !== accountId)
+      : [...allowedAccountIds, accountId]
+    allowedAccountsBusy = true
+    try {
+      await updateAllowedAccounts(next)
+    } finally {
+      allowedAccountsBusy = false
     }
   }
 
@@ -251,8 +270,9 @@
     (log) => matchesStatusFilter(log, statusFilter) && matchesSearch(log, normalizedLogSearch)
   )
   $: allowedGroupIdSet = new Set(allowedGroupIds)
-  $: hasAllowedGroups = allowedGroupIds.length > 0
-  $: startDisabled = localGatewayBusy || !hasAllowedGroups
+  $: allowedAccountIdSet = new Set(allowedAccountIds)
+  $: hasAllowedEntities = allowedGroupIds.length > 0 || allowedAccountIds.length > 0
+  $: startDisabled = localGatewayBusy || !hasAllowedEntities
 
   onMount(() => {
     void refreshGatewayStatus()
@@ -362,7 +382,7 @@
           onclick={() => void startLocalGateway()}
           disabled={startDisabled}
           ariaLabel={copy.startLocalGateway}
-          title={hasAllowedGroups ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired}
+          title={hasAllowedEntities ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired}
         >
           {#if localGatewayBusy}
             <span
@@ -391,7 +411,7 @@
     {/if}
 
     <section
-      class="gateway-overview-grid grid gap-3 xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]"
+      class="gateway-overview-grid grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)] xl:grid-cols-[minmax(0,1.15fr)_minmax(420px,0.85fr)]"
       aria-label={copy.localGatewayConfigHint}
     >
       <div class="gateway-panel gateway-config-panel overflow-hidden rounded-[0.45rem] border">
@@ -429,7 +449,7 @@
           </div>
         </div>
 
-        <div class="grid gap-2 p-2.5 md:grid-cols-2">
+        <div class="grid gap-2 p-2.5">
           <div class="gateway-config-field min-w-0 overflow-hidden rounded-[0.35rem] border">
             <div class="gateway-config-value flex min-w-0 items-center gap-2 px-2.5 py-2">
               <span
@@ -522,7 +542,7 @@
       </div>
 
       <div
-        class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2 lg:grid-cols-4 xl:grid-cols-2"
+        class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2"
       >
         <div class="gateway-metric-card rounded-[0.45rem] border p-3">
           <div class="mb-2 flex items-center justify-between gap-2">
@@ -596,7 +616,7 @@
               <span
                 class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
               >
-                {formatNumber(allowedGroupIds.length)} / {formatNumber(groups.length)}
+                {formatNumber(allowedGroupIds.length + allowedAccountIds.length)}
               </span>
             </div>
             <p class="mt-0.5 text-[10px] leading-4 text-faint">
@@ -607,35 +627,111 @@
       </div>
 
       <div class="flex flex-col gap-2 p-3">
-        {#if groups.length}
-          <div class="flex flex-wrap gap-1.5">
-            {#each groups as group (group.id)}
-              {@const selected = allowedGroupIdSet.has(group.id)}
+        <div class="flex flex-wrap gap-1.5">
+          {#each groups.filter((g) => allowedGroupIdSet.has(g.id)) as group (group.id)}
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected
+              ariaPressed={true}
+              disabled={allowedGroupsBusy || localGatewayBusy}
+              onclick={() => void toggleAllowedGroup(group.id)}
+            >
+              <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
+              <span>{group.name}</span>
+            </AppButton>
+          {/each}
+          {#each accounts.filter((a) => allowedAccountIdSet.has(a.id)) as account (account.id)}
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected
+              ariaPressed={true}
+              disabled={allowedAccountsBusy || localGatewayBusy}
+              onclick={() => void toggleAllowedAccount(account.id)}
+            >
+              <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
+              <span>{accountEmail(account, copy)}</span>
+            </AppButton>
+          {/each}
+          <AppButton
+            variant="secondary"
+            size="xs"
+            onclick={() => { showAccountPicker = !showAccountPicker }}
+            ariaLabel={showAccountPicker ? copy.closeDialog : copy.addAccount}
+            title={showAccountPicker ? copy.closeDialog : copy.addAccount}
+          >
+            <span class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`} aria-hidden="true"></span>
+          </AppButton>
+        </div>
+        {#if showAccountPicker}
+          <div class="flex flex-wrap gap-1.5 border-t border-black/8 pt-2">
+            {#each groups.filter((g) => !allowedGroupIdSet.has(g.id)) as group (group.id)}
               <AppButton
                 variant="filter"
                 size="xs"
-                {selected}
-                ariaPressed={selected}
+                selected={false}
+                ariaPressed={false}
                 disabled={allowedGroupsBusy || localGatewayBusy}
                 onclick={() => void toggleAllowedGroup(group.id)}
               >
-                {#if selected}
-                  <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
-                {/if}
+                <span class="i-lucide-folder h-3 w-3" aria-hidden="true"></span>
                 <span>{group.name}</span>
               </AppButton>
             {/each}
+            {#each accounts.filter((a) => !allowedAccountIdSet.has(a.id)) as account (account.id)}
+              <AppButton
+                variant="filter"
+                size="xs"
+                selected={false}
+                ariaPressed={false}
+                disabled={allowedAccountsBusy || localGatewayBusy}
+                onclick={() => void toggleAllowedAccount(account.id)}
+              >
+                <span class="i-lucide-user h-3 w-3" aria-hidden="true"></span>
+                <span>{accountEmail(account, copy)}</span>
+              </AppButton>
+            {/each}
           </div>
-          {#if !hasAllowedGroups}
-            <p class="text-[11px] leading-4 text-danger" role="alert">
-              {copy.localGatewayAllowedGroupsRequired}
-            </p>
-          {/if}
-        {:else}
-          <p class="text-[11px] leading-4 text-faint">{copy.localGatewayAllowedGroupsEmpty}</p>
+        {/if}
+        {#if !hasAllowedEntities && !showAccountPicker}
+          <p class="text-[11px] leading-4 text-danger" role="alert">
+            {copy.localGatewayAllowedGroupsRequired}
+          </p>
         {/if}
       </div>
     </section>
+
+    <div class="gateway-panel flex items-center gap-2 rounded-[0.45rem] border px-3 py-2.5">
+      <span
+        class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
+        aria-hidden="true"
+      >
+        <span class="i-lucide-arrow-left-right h-3.5 w-3.5"></span>
+      </span>
+      <div class="min-w-0 flex-1">
+        <div class="flex min-w-0 items-center gap-2">
+          <h3 class="text-[12px] font-semibold text-carbon">
+            {copy.localGatewayModelMappingsTitle}
+          </h3>
+          <span
+            class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+          >
+            {formatNumber(modelMappings.length)}
+          </span>
+        </div>
+      </div>
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={() => {
+          showMappingDialog = true
+        }}
+      >
+        <span class="i-lucide-settings-2 h-3.5 w-3.5" aria-hidden="true"></span>
+        <span>{copy.localGatewayModelMappingsManage}</span>
+      </AppButton>
+    </div>
 
     <section
       class="gateway-panel gateway-logs-panel rounded-[0.45rem] border"
@@ -812,83 +908,6 @@
         {/if}
       </div>
     </section>
-
-    <section
-      class="gateway-panel gateway-mappings-panel rounded-[0.45rem] border"
-      aria-labelledby="local-gateway-mappings-heading"
-    >
-      <div
-        class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5"
-      >
-        <div class="flex min-w-0 items-start gap-2">
-          <span
-            class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
-            aria-hidden="true"
-          >
-            <span class="i-lucide-arrow-left-right h-3.5 w-3.5"></span>
-          </span>
-          <div class="min-w-0">
-            <div class="flex min-w-0 items-center gap-2">
-              <h3 id="local-gateway-mappings-heading" class="text-[12px] font-semibold text-carbon">
-                {copy.localGatewayModelMappingsTitle}
-              </h3>
-              <span
-                class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
-              >
-                {formatNumber(modelMappings.length)}
-              </span>
-            </div>
-            <p class="mt-0.5 text-[10px] leading-4 text-faint">
-              {copy.localGatewayModelMappingsHint}
-            </p>
-          </div>
-        </div>
-        <AppButton
-          variant="secondary"
-          size="xs"
-          onclick={() => {
-            showMappingDialog = true
-          }}
-        >
-          <span class="i-lucide-settings-2 h-3.5 w-3.5" aria-hidden="true"></span>
-          <span>{copy.localGatewayModelMappingsManage}</span>
-        </AppButton>
-      </div>
-
-      <div class="flex flex-col gap-2 p-3">
-        {#if modelMappings.length}
-          <ul class="flex flex-col gap-1.5" aria-label={copy.localGatewayModelMappingsTitle}>
-            {#each modelMappings.slice(0, 3) as entry (entry.from)}
-              <li
-                class="gateway-mapping-row flex items-center gap-2 rounded-[0.35rem] border px-2.5 py-1.5"
-              >
-                <code
-                  class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
-                  title={entry.from}
-                  translate="no">{entry.from}</code
-                >
-                <span
-                  class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
-                  aria-hidden="true"
-                ></span>
-                <code
-                  class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
-                  title={entry.to}
-                  translate="no">{entry.to}</code
-                >
-              </li>
-            {/each}
-          </ul>
-          {#if modelMappings.length > 3}
-            <p class="text-[11px] leading-4 text-faint">
-              {copy.localGatewayModelMappingsMore(modelMappings.length - 3)}
-            </p>
-          {/if}
-        {:else}
-          <p class="text-[11px] leading-4 text-faint">{copy.localGatewayModelMappingsEmpty}</p>
-        {/if}
-      </div>
-    </section>
   </div>
 </div>
 
@@ -1038,12 +1057,6 @@
   }
 
   .gateway-toolbar {
-    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)),
-      color-mix(in srgb, var(--panel-strong) 72%, var(--surface-soft))
-    ) !important;
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
       0 1px 0 color-mix(in srgb, var(--edge-dark) 16%, transparent);
@@ -1115,6 +1128,18 @@
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
       0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .gateway-metric-card:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 100%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 2px 6px color-mix(in srgb, var(--edge-dark) 18%, transparent);
   }
 
   .gateway-metrics-grid {
@@ -1179,6 +1204,7 @@
 
   .gateway-table-row:hover {
     background: var(--surface-hover);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ink-soft-strong) 72%, transparent);
   }
 
   .gateway-method-pill,
@@ -1256,12 +1282,9 @@
   }
 
   :global(html[data-theme='dark']) .gateway-toolbar {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)),
-      color-mix(in srgb, var(--panel-strong) 62%, var(--surface-soft))
-    ) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
   }
 
   :global(html[data-theme='dark']) .gateway-scrollbar {

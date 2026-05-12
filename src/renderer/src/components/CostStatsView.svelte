@@ -1150,55 +1150,81 @@
 
 <style>
   .stats-stage {
-    box-shadow: none;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 16%, transparent);
   }
 
   .stats-surface {
-    background: transparent;
-    border-color: var(--color-arctic-mist);
-    box-shadow: none;
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .stats-surface:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 2px 6px color-mix(in srgb, var(--edge-dark) 18%, transparent);
   }
 
   .stats-info-rail {
-    background: var(--surface-soft);
-    border-color: var(--color-arctic-mist);
-    box-shadow: none;
+    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
   }
 
   .stats-metric-block {
-    background: var(--surface-soft);
-    border: 1px solid var(--color-arctic-mist);
+    border: 1px solid color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .stats-metric-block:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 100%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 2px 6px color-mix(in srgb, var(--edge-dark) 18%, transparent);
+  }
+
+  .stats-config-popover {
+    background: var(--panel-strong);
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    box-shadow: var(--elevation-2);
+  }
+
+  .stats-toggle-row {
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border: 1px solid color-mix(in srgb, var(--line-strong) 48%, transparent);
     box-shadow: none;
     transition:
       background-color 140ms ease,
       border-color 140ms ease;
   }
 
-  .stats-metric-block:hover {
-    background: var(--surface-hover);
-    border-color: var(--line-strong);
-  }
-
-  .stats-config-popover {
-    background: var(--panel-strong);
-    border-color: var(--color-arctic-mist);
-    box-shadow: var(--elevation-1);
-  }
-
-  .stats-toggle-row {
-    background: var(--surface-soft);
-    box-shadow: none;
-    transition: background-color 140ms ease;
-  }
-
   .stats-toggle-row:hover {
     background: var(--surface-hover);
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
   }
 
   .stats-chart-shell {
-    background: var(--surface-soft);
-    border-color: var(--color-arctic-mist);
-    box-shadow: none;
+    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 38%, transparent);
   }
 
   .stats-chart-canvas {
@@ -1229,33 +1255,64 @@
     align-items: center;
     justify-content: center;
     gap: 0.5rem;
-    border: 1px dashed var(--color-arctic-mist);
-    border-radius: 1rem;
-    background: var(--surface-soft);
+    border: 1px dashed color-mix(in srgb, var(--line-strong) 48%, transparent);
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
+    box-shadow: inset 0 2px 8px color-mix(in srgb, var(--edge-dark) 6%, transparent);
     text-align: center;
   }
 
   :global(html[data-theme='dark']) .stats-stage {
-    background: var(--surface-soft) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-    box-shadow: none !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .stats-surface {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
   }
 
-  :global(html[data-theme='dark']) .stats-info-rail,
-  :global(html[data-theme='dark']) .stats-metric-block,
-  :global(html[data-theme='dark']) .stats-toggle-row,
-  :global(html[data-theme='dark']) .stats-chart-shell {
+  :global(html[data-theme='dark']) .stats-info-rail {
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-metric-block {
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-metric-block:hover {
     background: var(--surface-hover) !important;
-    border-color: var(--color-arctic-mist) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 96%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-toggle-row {
+    background: color-mix(in srgb, var(--surface-soft) 82%, transparent) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 68%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-chart-shell {
+    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
   }
 
   :global(html[data-theme='dark']) .stats-config-popover {
     background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent) !important;
+  }
+
+  :global(html[data-theme='dark']) .stats-empty-state {
+    background: color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft));
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 68%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stats-surface,
+    .stats-metric-block,
+    .stats-toggle-row {
+      transition-duration: 0ms;
+    }
   }
 </style>
