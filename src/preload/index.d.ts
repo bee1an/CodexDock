@@ -56,6 +56,7 @@ interface CodexDesktopApi {
   openCodex: () => Promise<AppSnapshot>
   importCurrentAccount: () => Promise<AppSnapshot>
   importAccountsFromFile: () => Promise<AppSnapshot>
+  importAccountsFromRaw: (raw: string) => Promise<AppSnapshot>
   exportAccountsToFile: (format?: AccountTransferFormat) => Promise<AppSnapshot>
   exportSelectedAccountsToFile: (
     accountIds: string[],

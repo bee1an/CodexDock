@@ -698,6 +698,10 @@ app.whenReady().then(async () => {
     await codexServices.accounts.importFromTemplate(raw)
     return refreshTrayTitle()
   })
+  ipcMain.handle('codex:import-accounts-from-raw', async (_, raw: string) => {
+    await codexServices.accounts.importFromTemplate(raw)
+    return refreshTrayTitle()
+  })
   ipcMain.handle(
     'codex:export-accounts-to-file',
     async (_, format: AccountTransferFormat = 'codexdock') => {
