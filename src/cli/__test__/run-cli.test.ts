@@ -100,6 +100,8 @@ interface CliTestRuntime {
       stop: ReturnType<typeof vi.fn>
       status: ReturnType<typeof vi.fn>
       rotateKey: ReturnType<typeof vi.fn>
+      getPortOccupant: ReturnType<typeof vi.fn>
+      killPortOccupant: ReturnType<typeof vi.fn>
     }
     login: {
       start: ReturnType<typeof vi.fn>
@@ -390,7 +392,9 @@ function createRuntime(): {
           baseUrl: 'http://127.0.0.1:11456',
           apiKeyPreview: 'sk-cdock…new1',
           apiKey: 'sk-cdock-new-key'
-        }))
+        })),
+        getPortOccupant: vi.fn(async () => portOccupant),
+        killPortOccupant: vi.fn(async () => portOccupant)
       },
       login: {
         start: vi.fn(async (method: 'browser' | 'device') => {
@@ -769,6 +773,30 @@ describe('runCli', () => {
       ok: true,
       data: {
         apiKey: 'sk-cdock-new-key'
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['gateway', 'port', 'status', '--json'])).resolves.toBe(0)
+    expect(runtime.services.gateway.getPortOccupant).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        pid: 123,
+        command: 'node'
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['gateway', 'port', 'kill', '--json'])).resolves.toBe(0)
+    expect(runtime.services.gateway.killPortOccupant).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        pid: 123,
+        command: 'node'
       },
       error: null
     })

@@ -13,6 +13,7 @@ import type { CodexAuthPayload } from './codex-auth'
 import type { CodexAccountStore } from './codex-account-store'
 import type { CodexProviderStore } from './codex-providers'
 import type { StoredAuthRefreshResult } from './codex-services-shared'
+import { getTcpPortOccupant } from './codex-auth-shared'
 import {
   isLocalMockAccount,
   localGatewayBaseUrl,
@@ -27,7 +28,8 @@ import {
   type LocalGatewaySettings,
   type LocalGatewayStatus,
   type OpenCodexFromServiceInput,
-  type OpenCodexFromServiceResult
+  type OpenCodexFromServiceResult,
+  type PortOccupant
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
@@ -685,6 +687,27 @@ export class CodexLocalGatewayService {
       lastError: this.lastError || undefined,
       logs: this.requestLogs
     }
+  }
+
+  async getPortOccupant(): Promise<PortOccupant | null> {
+    const settings = await this.settings()
+    return getTcpPortOccupant(settings.port)
+  }
+
+  async killPortOccupant(): Promise<PortOccupant | null> {
+    const settings = await this.settings()
+    const occupant = await getTcpPortOccupant(settings.port)
+    if (!occupant) {
+      return null
+    }
+
+    if (occupant.pid === process.pid && this.server?.listening) {
+      await this.stop()
+      return occupant
+    }
+
+    process.kill(occupant.pid, 'SIGTERM')
+    return occupant
   }
 
   async start(): Promise<LocalGatewayStatus> {

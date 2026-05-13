@@ -152,8 +152,10 @@
     delivery: 'auto',
     currentVersion: '--',
     supported: false
+  let localGatewayPortOccupant: PortOccupant | null = null
   }
   let usageByAccountId: Record<string, AccountRateLimits> = {}
+  let killingLocalGatewayPortOccupant = false
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
   let wakingAccountId = ''
@@ -435,8 +437,26 @@
   const loginActionBusy = (): boolean => loginStarting || killingLoginPortOccupant
 
   const refreshAppMeta = async (): Promise<void> => {
+  const localGatewayPort = (): number => snapshot.settings.localGateway?.port ?? 11456
+
+  const hasLocalGatewayPortConflict = (): boolean => {
+    const message = pageError.toLowerCase()
+    const port = String(localGatewayPort())
+    return (
+      (message.includes(port) || message.includes('local gateway') || message.includes('本地')) &&
+      (message.includes('eaddrinuse') ||
+        message.includes('address already in use') ||
+        message.includes('占用') ||
+        message.includes('in use'))
+    )
+  }
+
     appMeta = await window.codexApp.getAppMeta()
     applySnapshot(rawSnapshot)
+  }
+
+  const refreshLocalGatewayPortOccupant = async (): Promise<void> => {
+    localGatewayPortOccupant = await window.codexApp.getLocalGatewayPortOccupant()
   }
 
   const refreshUpdateState = async (): Promise<void> => {
@@ -712,7 +732,16 @@
 
   const startLocalGateway = async (): Promise<void> =>
     runLocalGatewayAction(async () => {
-      await runAction('gateway:start', () => window.codexApp.startLocalGateway())
+      setPageError('')
+      localGatewayPortOccupant = null
+      try {
+        applySnapshot(await window.codexApp.startLocalGateway())
+      } catch (error) {
+        setPageError(localizeKnownError(error, copyForLanguage().actionFailed))
+        if (hasLocalGatewayPortConflict()) {
+          await refreshLocalGatewayPortOccupant()
+        }
+      }
     })
 
   const stopLocalGateway = async (): Promise<void> =>
@@ -868,6 +897,20 @@
     ) {
       return
     }
+
+  const killLocalGatewayPortOccupant = async (): Promise<void> => {
+    setPageError('')
+    killingLocalGatewayPortOccupant = true
+
+    try {
+      localGatewayPortOccupant = await window.codexApp.killLocalGatewayPortOccupant()
+      await refreshLocalGatewayPortOccupant()
+    } catch (error) {
+      setPageError(localizeKnownError(error, copyForLanguage().killLocalGatewayPortOccupantFailed))
+    } finally {
+      killingLocalGatewayPortOccupant = false
+    }
+  }
 
     await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
   }
@@ -1661,6 +1704,9 @@
               {updateAccountGroups}
               refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
               {updateShowLocalMockData}
+              {localGatewayPortOccupant}
+              {killingLocalGatewayPortOccupant}
+              {killLocalGatewayPortOccupant}
               {updateStatsDisplay}
               {openWakeDialog}
               {openEditTokensDialog}

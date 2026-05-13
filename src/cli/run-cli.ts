@@ -625,6 +625,33 @@ async function execute(
           printIfNeeded(`Local gateway API key: ${result.apiKey}`, silent)
           return { code: EXIT_OK, payload: toCliResult(result) }
         }
+        case 'port': {
+          const port = new URL((await runtime.services.gateway.status()).baseUrl).port
+          switch (rest[0]) {
+            case 'status': {
+              const occupant = await runtime.services.gateway.getPortOccupant()
+              printIfNeeded(
+                occupant
+                  ? `${port} occupied by ${occupant.command} (${occupant.pid})`
+                  : `${port} is available`,
+                silent
+              )
+              return { code: EXIT_OK, payload: toCliResult(occupant) }
+            }
+            case 'kill': {
+              const occupant = await runtime.services.gateway.killPortOccupant()
+              printIfNeeded(
+                occupant
+                  ? `Stopped ${occupant.command} (${occupant.pid})`
+                  : `No process was listening on ${port}`,
+                silent
+              )
+              return { code: EXIT_OK, payload: toCliResult(occupant) }
+            }
+            default:
+              throw new CliError('Usage: cdock gateway port status|kill [--json]', EXIT_USAGE)
+          }
+        }
         default:
           throw new CliError('Unknown gateway command', EXIT_USAGE)
       }

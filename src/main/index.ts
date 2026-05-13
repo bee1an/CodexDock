@@ -982,6 +982,9 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())
   ipcMain.handle('codex:get-local-gateway-api-key', () => codexServices.gateway.getApiKey())
+  ipcMain.handle('codex:get-local-gateway-port-occupant', () =>
+    codexServices.gateway.getPortOccupant()
+  )
   ipcMain.handle('codex:start-local-gateway', async () => {
     await codexServices.gateway.start()
     return refreshTrayTitle()
@@ -995,6 +998,9 @@ app.whenReady().then(async () => {
     await refreshTrayTitle()
     return result
   })
+  ipcMain.handle('codex:kill-local-gateway-port-occupant', () =>
+    codexServices.gateway.killPortOccupant()
+  )
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => triggerUpdateDownload())
   ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())

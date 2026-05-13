@@ -8,7 +8,9 @@ export type {
 } from './codex-auth-shared'
 export {
   getOpenAiCallbackPortOccupant,
+  getTcpPortOccupant,
   killOpenAiCallbackPortOccupant,
+  killTcpPortOccupant,
   refreshCodexAuthPayload
 } from './codex-auth-shared'
 export { CodexAccountStore } from './codex-account-store'

@@ -601,6 +601,10 @@ export const messages = {
     emptyStateDescription: '导入当前登录，或者新建一次回调登录。',
     importCurrentHint: '导入当前登录',
     importCurrentDetail: '适合你已经在本机 Codex 里登录过账号的情况。',
+    localGatewayPortOccupied: (port: number, command: string, pid: number) =>
+      `本地服务端口 ${port} 当前被 ${command} (${pid}) 占用`,
+    killLocalGatewayPortOccupant: '结束占用本地服务端口的进程',
+    killLocalGatewayPortOccupantFailed: '无法结束占用本地服务端口的进程',
     callbackLoginHint: '新建回调登录',
     callbackLoginDetail: '适合补充新账号，授权完成后会自动回调导入。',
     deviceLoginHint: '设备码登录',
@@ -1202,6 +1206,11 @@ export const messages = {
     callbackLoginHint: 'Start callback login',
     callbackLoginDetail:
       'Best when you want to add another account and let the local callback finish automatically.',
+    localGatewayPortOccupied: (port: number, command: string, pid: number) =>
+      `Local service port ${port} is currently in use by ${command} (${pid})`,
+    killLocalGatewayPortOccupant: 'Kill local service port process',
+    killLocalGatewayPortOccupantFailed:
+      'Unable to terminate the process using the local service port',
     deviceLoginHint: 'Use device code',
     deviceLoginDetail:
       'Best when you want to approve the login on another browser or device and let CodexDock poll automatically.'

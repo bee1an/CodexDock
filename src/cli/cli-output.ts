@@ -52,6 +52,8 @@ Usage:
   cdock cost read [--refresh] [--json]
   cdock gateway start|stop|status [--json]
   cdock gateway key rotate [--json]
+  cdock gateway port status [--json]
+  cdock gateway port kill [--json]
   cdock login browser [--json] [--no-open] [--timeout <sec>]
   cdock login device [--json] [--timeout <sec>]
   cdock login port status [--json]

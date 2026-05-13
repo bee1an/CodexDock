@@ -161,9 +161,13 @@ const codexApp = {
   getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
   getLocalGatewayApiKey: (): Promise<string> =>
     ipcRenderer.invoke('codex:get-local-gateway-api-key'),
+  getLocalGatewayPortOccupant: (): Promise<PortOccupant | null> =>
+    ipcRenderer.invoke('codex:get-local-gateway-port-occupant'),
   startLocalGateway: () => ipcRenderer.invoke('codex:start-local-gateway'),
   stopLocalGateway: () => ipcRenderer.invoke('codex:stop-local-gateway'),
   rotateLocalGatewayKey: () => ipcRenderer.invoke('codex:rotate-local-gateway-key'),
+  killLocalGatewayPortOccupant: (): Promise<PortOccupant | null> =>
+    ipcRenderer.invoke('codex:kill-local-gateway-port-occupant'),
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
   downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),

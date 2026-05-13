@@ -5,7 +5,8 @@
     AccountSummary,
     LocalGatewayLogEntry,
     LocalGatewayModelMapping,
-    LocalGatewayStatus
+    LocalGatewayStatus,
+    PortOccupant
   } from '../../../shared/codex'
   import { accountEmail, type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
@@ -32,6 +33,9 @@
   ) => Promise<void> = async () => {}
   export let updateAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
+  export let portOccupant: PortOccupant | null = null
+  export let killingPortOccupant = false
+  export let killPortOccupant: () => Promise<void> = async () => {}
 
   let allowedGroupsBusy = false
   let allowedAccountsBusy = false
@@ -420,6 +424,36 @@
       >
         <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true"></span>
         <span class="min-w-0 break-words leading-relaxed">{displayedStatus.lastError}</span>
+      </div>
+    {/if}
+
+    {#if portOccupant}
+      <div
+        class="gateway-port-conflict flex flex-wrap items-center justify-between gap-3 rounded-[0.45rem] border px-3 py-2.5"
+        role="status"
+      >
+        <div class="flex min-w-0 items-start gap-2 text-xs">
+          <span
+            class="i-lucide-alert-triangle mt-0.5 h-4 w-4 flex-none gateway-port-conflict-icon"
+            aria-hidden="true"
+          ></span>
+          <span class="gateway-port-conflict-text min-w-0 break-words leading-relaxed">
+            {copy.localGatewayPortOccupied(Number(gatewayPort) || 0, portOccupant.command, portOccupant.pid)}
+          </span>
+        </div>
+        <AppButton
+          variant="secondary"
+          size="xs"
+          onclick={killPortOccupant}
+          disabled={killingPortOccupant}
+        >
+          {#if killingPortOccupant}
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin" aria-hidden="true"></span>
+          {:else}
+            <span class="i-lucide-skull h-3.5 w-3.5" aria-hidden="true"></span>
+          {/if}
+          <span>{copy.killLocalGatewayPortOccupant}</span>
+        </AppButton>
       </div>
     {/if}
 
@@ -1198,6 +1232,19 @@
   .gateway-error {
     border-color: color-mix(in srgb, var(--danger) 30%, var(--color-arctic-mist));
     background: color-mix(in srgb, var(--danger) 8%, transparent);
+  }
+
+  .gateway-port-conflict {
+    border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+  }
+
+  .gateway-port-conflict-icon {
+    color: var(--warn);
+  }
+
+  .gateway-port-conflict-text {
+    color: color-mix(in srgb, var(--ink) 85%, var(--warn));
   }
 
   .gateway-divide {

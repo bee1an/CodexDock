@@ -260,13 +260,9 @@ interface TokenEndpointPayload {
   id_token?: string
 }
 
-export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
+export async function getTcpPortOccupant(port: number): Promise<PortOccupant | null> {
   try {
-    const { stdout } = await execFile('lsof', [
-      '-nP',
-      `-iTCP:${OPENAI_CALLBACK_PORT}`,
-      '-sTCP:LISTEN'
-    ])
+    const { stdout } = await execFile('lsof', ['-nP', `-iTCP:${port}`, '-sTCP:LISTEN'])
     const lines = stdout
       .split('\n')
       .map((line) => line.trim())
@@ -289,14 +285,22 @@ export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | nu
   }
 }
 
-export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
-  const occupant = await getOpenAiCallbackPortOccupant()
+export async function killTcpPortOccupant(port: number): Promise<PortOccupant | null> {
+  const occupant = await getTcpPortOccupant(port)
   if (!occupant) {
     return null
   }
 
   process.kill(occupant.pid, 'SIGTERM')
   return occupant
+export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
+  return getTcpPortOccupant(OPENAI_CALLBACK_PORT)
+}
+
+export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
+  return killTcpPortOccupant(OPENAI_CALLBACK_PORT)
+}
+
 }
 
 function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexAuthPayload {

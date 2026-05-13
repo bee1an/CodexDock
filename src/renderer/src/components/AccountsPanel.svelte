@@ -29,6 +29,7 @@
     LocalGatewayModelMapping,
     ListCodexSessionsInput,
     LoginMethod,
+    PortOccupant,
     ProbeProviderModelsInput,
     ProviderModelsProbeResult,
     StatsDisplaySettings,
@@ -125,6 +126,9 @@
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
+  export let localGatewayPortOccupant: PortOccupant | null = null
+  export let killingLocalGatewayPortOccupant = false
+  export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
   export let createGroup: (name: string) => Promise<void>
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
   export let deleteGroup: (group: AccountGroup) => Promise<void>
@@ -636,6 +640,9 @@
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
     />
+      portOccupant={localGatewayPortOccupant}
+      {killingLocalGatewayPortOccupant}
+      killPortOccupant={killLocalGatewayPortOccupant}
   {:else if currentView === 'providers'}
     <AccountsProvidersView
       {copy}

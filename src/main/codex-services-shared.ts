@@ -42,6 +42,7 @@ import {
   type LocalGatewayStatus,
   type OpenCodexFromServiceInput,
   type OpenCodexFromServiceResult,
+  type PortOccupant,
   type ProbeProviderModelsInput,
   type ProviderCheckReport,
   type ProviderModelsProbeResult,
@@ -381,6 +382,8 @@ export interface CodexServices {
     status(): Promise<LocalGatewayStatus>
     rotateKey(): Promise<LocalGatewayStatus & { apiKey: string }>
     getApiKey(): Promise<string>
+    getPortOccupant(): Promise<PortOccupant | null>
+    killPortOccupant(): Promise<PortOccupant | null>
   }
   login: {
     start(

@@ -124,9 +124,11 @@ interface CodexDesktopApi {
   readPromptAttachment: (promptId: string, fileName: string) => Promise<PromptAttachmentData>
   getLocalGatewayStatus: () => Promise<LocalGatewayStatus>
   getLocalGatewayApiKey: () => Promise<string>
+  getLocalGatewayPortOccupant: () => Promise<PortOccupant | null>
   startLocalGateway: () => Promise<AppSnapshot>
   stopLocalGateway: () => Promise<AppSnapshot>
   rotateLocalGatewayKey: () => Promise<LocalGatewayStatus & { apiKey: string }>
+  killLocalGatewayPortOccupant: () => Promise<PortOccupant | null>
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>
   installUpdate: () => Promise<void>

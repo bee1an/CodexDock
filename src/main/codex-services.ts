@@ -541,7 +541,9 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         })
         return status
       },
-      getApiKey: () => localGatewayService.getApiKey()
+      getApiKey: () => localGatewayService.getApiKey(),
+      getPortOccupant: () => localGatewayService.getPortOccupant(),
+      killPortOccupant: () => localGatewayService.killPortOccupant()
     },
     login: {
       start: (method) => loginCoordinator.start(method),
