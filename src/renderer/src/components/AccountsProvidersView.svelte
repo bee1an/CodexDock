@@ -1,6 +1,12 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
-  import { dragHandle, dragHandleZone, type DndEvent as SortEvent } from 'svelte-dnd-action'
+  import {
+    dragHandle,
+    dragHandleZone,
+    SHADOW_ITEM_MARKER_PROPERTY_NAME,
+    SHADOW_PLACEHOLDER_ITEM_ID,
+    type DndEvent as SortEvent
+  } from 'svelte-dnd-action'
   import type {
     CreateCustomProviderInput,
     CustomProviderSummary,
@@ -43,6 +49,14 @@
   let savingProviderId = ''
   let removingProviderId = ''
   let showCreateDialog = false
+
+  function isSortShadowProvider(provider: CustomProviderSummary): boolean {
+    const sortable = provider as CustomProviderSummary & Record<string, unknown>
+    return (
+      Boolean(sortable[SHADOW_ITEM_MARKER_PROPERTY_NAME]) ||
+      provider.id === SHADOW_PLACEHOLDER_ITEM_ID
+    )
+  }
   let creatingProvider = false
   let probingModels = false
   let probeError = ''
@@ -180,7 +194,7 @@
     >
       {#each sortableProviders as provider, providerIndex (provider.id)}
         <article
-          class="theme-provider-card group grid items-center gap-3 px-2.5 py-2.5 transition-colors duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto]"
+          class={`theme-provider-card group grid items-center gap-3 px-2.5 py-2.5 transition-colors duration-140 md:grid-cols-[auto_minmax(0,1fr)_auto] ${isSortShadowProvider(provider) ? 'is-dnd-shadow' : ''}`}
           animate:flip={{ duration: flipDurationMs }}
           aria-label={providerLabel(provider, copy)}
         >
@@ -571,5 +585,28 @@
     background: var(--panel-strong) !important;
     border-color: var(--color-arctic-mist) !important;
     color: var(--color-carbon) !important;
+  }
+
+  :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card {
+    transform: translateY(3px);
+    transition: transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card::before {
+    content: '' !important;
+    position: absolute;
+    top: -1px;
+    right: 0.75rem;
+    left: 0.75rem;
+    height: 1px;
+    background: color-mix(in srgb, var(--color-carbon) 22%, transparent);
+    opacity: 1;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card {
+      transform: none;
+    }
   }
 </style>
