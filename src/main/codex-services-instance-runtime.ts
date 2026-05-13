@@ -410,6 +410,10 @@ export function createCodexServicesInstanceRuntime(
     return join(rootDir, 'local-gateway')
   }
 
+  function isLocalGatewayCodexHome(codexHome: string): boolean {
+    return resolve(codexHome) === resolve(localGatewayCodexHome())
+  }
+
   function localGatewayProviderBaseUrl(baseUrl: string): string {
     return `${baseUrl.replace(/\/+$/u, '')}/v1`
   }
@@ -548,6 +552,14 @@ export function createCodexServicesInstanceRuntime(
     workspacePath: string
   ): Promise<CodexInstanceSummary> {
     const instance = await instanceStore.getInstance(instanceId)
+    if (isLocalGatewayCodexHome(instance.codexHome)) {
+      const gateway = await resolveLocalGatewayOpenConfig()
+      return startLocalGatewayInstance({
+        ...gateway,
+        workspacePath
+      })
+    }
+
     await assertIsolatedCodexLaunchAllowed(instance.bindAccountId)
     await instanceStore.ensureInitialized(instance.codexHome)
     await instanceStore.syncConfigFromDefault(instance.codexHome)

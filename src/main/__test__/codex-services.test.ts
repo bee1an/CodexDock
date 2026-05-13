@@ -979,6 +979,67 @@ describe('createCodexServices', () => {
     }
   })
 
+  it('普通 instance 启动 Local Gateway 时保留本地网关 base_url 和 API key', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const port = await getFreePort()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: ['group-1'],
+        allowedAccountIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      await services.codex.openLocalGateway(env.workspacePath)
+      const localGatewayHome = join(env.userDataPath, 'codex-instance-homes', 'local-gateway')
+      const localGatewayInstance = (await services.codex.instances.list()).find(
+        (instance) => instance.codexHome === localGatewayHome
+      )
+      expect(localGatewayInstance).toBeTruthy()
+
+      const defaultCodexHome = join(process.env.HOME ?? '', '.codex')
+      await mkdir(defaultCodexHome, { recursive: true })
+      await writeFile(
+        join(defaultCodexHome, 'config.toml'),
+        [
+          'model = "gpt-5.4"',
+          'model_provider = "openai"',
+          '',
+          '[model_providers.openai]',
+          'name = "OpenAI"',
+          'wire_api = "responses"',
+          'base_url = "https://api.openai.com/v1"'
+        ].join('\n') + '\n',
+        'utf8'
+      )
+
+      await services.codex.instances.start(localGatewayInstance!.id, env.workspacePath)
+
+      const config = await readFile(join(localGatewayHome, 'config.toml'), 'utf8')
+      expect(config).toContain('model_provider = "custom"')
+      expect(config).toContain('[model_providers.custom]')
+      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/v1"`)
+      await expect(readFile(join(localGatewayHome, 'auth.json'), 'utf8')).resolves.toContain(
+        '"OPENAI_API_KEY": "gateway-secret-a"'
+      )
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
   it('starts the local gateway with account-only routing enabled', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
