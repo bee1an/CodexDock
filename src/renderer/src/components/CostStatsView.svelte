@@ -44,6 +44,8 @@
     Legend
   )
 
+  type TrendMetric = 'tokens' | 'cost'
+
   export let copy: LocalizedCopy
   export let language: AppLanguage
   export let codexInstances: CodexInstanceSummary[] = []
@@ -89,6 +91,8 @@
   let showStatsDisplayPopover = false
   let statsDisplayButton: HTMLButtonElement | null = null
   let statsDisplayAnchorRect: DOMRect | null = null
+  let trendMetric: TrendMetric = 'tokens'
+  let trendMetricOptions: Array<{ value: TrendMetric; label: string }> = []
 
   const summaryHasData = (summary: TokenCostSummary | null): boolean =>
     Boolean(summary && (summary.sessionTokens > 0 || summary.last30DaysTokens > 0))
@@ -107,6 +111,12 @@
 
     return `$${value.toFixed(4)}`
   }
+
+  const trendMetricValue = (entry: TokenCostDetail['daily'][number]): number =>
+    trendMetric === 'tokens' ? entry.totalTokens : (entry.costUSD ?? 0)
+
+  const formatTrendMetricValue = (value: number): string =>
+    trendMetric === 'tokens' ? formatTokens(value) : formatCost(value)
 
   const formatUpdatedAt = (value?: string): string => {
     if (!value) {
@@ -366,6 +376,8 @@
     }
 
     const accentTokens = readCssVar('--ink', '#18181b')
+    const accentCost = readCssVar('--success', '#16a34a')
+    const accent = trendMetric === 'tokens' ? accentTokens : accentCost
     const ink = readCssVar('--ink', '#18181b')
     const muted = readCssVar('--muted-strong', '#6b7280')
     const line = readCssVar('--line', 'rgba(24, 24, 27, 0.1)')
@@ -377,16 +389,16 @@
         labels: chartDaily.map((entry) => formatDayLabel(entry.date)),
         datasets: [
           {
-            label: `${copy.tokens} / ${copy.cost}`,
-            data: chartDaily.map((entry) => entry.totalTokens),
-            borderColor: accentTokens,
-            backgroundColor: withAlpha(accentTokens, 0.08),
+            label: trendMetric === 'tokens' ? copy.tokens : copy.trendMetricCost,
+            data: chartDaily.map((entry) => trendMetricValue(entry)),
+            borderColor: accent,
+            backgroundColor: withAlpha(accent, 0.08),
             fill: true,
             tension: 0.32,
             borderWidth: 2,
             pointRadius: 0,
             pointHoverRadius: 4,
-            pointBackgroundColor: accentTokens,
+            pointBackgroundColor: accent,
             pointHitRadius: 14
           }
         ]
@@ -420,11 +432,15 @@
               },
               label: (context) => {
                 const value = typeof context.parsed.y === 'number' ? context.parsed.y : 0
-                return `${copy.tokens}: ${formatTokens(value)}`
+                return trendMetric === 'tokens'
+                  ? `${copy.tokens}: ${formatTokens(value)}`
+                  : `${copy.trendMetricCost}: ${formatCost(value)}`
               },
               afterLabel: (context) => {
                 const entry = chartDaily[context.dataIndex]
-                return copy.costReference(formatCost(entry?.costUSD ?? null))
+                return trendMetric === 'tokens'
+                  ? copy.costReference(formatCost(entry?.costUSD ?? null))
+                  : `${copy.tokens}: ${formatTokens(entry?.totalTokens ?? 0)}`
               }
             }
           }
@@ -449,7 +465,7 @@
             ticks: {
               color: muted,
               maxTicksLimit: 5,
-              callback: (value) => formatTokens(Number(value))
+              callback: (value) => formatTrendMetricValue(Number(value))
             }
           }
         }
@@ -779,6 +795,10 @@
   ]
   $: modelBreakdowns = aggregateModelBreakdowns(detail)
   $: statsDisplayDraft = normalizeStatsDisplaySettings(statsDisplay)
+  $: trendMetricOptions = [
+    { value: 'tokens', label: copy.trendMetricTokens },
+    { value: 'cost', label: copy.trendMetricCost }
+  ]
   $: instanceUsageRows = buildInstanceConsumptionEntries({
     tokenCostByInstanceId,
     instances: codexInstances,
@@ -796,6 +816,9 @@
     language,
     copy.tokens,
     copy.cost,
+    copy.trendMetricTokens,
+    copy.trendMetricCost,
+    trendMetric,
     runningTokenCostInstanceIds.join(','),
     selectedSummary?.updatedAt ?? '',
     ...chartDaily.map((entry) => `${entry.date}:${entry.totalTokens}:${entry.costUSD ?? ''}`)
@@ -1129,7 +1152,31 @@
             {copy.costReference(formatCost(selectedSummary?.last30DaysCostUSD ?? null))}
           </p>
         </div>
-        <span class="i-lucide-chart-column-big h-4 w-4 text-muted-strong opacity-60"></span>
+        <div class="flex items-center gap-2">
+          <div
+            class="stats-trend-switch relative inline-flex rounded-full p-[2px]"
+            role="group"
+            aria-label={copy.trendMetric}
+          >
+            <span
+              class="stats-trend-switch-indicator absolute top-[2px] bottom-[2px] rounded-full transition-transform duration-200 ease-out"
+              style={`width: calc(50% - 2px); transform: translateX(${trendMetric === trendMetricOptions[0]?.value ? '0%' : '100%'})`}
+            ></span>
+            {#each trendMetricOptions as option (option.value)}
+              <button
+                type="button"
+                class={`stats-trend-switch-button relative rounded-full px-3.5 py-1 text-[11px] font-semibold ${trendMetric === option.value ? 'is-active' : ''}`}
+                aria-pressed={trendMetric === option.value}
+                onclick={() => {
+                  trendMetric = option.value
+                }}
+              >
+                {option.label}
+              </button>
+            {/each}
+          </div>
+          <span class="i-lucide-chart-column-big h-4 w-4 text-muted-strong opacity-60"></span>
+        </div>
       </div>
 
       {#if chartDaily.length}
@@ -1219,6 +1266,35 @@
   .stats-toggle-row:hover {
     background: var(--surface-hover);
     border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  }
+
+  .stats-trend-switch {
+    background: color-mix(in srgb, var(--ink) 18%, transparent);
+    border: 1px solid color-mix(in srgb, var(--ink) 16%, transparent);
+  }
+
+  .stats-trend-switch-indicator {
+    background: var(--ink);
+    left: 2px;
+    z-index: 0;
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--edge-dark) 20%, transparent);
+  }
+
+  .stats-trend-switch-button {
+    color: color-mix(in srgb, var(--ink) 65%, transparent);
+    z-index: 1;
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+    transition: color 180ms ease;
+  }
+
+  .stats-trend-switch-button:hover:not(.is-active) {
+    color: var(--ink);
+  }
+
+  .stats-trend-switch-button.is-active {
+    color: var(--panel-strong);
   }
 
   .stats-chart-shell {
