@@ -12,6 +12,7 @@
   import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
+  import CopyIcon from './CopyIcon.svelte'
 
   type StatusFilter = 'all' | 'ok' | 'warn' | 'error'
 
@@ -126,8 +127,20 @@
 
   const statusFilters: StatusFilter[] = ['all', 'ok', 'warn', 'error']
 
-  const copyText = async (value: string): Promise<void> => {
-    if (value) await navigator.clipboard.writeText(value)
+  let copiedKey = ''
+  let copiedTimer: ReturnType<typeof setTimeout> | null = null
+
+  const markCopied = (key: string): void => {
+    copiedKey = key
+    if (copiedTimer) clearTimeout(copiedTimer)
+    copiedTimer = setTimeout(() => { copiedKey = '' }, 1500)
+  }
+
+  const copyText = async (value: string, key = 'url'): Promise<void> => {
+    if (value) {
+      await navigator.clipboard.writeText(value)
+      markCopied(key)
+    }
   }
 
   const revealGatewayApiKey = async (): Promise<string> => {
@@ -158,7 +171,7 @@
 
   const copyGatewayApiKey = async (): Promise<void> => {
     const apiKey = await revealGatewayApiKey()
-    await copyText(apiKey)
+    await copyText(apiKey, 'apikey')
   }
 
   let refreshingStatus = false
@@ -523,11 +536,11 @@
                 variant="icon"
                 size="xs"
                 class="flex-none"
-                onclick={() => void copyText(endpointUrl)}
+                onclick={() => void copyText(endpointUrl, 'url')}
                 ariaLabel={copy.copyLocalGatewayBaseUrl}
                 title={copy.copyLocalGatewayBaseUrl}
               >
-                <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
+                <CopyIcon copied={copiedKey === 'url'} />
               </AppButton>
             </div>
           </div>
@@ -581,7 +594,7 @@
                 ariaLabel={copy.copyLocalGatewayApiKey}
                 title={copy.copyLocalGatewayApiKey}
               >
-                <span class="i-lucide-copy h-3.5 w-3.5" aria-hidden="true"></span>
+                <CopyIcon copied={copiedKey === 'apikey'} />
               </AppButton>
             </div>
           </div>
