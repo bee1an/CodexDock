@@ -146,7 +146,7 @@
       <div class="text-sm text-muted">{copy.instanceCount(instances.length)}</div>
     </div>
 
-    <div class="theme-soft-panel grid gap-3 rounded-2xl border border-black/8 p-4">
+    <div class="theme-soft-panel grid gap-3 rounded-2xl border border-[var(--card-border)] p-4">
       <div class="grid gap-3 md:grid-cols-2">
         <AppInput
           bind:value={newInstanceName}
@@ -167,7 +167,7 @@
           disabled={busy}
         />
         <select
-          class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="rounded-xl border border-[var(--card-border)] bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           bind:value={newInstanceBindAccountId}
           disabled={busy}
         >
@@ -196,7 +196,7 @@
 
     <div class="grid gap-3">
       {#each instances as instance (instance.id)}
-        <article class="theme-soft-panel grid gap-3 rounded-2xl border border-black/8 p-4">
+        <article class="theme-soft-panel grid gap-3 rounded-2xl border border-[var(--card-border)] p-4">
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div class="text-sm font-medium text-carbon">
@@ -222,7 +222,7 @@
             {/if}
 
             <select
-              class="rounded-xl border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+              class="rounded-xl border border-[var(--card-border)] bg-transparent px-3 py-2 text-sm text-carbon outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
               bind:value={drafts[instance.id].bindAccountId}
               disabled={busy}
             >

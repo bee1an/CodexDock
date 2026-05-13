@@ -230,7 +230,7 @@
 <div class="theme-app-sider-shell grid place-items-center">
   {#if toolbarOpen}
     <div
-      class="theme-app-sider-rail flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-[1rem] border border-black/8 bg-[var(--panel-strong)] p-1"
+      class="theme-app-sider-rail flex max-w-[calc(100vw-2rem)] items-center gap-1.5 rounded-[1rem] border border-[var(--sider-rail-border)] bg-[var(--panel-strong)] p-1"
       transition:toolbarRailTransition
       role="toolbar"
       aria-label={toolbarLabel}
@@ -246,7 +246,7 @@
         <span class="i-lucide-chevron-down h-4.5 w-4.5"></span>
       </AppButton>
 
-      <div class="theme-sider-divider h-6 w-px bg-black/8" aria-hidden="true"></div>
+      <div class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]" aria-hidden="true"></div>
 
       <AppButton
         variant="icon"
@@ -358,18 +358,18 @@
         <span class="i-lucide-cog h-4.5 w-4.5"></span>
       </AppButton>
 
-      <div class="theme-sider-divider h-6 w-px bg-black/8" aria-hidden="true"></div>
+      <div class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]" aria-hidden="true"></div>
 
       <div class="theme-sider-language relative w-10">
         <FloatingSelect
           options={compactLanguageOptions}
           value={language}
           ariaLabel={copy.switchLanguage}
-          buttonClass="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-black/8 bg-transparent px-0 py-0 text-[11px] font-semibold text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          buttonClass="theme-select theme-sider-language-select h-8 w-full appearance-none rounded-lg border border-[var(--sider-rail-border)] bg-transparent px-0 py-0 text-[11px] font-semibold text-carbon outline-none transition-colors duration-140 hover:bg-[var(--trigger-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           menuClass="theme-tag-picker-surface z-[999] rounded-[1rem] p-1.5"
-          optionClass="theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
-          activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
-          inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+          optionClass="theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+          activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+          inactiveOptionClass="bg-transparent hover:bg-[var(--surface-soft)]"
           on:change={(event) => updateLanguage(event.detail as AppLanguage)}
         />
       </div>
@@ -412,7 +412,7 @@
       <AppButton
         variant="icon"
         size="md"
-        class={`theme-app-sider-collapsed rounded-[1rem] border border-black/8 bg-[var(--panel-strong)] ${toolbarIconMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
+        class={`theme-app-sider-collapsed rounded-[1rem] border border-[var(--sider-rail-border)] bg-[var(--panel-strong)] ${toolbarIconMovable ? 'cursor-grab active:cursor-grabbing' : ''}`}
         onpointerdown={handleCollapsedPointerDown}
         onclick={handleCollapsedClick}
         ariaLabel={expandLabel}
@@ -515,40 +515,4 @@
     opacity: 0.48;
   }
 
-  :global(html[data-theme='dark']) .theme-app-sider-rail {
-    filter: none;
-    border-color: var(--color-arctic-mist) !important;
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--color-snow)) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-app-sider-collapsed {
-    border-color: var(--color-arctic-mist) !important;
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--color-snow)) !important;
-    color: var(--color-carbon) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-sider-group {
-    border-color: transparent !important;
-    background: transparent !important;
-    box-shadow: none !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-sider-dock {
-    background: transparent !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-sider-language-select,
-  :global(html[data-theme='dark']) .theme-sider-utility-button {
-    background: transparent !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-sider-tool-button:hover:not(:disabled),
-  :global(html[data-theme='dark']) .theme-sider-language-select:hover,
-  :global(html[data-theme='dark']) .theme-sider-utility-button:hover:not(:disabled) {
-    background: var(--surface-hover) !important;
-  }
 </style>

@@ -24,7 +24,7 @@
 </script>
 
 <section
-  class="theme-tray-panel grid gap-3 overflow-hidden rounded-[1.05rem] border border-black/[0.08] bg-white p-3.5"
+  class="theme-tray-panel grid gap-3 overflow-hidden rounded-[1.05rem] border border-[var(--card-border)] bg-[var(--panel-strong)] p-3.5"
 >
   <div class="flex items-center justify-between gap-3">
     <div class="flex min-w-0 items-center gap-2.5">
@@ -64,7 +64,7 @@
   <div class="grid gap-2">
     {#if statusAccounts.length}
       {#each statusAccounts as account (account.id)}
-        <article class="theme-soft-panel grid gap-2 rounded-xl bg-black/[0.035] px-3 py-2.5">
+        <article class="theme-soft-panel grid gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2.5">
           <div class="flex items-center gap-2">
             <span
               class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'theme-status-idle bg-black/14'}`}
@@ -125,13 +125,13 @@
         </article>
       {/each}
     {:else}
-      <div class="theme-soft-panel rounded-xl bg-black/[0.03] px-3 py-3 text-sm text-muted-strong">
+      <div class="theme-soft-panel rounded-xl bg-[var(--surface-soft)] px-3 py-3 text-sm text-muted-strong">
         {copy.noStatusBarAccounts}
       </div>
     {/if}
   </div>
 
-  <div class="grid gap-2 border-t border-black/6 pt-3">
+  <div class="grid gap-2 border-t border-[var(--soft-panel-border)] pt-3">
     <div class="flex items-center justify-between gap-3">
       <p class="text-xs text-muted-strong">{copy.statusBarDisplayAccounts}</p>
       <p class="text-xs text-faint">{copy.maxFiveAccounts}</p>
@@ -140,7 +140,7 @@
     <div class="grid gap-1">
       {#each snapshot.accounts as account (account.id)}
         <button
-          class={`theme-menu-choice flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${snapshot.settings.statusBarAccountIds.includes(account.id) ? 'theme-menu-choice-active bg-black/[0.05]' : 'bg-transparent hover:bg-black/[0.03]'}`}
+          class={`theme-menu-choice flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-left transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${snapshot.settings.statusBarAccountIds.includes(account.id) ? 'theme-menu-choice-active bg-[var(--surface-soft)]' : 'bg-transparent hover:bg-[var(--surface-hover)]'}`}
           on:click={() => toggleStatusAccount(account.id)}
           disabled={!snapshot.settings.statusBarAccountIds.includes(account.id) &&
             snapshot.settings.statusBarAccountIds.length >= 5}
@@ -158,10 +158,10 @@
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-3 border-t border-black/6 pt-3">
+  <div class="flex items-center justify-between gap-3 border-t border-[var(--soft-panel-border)] pt-3">
     <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
     <select
-      class="theme-select h-8 rounded-md border border-black/8 bg-white px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+      class="theme-select h-8 rounded-md border border-[var(--card-border)] bg-[var(--panel-strong)] px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
       value={snapshot.settings.usagePollingMinutes}
       on:change={(event) =>
         updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}

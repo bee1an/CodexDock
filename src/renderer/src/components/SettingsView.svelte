@@ -125,7 +125,7 @@
 </script>
 
 <div class="settings-container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex items-center gap-3 mb-4">
       <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
         <span class="i-lucide-sliders-horizontal h-4 w-4" aria-hidden="true"></span>
@@ -140,7 +140,7 @@
       <div class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5">
         <span class="text-xs font-medium text-carbon">{copy.pollingInterval}</span>
         <select
-          class="settings-select h-7 rounded-[0.35rem] border border-black/8 bg-transparent px-2 text-xs text-carbon outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="settings-select h-7 rounded-[0.35rem] border border-[var(--card-border)] bg-transparent px-2 text-xs text-carbon outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           value={settings.usagePollingMinutes}
           onchange={(event) => updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
         >
@@ -172,7 +172,7 @@
     </div>
   </section>
 
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex items-center gap-3 mb-4">
       <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
         <span class="i-lucide-palette h-4 w-4" aria-hidden="true"></span>
@@ -215,7 +215,7 @@
   </section>
 
   {#if showCodexDesktopExecutablePath}
-    <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4">
+    <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
       <div class="flex items-center gap-3 mb-4">
         <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
           <span class="i-lucide-terminal h-4 w-4" aria-hidden="true"></span>
@@ -252,7 +252,7 @@
     </section>
   {/if}
 
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex items-center gap-3 mb-4">
       <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
         <span class="i-lucide-download h-4 w-4" aria-hidden="true"></span>
@@ -329,18 +329,4 @@
     border-color: color-mix(in srgb, var(--color-carbon) 34%, var(--line-strong));
   }
 
-  :global(html[data-theme='dark']) .settings-section-icon {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
-  }
-
-  :global(html[data-theme='dark']) .settings-row {
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .settings-select {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    color: var(--color-carbon);
-  }
 </style>

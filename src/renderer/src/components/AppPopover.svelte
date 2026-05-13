@@ -79,20 +79,9 @@
 <style>
   .app-popover {
     z-index: 999;
-    border: 1px solid var(--line-strong);
+    border: 1px solid var(--popover-border);
     border-radius: 0.75rem;
-    background: var(--panel-strong);
-    box-shadow:
-      var(--elevation-2),
-      0 0 0 1px var(--line-strong);
-  }
-
-  :global(html[data-theme='dark']) .app-popover {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 88%, var(--color-fog) 12%);
-    box-shadow:
-      0 18px 50px rgba(0, 0, 0, 0.72),
-      0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 52%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    background: var(--popover-bg);
+    box-shadow: var(--popover-shadow);
   }
 </style>

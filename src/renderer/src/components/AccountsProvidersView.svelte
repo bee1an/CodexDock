@@ -154,7 +154,7 @@
 </script>
 
 <div class="flex flex-none px-4 pb-3">
-  <div class="theme-soft-panel flex w-full flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-black/8 px-4 py-3">
+  <div class="theme-soft-panel flex w-full flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-3">
     <div class="min-w-0">
       <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.createProvider}</p>
       <p class="mt-0.5 text-xs leading-5 text-muted-strong">{copy.providerCreateDialogDescription}</p>
@@ -261,19 +261,19 @@
                   </div>
                   <div class="flex min-w-0 flex-wrap items-center gap-1.5">
                     <span
-                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
                     >
                       <span class="font-medium uppercase tracking-[0.08em]">API</span>
                       <span>{provider.protocol ?? 'openai'}</span>
                     </span>
                     <span
-                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
                     >
                       <span class="font-medium uppercase tracking-[0.08em]">Model</span>
                       <span>{provider.model}</span>
                     </span>
                     <span
-                      class="theme-provider-meta theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2 py-1 text-[11px] text-muted-strong"
+                      class="theme-provider-meta theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
                     >
                       <span class="font-medium uppercase tracking-[0.08em]">URL</span>
                       <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
@@ -287,7 +287,7 @@
           <div class="flex items-center justify-end gap-1">
             {#if editingProviderId === provider.id}
               <label
-                class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-[0.35rem] border border-black/10 bg-white px-2.5 py-1.5 text-sm text-carbon"
+                class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-[0.35rem] border border-[var(--card-border)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-sm text-carbon"
               >
                 <Checkbox
                   bind:checked={providerDrafts[provider.id].fastMode}
@@ -370,7 +370,7 @@
   </div>
 {:else}
   <div
-    class="theme-tag-empty mx-4 mb-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.4rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-8 text-center"
+    class="theme-tag-empty mx-4 mb-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.4rem] border border-dashed border-[var(--empty-border)] bg-[var(--surface-soft)] px-4 py-8 text-center"
   >
     <p class="text-sm text-muted-strong">{copy.noProviders}</p>
   </div>
@@ -560,32 +560,6 @@
     opacity: 0.48;
   }
 
-  :global(html[data-theme='dark']) .provider-drag-button {
-    border-color: var(--color-arctic-mist);
-    color: var(--ink-soft);
-  }
-
-  :global(html[data-theme='dark']) .provider-list-panel {
-    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
-  }
-
-  :global(html[data-theme='dark']) .provider-list-panel::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .provider-list-panel::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .theme-provider-divider {
-    background: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-empty {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
 
   :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card {
     transform: translateY(3px);

@@ -92,15 +92,4 @@
   .theme-checkbox-disabled .theme-checkbox-input {
     cursor: not-allowed;
   }
-
-  :global(html[data-theme='dark']) .theme-checkbox-box {
-    border-color: var(--color-arctic-mist);
-    background: var(--panel-strong);
-  }
-
-  :global(html[data-theme='dark']) .theme-checkbox-checked .theme-checkbox-box {
-    border-color: var(--color-carbon);
-    background: var(--color-carbon);
-    color: var(--color-snow);
-  }
 </style>

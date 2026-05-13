@@ -47,7 +47,7 @@
     onclose={onClose}
   >
     <div
-      class="mb-4 flex items-start justify-between gap-3 border-b border-black/6 pb-4"
+      class="mb-4 flex items-start justify-between gap-3 border-b border-[var(--soft-panel-border)] pb-4"
       data-hero-motion
     >
       <div class="grid gap-1">
@@ -63,10 +63,10 @@
 
     <div class="grid gap-2" data-hero-motion>
       {#if showBrowserLoginDetails && loginEvent?.method === 'browser' && loginEvent.authUrl}
-        <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+        <div class="theme-soft-panel grid gap-2 rounded-lg bg-[var(--soft-panel-bg)] p-3">
           <p class="text-sm text-muted-strong">{copy.callbackLoginLink}</p>
           <code
-            class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+            class="theme-inline-code overflow-x-auto rounded-md bg-[var(--panel-strong)] px-3 py-2 text-sm text-carbon"
           >
             {loginEvent.authUrl}
           </code>
@@ -90,10 +90,10 @@
       {/if}
 
       {#if showDeviceLoginDetailsPanel && loginEvent?.method === 'device' && loginEvent.verificationUrl}
-        <div class="theme-soft-panel grid gap-2 rounded-lg bg-black/[0.03] p-3">
+        <div class="theme-soft-panel grid gap-2 rounded-lg bg-[var(--soft-panel-bg)] p-3">
           <p class="text-sm text-muted-strong">{copy.deviceLoginLink}</p>
           <code
-            class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm text-black"
+            class="theme-inline-code overflow-x-auto rounded-md bg-[var(--panel-strong)] px-3 py-2 text-sm text-carbon"
           >
             {loginEvent.verificationUrl}
           </code>
@@ -101,7 +101,7 @@
             <div class="grid gap-1">
               <p class="text-sm text-muted-strong">{copy.deviceCode}</p>
               <code
-                class="theme-inline-code overflow-x-auto rounded-md bg-white px-3 py-2 text-sm font-semibold tracking-[0.18em] text-black"
+                class="theme-inline-code overflow-x-auto rounded-md bg-[var(--panel-strong)] px-3 py-2 text-sm font-semibold tracking-[0.18em] text-carbon"
               >
                 {loginEvent.userCode}
               </code>
@@ -133,7 +133,7 @@
 
       {#if loginEvent?.phase === 'error' && loginEvent.rawOutput}
         <pre
-          class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-black/8 bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
+          class="theme-code-surface m-0 max-h-60 overflow-auto rounded-lg border border-[var(--card-border)] bg-[#111111] p-4 font-mono text-sm leading-6 text-[#f5f5f5]">{loginEvent.rawOutput}</pre>
       {/if}
     </div>
   </AppDialog>

@@ -132,7 +132,7 @@
 
 <div class="relative" bind:this={root}>
   <button
-    class={`theme-compact-select-trigger inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 ${open ? 'bg-black/[0.05]' : ''}`}
+    class={`theme-compact-select-trigger inline-flex h-8 items-center gap-2 rounded-md border-0 bg-transparent px-2.5 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-[var(--trigger-hover-bg)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] ${open ? 'bg-[var(--trigger-hover-bg)]' : ''}`}
     aria-label={ariaLabel}
     aria-expanded={open}
     aria-haspopup="listbox"
@@ -140,19 +140,19 @@
     on:click={toggle}
   >
     <span class="truncate">{selected?.label ?? value}</span>
-    <span class={`theme-compact-select-icon ${iconClass} h-4 w-4 flex-none text-black/44`}></span>
+    <span class={`theme-compact-select-icon ${iconClass} h-4 w-4 flex-none text-[var(--trigger-icon-color)]`}></span>
   </button>
 
   {#if renderPanel}
     <div
-      class={`theme-compact-select-panel t-dropdown ${dropdownMotionClass} absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[9rem] rounded-xl border border-black/8 bg-white p-1`}
+      class={`theme-compact-select-panel t-dropdown ${dropdownMotionClass} absolute right-0 top-[calc(100%+0.5rem)] z-30 min-w-[9rem] rounded-xl border border-[var(--dropdown-panel-border)] bg-[var(--dropdown-panel-bg)] p-1`}
       data-origin="top-right"
       role="listbox"
       aria-label={ariaLabel}
     >
       {#each options as option (option.value)}
         <button
-          class={`theme-compact-select-option flex h-8 w-full items-center rounded-lg px-2.5 text-left text-sm transition-colors duration-140 ${option.value === value ? 'theme-compact-select-option-active bg-black text-white' : 'theme-compact-select-option-idle text-black/68 hover:bg-black/[0.04] hover:text-black'}`}
+          class={`theme-compact-select-option flex h-8 w-full items-center rounded-lg px-2.5 text-left text-sm transition-colors duration-140 ${option.value === value ? 'theme-compact-select-option-active bg-[var(--dropdown-option-active-bg)] text-[var(--dropdown-option-active-color)]' : 'theme-compact-select-option-idle text-[var(--dropdown-option-idle-color)] hover:bg-[var(--dropdown-option-idle-hover-bg)] hover:text-carbon'}`}
           type="button"
           role="option"
           aria-selected={option.value === value}
@@ -166,37 +166,4 @@
 </div>
 
 <style>
-  :global(html[data-theme='dark'] .theme-compact-select-trigger) {
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-trigger:hover),
-  :global(html[data-theme='dark'] .theme-compact-select-trigger:focus-visible) {
-    background: var(--surface-hover) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-icon) {
-    color: var(--ink-faint) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-panel) {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-option-idle) {
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-option-idle:hover),
-  :global(html[data-theme='dark'] .theme-compact-select-option-idle:focus-visible) {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-compact-select-option-active) {
-    background: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
-  }
 </style>

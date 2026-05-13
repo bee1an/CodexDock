@@ -89,11 +89,11 @@
   }
 </script>
 
-<section class="theme-surface rounded-[1rem] border border-black/8 bg-white px-3 py-2.5">
+<section class="theme-surface rounded-[1rem] border border-[var(--card-border)] bg-[var(--panel-strong)] px-3 py-2.5">
   <div class="flex flex-wrap items-center justify-between gap-2.5">
     <div class="flex flex-wrap items-center gap-2 text-sm text-faint">
       <span
-        class="theme-version-pill rounded-full bg-black/[0.04] px-2 py-1 text-[11px] text-muted-strong"
+        class="theme-version-pill rounded-full bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
       >
         v{appMeta.version}
       </span>
@@ -117,13 +117,13 @@
       {/if}
     </div>
 
-    <div class="theme-toolbar inline-flex items-center gap-0.5 rounded-lg bg-black/[0.03] p-1">
+    <div class="theme-toolbar inline-flex items-center gap-0.5 rounded-lg bg-[var(--surface-soft)] p-1">
       <div class="relative">
         <span
           class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-languages"
         ></span>
         <select
-          class="theme-select h-8 appearance-none rounded-md border-0 bg-transparent py-0 pl-8 pr-7 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16"
+          class="theme-select h-8 appearance-none rounded-md border-0 bg-transparent py-0 pl-8 pr-7 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           aria-label={copy.switchLanguage}
           value={language}
           on:change={(event) =>

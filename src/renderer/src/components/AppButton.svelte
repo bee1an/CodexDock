@@ -238,36 +238,6 @@
     text-underline-offset: 2px;
   }
 
-  :global(html[data-theme='dark']) .app-button-secondary,
-  :global(html[data-theme='dark']) .app-button-ghost,
-  :global(html[data-theme='dark']) .app-button-toolbar,
-  :global(html[data-theme='dark']) .app-button-icon {
-    border-color: var(--color-arctic-mist);
-    color: var(--ink-soft);
-  }
-
-  :global(html[data-theme='dark']) .app-button-secondary {
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
-    color: var(--color-carbon);
-  }
-
-  :global(html[data-theme='dark']) .app-button-primary,
-  :global(html[data-theme='dark']) .app-button-filter.is-selected,
-  :global(html[data-theme='dark']) .app-button-filter[aria-pressed='true'] {
-    border-color: var(--color-carbon);
-    background: var(--color-carbon);
-    color: var(--color-snow);
-  }
-
-  :global(html[data-theme='dark']) .app-button-ghost:hover:not(:disabled),
-  :global(html[data-theme='dark']) .app-button-toolbar:hover:not(:disabled),
-  :global(html[data-theme='dark']) .app-button-icon:hover:not(:disabled),
-  :global(html[data-theme='dark']) .app-button-secondary:hover:not(:disabled) {
-    border-color: var(--line-strong);
-    background: var(--surface-hover);
-    color: var(--color-carbon);
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .app-button {
       transition: none;

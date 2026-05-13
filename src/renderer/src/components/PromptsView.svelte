@@ -390,7 +390,7 @@
   class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
   use:reveal={{ delay: 0.02 }}
 >
-  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.promptsTitle}</p>
@@ -476,7 +476,7 @@
   <div class="grid gap-3">
     {#if loading && !prompts.length}
       <section
-        class="theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-8 text-center text-sm text-muted-strong"
+        class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
       >
         <div class="flex flex-col items-center justify-center gap-2">
           <span class="i-lucide-loader-circle h-5 w-5 animate-spin text-faint"></span>
@@ -485,7 +485,7 @@
       </section>
     {:else if !prompts.length}
       <section
-        class="theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-8 text-center text-sm text-muted-strong"
+        class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
       >
         <div class="flex flex-col items-center justify-center gap-2">
           <span class="i-lucide-file-text h-5 w-5 text-faint"></span>
@@ -494,7 +494,7 @@
       </section>
     {:else}
       <section
-        class="theme-soft-panel grid gap-2 rounded-[0.55rem] border border-black/8 px-4 py-4"
+        class="theme-soft-panel grid gap-2 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
         use:cascadeIn={{ selector: '[data-motion-item]' }}
       >
         <div class="flex flex-wrap items-center gap-2">
@@ -662,7 +662,7 @@
                 </AppButton>
               {:else}
                 <span
-                  class="theme-tag-count-pill inline-flex items-center rounded-full bg-black/[0.05] px-2.5 py-1 text-xs font-medium text-black/72"
+                  class="theme-tag-count-pill inline-flex items-center rounded-full bg-[var(--surface-soft)] px-2.5 py-1 text-xs font-medium text-[var(--ink-soft)]"
                 >
                   {cat}
                 </span>
@@ -709,7 +709,7 @@
         </div>
       {:else}
         <div
-          class="theme-tag-empty rounded-[0.4rem] border border-dashed border-black/10 bg-white px-4 py-8 text-center"
+          class="theme-tag-empty rounded-[0.4rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-4 py-8 text-center"
         >
           <p class="text-sm text-faint">{copy.promptsEmpty}</p>
         </div>
@@ -743,7 +743,7 @@
       </div>
 
       <pre
-        class="theme-code-surface max-h-[62vh] min-h-[40vh] overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{viewingPrompt.content}</pre>
+        class="theme-code-surface max-h-[62vh] min-h-[40vh] overflow-auto rounded-[0.5rem] border border-[var(--card-border)] px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{viewingPrompt.content}</pre>
 
       {#if viewingPrompt.attachments.length}
         <div class="grid gap-2">
@@ -862,7 +862,7 @@
 
           {#if !editingPrompt}
             <div
-              class="theme-tag-empty rounded-[0.4rem] border border-dashed border-black/10 bg-white px-4 py-6 text-center"
+              class="theme-tag-empty rounded-[0.4rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-4 py-6 text-center"
             >
               <p class="text-sm text-faint">{copy.promptsImagesCreateFirst}</p>
             </div>
@@ -878,7 +878,7 @@
                   onchange={onImageInputChange}
                 />
                 <span
-                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-[0.4rem] border border-black/10 bg-white px-2.5 py-1.5 text-xs font-medium text-carbon transition hover:bg-black/5 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
+                  class="inline-flex cursor-pointer items-center gap-1.5 rounded-[0.4rem] border border-[var(--empty-border)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-xs font-medium text-carbon transition hover:bg-[var(--surface-hover)] aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
                   aria-disabled={attachmentBusy}
                 >
                   {#if attachmentBusy}
@@ -937,7 +937,7 @@
               </div>
             {:else}
               <div
-                class="theme-tag-empty rounded-[0.4rem] border border-dashed border-black/10 bg-white px-4 py-6 text-center"
+                class="theme-tag-empty rounded-[0.4rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-4 py-6 text-center"
               >
                 <p class="text-sm text-faint">{copy.promptsImagesEmpty}</p>
               </div>
@@ -1128,26 +1128,6 @@
     box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
   }
 
-  :global(html[data-theme='dark']) .prompts-attachment-card {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .prompts-attachment-thumb {
-    background: color-mix(in srgb, var(--color-arctic-mist) 32%, black 68%);
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-empty,
-  :global(html[data-theme='dark']) .prompts-category-card {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-count-pill {
-    background: var(--surface-soft) !important;
-    color: var(--ink-soft) !important;
-  }
 
   @media (prefers-reduced-motion: reduce) {
     .prompts-card-actions {

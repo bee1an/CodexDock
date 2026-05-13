@@ -130,7 +130,7 @@
         <ul class="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1">
           {#each groups as group (group.id)}
             <li
-              class="group-row flex flex-wrap items-center gap-2 rounded-[0.45rem] border border-black/8 bg-black/[0.02] px-3 py-2"
+              class="group-row flex flex-wrap items-center gap-2 rounded-[0.45rem] border border-[var(--card-border)] bg-[var(--surface-soft)] px-3 py-2"
             >
               {#if editingId === group.id}
                 <AppInput
@@ -163,7 +163,7 @@
                   {group.name}
                 </span>
                 <span
-                  class="inline-flex flex-none items-center rounded-full bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium text-muted-strong"
+                  class="inline-flex flex-none items-center rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium text-muted-strong"
                 >
                   {copy.groupMemberCount(groupAccountCount(group.id))}
                 </span>
@@ -195,7 +195,7 @@
         </ul>
       {:else}
         <div
-          class="rounded-[0.45rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-6 text-center"
+          class="rounded-[0.45rem] border border-dashed border-[var(--empty-border)] bg-[var(--surface-soft)] px-4 py-6 text-center"
         >
           <p class="text-[12px] text-muted-strong">{copy.noGroups}</p>
         </div>
@@ -217,8 +217,4 @@
     background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
   }
 
-  :global(html[data-theme='dark']) .group-row {
-    background: color-mix(in srgb, var(--panel-strong) 92%, transparent) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 70%, transparent) !important;
-  }
 </style>

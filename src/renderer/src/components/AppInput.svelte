@@ -178,24 +178,6 @@
     color: var(--ink-faint);
   }
 
-  :global(html[data-theme='dark']) .app-input {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
-  }
-
-  :global(html[data-theme='dark']) .app-input:hover:not(.is-disabled) {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 92%, transparent);
-    background: color-mix(in srgb, var(--surface-hover) 72%, var(--panel-strong));
-  }
-
-  :global(html[data-theme='dark']) .app-input:focus-within {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 58%, white 42%);
-    box-shadow:
-      0 0 0 2px color-mix(in srgb, var(--color-arctic-mist) 24%, transparent),
-      0 0 0 1px color-mix(in srgb, var(--line-strong) 72%, transparent),
-      inset 0 1px 0 rgba(255, 255, 255, 0.08);
-  }
-
   @media (prefers-reduced-motion: reduce) {
     .app-input {
       transition: none;

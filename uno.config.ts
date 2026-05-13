@@ -77,7 +77,20 @@ export default defineConfig({
       ink: 'var(--color-carbon)',
       paper: 'var(--color-snow)',
       panel: 'var(--color-fog)',
-      line: 'var(--color-arctic-mist)'
+      line: 'var(--color-arctic-mist)',
+      'surface-soft': 'var(--surface-soft)',
+      'surface-hover': 'var(--surface-hover)',
+      'surface-selected': 'var(--surface-selected)',
+      'panel-strong': 'var(--panel-strong)',
+      'line-strong': 'var(--line-strong)',
+      'ink-soft': 'var(--ink-soft)',
+      'ink-faint': 'var(--ink-faint)',
+      'dropdown-panel': 'var(--dropdown-panel-bg)',
+      'card-bg': 'var(--card-bg)',
+      'pill-bg': 'var(--pill-bg)',
+      'selector-bg': 'var(--selector-bg)',
+      'empty-bg': 'var(--empty-bg)',
+      'sider-rail': 'var(--sider-rail-bg)'
     },
     fontFamily: {
       ui: 'var(--font-ui-sans-serif)',

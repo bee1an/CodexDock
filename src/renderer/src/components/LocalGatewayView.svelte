@@ -318,7 +318,7 @@
   class="gateway-container gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
 >
   <div
-    class="gateway-toolbar theme-soft-panel flex flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4"
+    class="gateway-toolbar theme-soft-panel flex flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
   >
     <div class="flex min-w-[18rem] flex-1 items-center gap-3">
       <div
@@ -725,7 +725,7 @@
           </AppButton>
         </div>
         {#if showAccountPicker}
-          <div class="flex flex-wrap gap-1.5 border-t border-black/8 pt-2">
+          <div class="flex flex-wrap gap-1.5 border-t border-[var(--card-border)] pt-2">
             {#each groups.filter((g) => !allowedGroupIdSet.has(g.id)) as group (group.id)}
               <AppButton
                 variant="filter"
@@ -1379,94 +1379,6 @@
 
   .gateway-latency-error {
     color: var(--danger);
-  }
-
-  :global(html[data-theme='dark']) .gateway-toolbar {
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
-      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-scrollbar {
-    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
-  }
-
-  :global(html[data-theme='dark']) .gateway-scrollbar::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-title-icon,
-  :global(html[data-theme='dark']) .gateway-section-icon,
-  :global(html[data-theme='dark']) .gateway-config-icon,
-  :global(html[data-theme='dark']) .gateway-config-badge,
-  :global(html[data-theme='dark']) .gateway-config-field,
-  :global(html[data-theme='dark']) .gateway-metric-card,
-  :global(html[data-theme='dark']) .gateway-metrics-grid,
-  :global(html[data-theme='dark']) .gateway-status-pill,
-  :global(html[data-theme='dark']) .gateway-panel,
-  :global(html[data-theme='dark']) .gateway-table-container {
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-config-header {
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-config-value {
-    background: color-mix(in srgb, var(--surface-soft) 42%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-metric-card,
-  :global(html[data-theme='dark']) .gateway-config-field {
-    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-logs-header,
-  :global(html[data-theme='dark']) .gateway-log-filters {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 84%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-logs-header {
-    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-log-filters {
-    background: color-mix(in srgb, var(--surface-soft) 38%, var(--panel-strong));
-  }
-
-  :global(html[data-theme='dark']) .gateway-table-head {
-    background: color-mix(in srgb, var(--surface-soft) 76%, var(--panel-strong));
-    border-bottom-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-table-row {
-    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-table-row:nth-child(even) {
-    background: color-mix(in srgb, var(--surface-soft) 28%, var(--panel-strong));
-  }
-
-  :global(html[data-theme='dark']) .gateway-log-detail {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent);
-    background: transparent;
-    border-left-color: color-mix(in srgb, var(--color-danger) 62%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-mappings-header {
-    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 84%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .gateway-mapping-row {
-    background: color-mix(in srgb, var(--panel-strong) 94%, transparent);
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 80%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

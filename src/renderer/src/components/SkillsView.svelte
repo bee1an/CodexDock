@@ -276,7 +276,7 @@
   use:reveal={{ delay: 0.02 }}
 >
   <!-- Header -->
-  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.skillsTitle}</p>
@@ -354,7 +354,7 @@
 
   {#if bulkBarVisible}
     <section
-      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-black/8 bg-white px-3 py-2"
+      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-3 py-2"
     >
       <div class="flex items-center gap-2 text-[12px] text-muted-strong">
         <span class="font-semibold text-carbon">{copy.skillsBulkSelected(selectedSkillCount)}</span>
@@ -380,7 +380,7 @@
   <div class="grid gap-3">
     {#if loading && !skills.length}
       <section
-        class="theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-8 text-center text-sm text-muted-strong"
+        class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
       >
         <div class="flex flex-col items-center justify-center gap-2">
           <span class="i-lucide-loader-circle h-5 w-5 animate-spin text-faint"></span>
@@ -389,7 +389,7 @@
       </section>
     {:else if filteredSkills.length === 0}
       <section
-        class="theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-8 text-center text-sm text-muted-strong"
+        class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
       >
         <div class="flex flex-col items-center justify-center gap-2">
           <span class="i-lucide-puzzle h-5 w-5 text-faint"></span>
@@ -405,7 +405,7 @@
     {:else}
       {#each instanceGroups as group (group.instance.id)}
         <section
-          class="theme-soft-panel grid gap-2 rounded-[0.55rem] border border-black/8 px-4 py-4"
+          class="theme-soft-panel grid gap-2 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
           use:cascadeIn={{ selector: '[data-motion-item]' }}
         >
           <div class="flex flex-wrap items-center gap-2">
@@ -534,7 +534,7 @@
         <div class="flex flex-col gap-1.5">
           <span class="text-xs font-medium text-muted-strong">SKILL.md</span>
           <pre
-            class="theme-code-surface max-h-80 overflow-auto rounded-[0.5rem] border border-black/8 px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{detailSkill.content}</pre>
+            class="theme-code-surface max-h-80 overflow-auto rounded-[0.5rem] border border-[var(--card-border)] px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{detailSkill.content}</pre>
         </div>
 
         <div class="flex justify-end gap-2 pt-2">

@@ -867,7 +867,7 @@
   use:reveal={{ delay: 0.02 }}
 >
   <section
-    class="stats-stage theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-4 sm:px-5 sm:py-5"
+    class="stats-stage theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4 sm:px-5 sm:py-5"
     use:cascadeIn={{
       selector: '[data-motion-item]'
     }}
@@ -1336,52 +1336,6 @@
     background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
     box-shadow: inset 0 2px 8px color-mix(in srgb, var(--edge-dark) 6%, transparent);
     text-align: center;
-  }
-
-  :global(html[data-theme='dark']) .stats-stage {
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
-      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-surface {
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-info-rail {
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-metric-block {
-    background: color-mix(in srgb, var(--panel-strong) 96%, transparent) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-metric-block:hover {
-    background: var(--surface-hover) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 96%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-toggle-row {
-    background: color-mix(in srgb, var(--surface-soft) 82%, transparent) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 68%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-chart-shell {
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft)) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-config-popover {
-    background: var(--panel-strong) !important;
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 86%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .stats-empty-state {
-    background: color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft));
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 68%, transparent);
   }
 
   @media (prefers-reduced-motion: reduce) {

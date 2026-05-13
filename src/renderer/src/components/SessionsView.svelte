@@ -105,10 +105,10 @@
   }
 
   const floatingSelectButtonClass =
-    'theme-select flex h-11 w-full items-center justify-between rounded-[0.4rem] border border-black/10 bg-transparent px-3 py-2 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-black/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16 disabled:cursor-not-allowed disabled:opacity-60'
+    'theme-select flex h-11 w-full items-center justify-between rounded-[0.4rem] border border-[var(--empty-border)] bg-transparent px-3 py-2 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60'
   const floatingSelectMenuClass = 'theme-tag-picker-surface z-[999] rounded-[0.75rem] p-1.5'
   const floatingSelectOptionClass =
-    'theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/16'
+    'theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]'
   const formatDateTime = (value?: string): string => formatSessionDateTime(value, language)
   const roleLabel = (role: CodexSessionMessageRole): string => resolveRoleLabel(role, copy)
   const sourceText = (session: CodexSessionSummary): string => resolveSourceText(session, copy)
@@ -672,7 +672,7 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-  <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-black/8 px-4 py-4">
+  <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.sessionsTitle}</p>
@@ -706,8 +706,8 @@
         buttonClass={floatingSelectButtonClass}
         menuClass={floatingSelectMenuClass}
         optionClass={floatingSelectOptionClass}
-        activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
-        inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+        activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+        inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
         on:change={(event) => {
           selectedInstanceId = event.detail
         }}
@@ -721,8 +721,8 @@
         buttonClass={floatingSelectButtonClass}
         menuClass={floatingSelectMenuClass}
         optionClass={floatingSelectOptionClass}
-        activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
-        inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+        activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+        inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
         on:change={(event) => {
           statusFilter = event.detail as 'all' | CodexSessionStatus
           sessionsByProjectKey = {}
@@ -741,7 +741,7 @@
 
     {#if copySessionNotice}
       <div
-        class="rounded-[0.45rem] border border-black/6 bg-black/[0.035] px-3 py-2 text-sm text-muted-strong"
+        class="rounded-[0.45rem] border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-3 py-2 text-sm text-muted-strong"
       >
         {copySessionNotice}
       </div>
@@ -750,7 +750,7 @@
 
   {#if selectedSessionKeys.length > 0}
     <section
-      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-black/8 bg-white px-3 py-2"
+      class="theme-bulk-bar flex flex-wrap items-center justify-between gap-2 rounded-[0.55rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-3 py-2"
     >
       <div class="text-[12px] text-muted-strong">
         <span class="font-semibold text-carbon"
@@ -770,7 +770,7 @@
   {/if}
 
   {#if selectedSummary}
-    <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-black/8 px-4 py-4">
+    <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
           <p class="text-xs text-faint">{copy.sessionsDetail}</p>
@@ -808,7 +808,7 @@
 
       {#if detailLoading}
         <div
-          class="rounded-[0.45rem] border border-black/6 px-3 py-8 text-center text-sm text-muted-strong"
+          class="rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-8 text-center text-sm text-muted-strong"
         >
           {copy.sessionsDetailLoading}
         </div>
@@ -820,7 +820,7 @@
         </div>
       {:else if !selectedDetail?.messages.length}
         <div
-          class="rounded-[0.45rem] border border-black/6 px-3 py-8 text-center text-sm text-muted-strong"
+          class="rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-8 text-center text-sm text-muted-strong"
         >
           {copy.sessionsNoMessages}
         </div>
@@ -909,7 +909,7 @@
     </section>
   {:else if !instances.length}
     <section
-      class="theme-soft-panel rounded-[0.55rem] border border-black/8 px-4 py-8 text-center text-sm text-muted-strong"
+      class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
     >
       {copy.sessionsEmpty}
     </section>
@@ -930,7 +930,7 @@
           0
         )}
         <section
-          class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-black/8 px-4 py-4"
+          class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
         >
           <div class="flex flex-wrap items-start justify-between gap-3">
             <button
@@ -948,17 +948,17 @@
                 <span class={`tree-caret ${instanceCollapsed ? '' : 'is-open'}`}>›</span>
                 <span class="text-sm font-semibold text-carbon">{instanceLabel(instance)}</span>
                 <span
-                  class="theme-version-pill rounded-[0.3rem] border border-black/6 px-1.5 py-0.5 text-[10px] text-muted-strong"
+                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
                 >
                   {copy.sessionsCount(instanceSessionCount)}
                 </span>
                 <span
-                  class="theme-version-pill rounded-[0.3rem] border border-black/6 px-1.5 py-0.5 text-[10px] text-muted-strong"
+                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
                 >
                   {copy.sessionsProjectCount(projectGroups.length)}
                 </span>
                 <span
-                  class="theme-version-pill rounded-[0.3rem] border border-black/6 px-1.5 py-0.5 text-[10px] text-muted-strong"
+                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
                 >
                   {copy.sessionsProviderCount(providerGroups.length)}
                 </span>
@@ -989,13 +989,13 @@
 
             {#if loading && !projects.length}
               <div
-                class="rounded-[0.45rem] border border-black/6 px-3 py-6 text-center text-sm text-muted-strong"
+                class="rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-6 text-center text-sm text-muted-strong"
               >
                 {copy.refreshing}
               </div>
             {:else if !providerGroups.length}
               <div
-                class="rounded-[0.45rem] border border-black/6 px-3 py-6 text-center text-sm text-muted-strong"
+                class="rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-6 text-center text-sm text-muted-strong"
               >
                 {copy.sessionsInstanceEmpty}
               </div>
@@ -1005,7 +1005,7 @@
                   {@const providerCollapsed = collapsedByProviderKey[providerGroup.key] ?? false}
                   <div class="provider-node grid gap-2">
                     <button
-                      class="provider-toggle grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-[0.45rem] border border-black/6 px-3 py-2 text-left"
+                      class="provider-toggle grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-2 text-left"
                       type="button"
                       aria-expanded={!providerCollapsed}
                       onclick={() => {
@@ -1057,7 +1057,7 @@
                             visibleLimitByProjectKey[project.key] ?? visibleLimit}
                           <div class="project-node grid gap-2">
                             <button
-                              class="project-toggle grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-[0.45rem] border border-black/6 px-3 py-2 text-left"
+                              class="project-toggle grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2 rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-2 text-left"
                               type="button"
                               aria-expanded={projectExpanded}
                               onclick={() => void toggleProject(project)}
@@ -1091,14 +1091,14 @@
                               <div class="project-children grid gap-2 pl-5">
                                 {#if sessionLoadingByProjectKey[project.key] && !displayedSessions.length}
                                   <div
-                                    class="rounded-[0.45rem] border border-black/6 px-3 py-5 text-center text-sm text-muted-strong"
+                                    class="rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-5 text-center text-sm text-muted-strong"
                                   >
                                     {copy.refreshing}
                                   </div>
                                 {:else}
                                   {#each displayedSessions as session (session.filePath)}
                                     <div
-                                      class={`session-card grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 rounded-[0.45rem] border border-black/6 px-3 py-3 ${
+                                      class={`session-card grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-3 ${
                                         isSessionSelected(session) ? 'is-selected' : ''
                                       }`}
                                     >
@@ -1217,7 +1217,7 @@
         <div class="flex items-start justify-between gap-4" data-dialog-motion>
           <div class="min-w-0">
             <p
-              class="inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.035] px-2 py-1 text-[11px] font-medium text-muted-strong"
+              class="inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] font-medium text-muted-strong"
             >
               <span class="i-lucide-copy-plus h-3 w-3"></span>
               {copy.sessionsCopyToProvider}
@@ -1321,8 +1321,8 @@
                 buttonClass={`${floatingSelectButtonClass} session-copy-select-button`}
                 menuClass={floatingSelectMenuClass}
                 optionClass={floatingSelectOptionClass}
-                activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
-                inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+                activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+                inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
                 on:change={(event) => {
                   updateCopyTargetInstance(event.detail)
                 }}
@@ -1352,8 +1352,8 @@
                 buttonClass={`${floatingSelectButtonClass} session-copy-select-button`}
                 menuClass={floatingSelectMenuClass}
                 optionClass={floatingSelectOptionClass}
-                activeOptionClass="theme-menu-choice-active bg-black/[0.05]"
-                inactiveOptionClass="bg-transparent hover:bg-black/[0.03]"
+                activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+                inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
                 on:change={(event) => {
                   copyTargetProviderId = event.detail
                 }}
@@ -1852,30 +1852,4 @@
     -webkit-line-clamp: 2;
   }
 
-  :global(html[data-theme='dark']) .session-card,
-  :global(html[data-theme='dark']) .session-message {
-    background: color-mix(in srgb, var(--surface-soft) 72%, var(--color-fog) 28%);
-  }
-
-  :global(html[data-theme='dark']) .session-message-user {
-    border-color: color-mix(in srgb, var(--color-carbon) 9%, transparent);
-    background: color-mix(in srgb, var(--color-carbon) 9%, var(--surface-soft) 38%);
-  }
-
-  :global(html[data-theme='dark']) .session-message-assistant {
-    background: color-mix(in srgb, var(--surface-soft) 72%, var(--color-fog) 28%);
-  }
-
-  :global(html[data-theme='dark']) .session-message-auxiliary {
-    background: color-mix(in srgb, var(--surface-soft) 36%, var(--color-fog) 64%);
-  }
-
-  :global(html[data-theme='dark']) .provider-toggle,
-  :global(html[data-theme='dark']) .project-toggle {
-    background: color-mix(in srgb, var(--surface-soft) 56%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .session-card:hover {
-    background: var(--surface-hover);
-  }
 </style>

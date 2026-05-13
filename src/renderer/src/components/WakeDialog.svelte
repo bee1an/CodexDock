@@ -171,7 +171,7 @@
       </div>
 
       <AppButtonGroup
-        class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-black/5 bg-transparent p-0.5"
+        class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-[var(--soft-panel-border)] bg-transparent p-0.5"
         data-wake-motion
       >
         <AppButton
@@ -263,7 +263,7 @@
                   </span>
                   {#if requestResult}
                     <span
-                      class="theme-version-pill inline-flex items-center rounded-md bg-black/[0.05] px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-strong"
+                      class="theme-version-pill inline-flex items-center rounded-md bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-strong"
                     >
                       {copy.wakeQuotaResultStatus}&nbsp;{requestResult.status}
                     </span>
@@ -272,7 +272,7 @@
 
                 <pre
                   bind:this={logPanel}
-                  class="theme-code-surface wake-log-panel min-h-48 max-h-72 overflow-auto rounded-[0.4rem] border border-black/8 bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
+                  class="theme-code-surface wake-log-panel min-h-48 max-h-72 overflow-auto rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
                     >{sessionLogs.length ? sessionLogs.join('\n') : copy.wakeQuotaLogEmpty}</code
                   ></pre>
               </div>
@@ -286,7 +286,7 @@
                     <span class="text-[10px] text-faint">{responsePreview(rawResponseBody)}</span>
                   </div>
                   <pre
-                    class="theme-code-surface max-h-56 overflow-auto overscroll-contain rounded-[0.4rem] border border-black/8 bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
+                    class="theme-code-surface max-h-56 overflow-auto overscroll-contain rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
                       >{rawResponseBody || copy.wakeQuotaResultEmpty}</code
                     ></pre>
                 </div>
@@ -314,7 +314,7 @@
       {:else}
         <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
           <div
-            class="wake-section-header flex flex-wrap items-center justify-between gap-3 border-b border-black/6 pb-3"
+            class="wake-section-header flex flex-wrap items-center justify-between gap-3 border-b border-[var(--soft-panel-border)] pb-3"
           >
             <div class="grid gap-1">
               <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">
@@ -415,7 +415,7 @@
             </div>
 
             <div
-              class="wake-schedule-summary grid content-start gap-0 rounded-[0.5rem] border border-black/8 bg-transparent px-3 py-2 text-xs text-muted-strong"
+              class="wake-schedule-summary grid content-start gap-0 rounded-[0.5rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-xs text-muted-strong"
             >
               <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
                 <span>{copy.wakeScheduleNextRun}</span>
@@ -440,12 +440,12 @@
                 >
               </div>
               {#if schedule?.lastMessage}
-                <div class="grid gap-1 border-t border-black/6 pt-2">
+                <div class="grid gap-1 border-t border-[var(--soft-panel-border)] pt-2">
                   <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-faint">
                     {copy.wakeScheduleLastMessage}
                   </span>
                   <pre
-                    class="theme-code-surface max-h-36 overflow-auto rounded-[0.35rem] border border-black/8 bg-transparent px-3 py-2 text-[11px] leading-5 text-carbon"><code
+                    class="theme-code-surface max-h-36 overflow-auto rounded-[0.35rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-[11px] leading-5 text-carbon"><code
                       >{schedule.lastMessage}</code
                     ></pre>
                 </div>
@@ -543,48 +543,4 @@
     border-top: 1px solid var(--color-arctic-mist);
   }
 
-  :global(html[data-theme='dark']) .wake-dialog-backdrop {
-    background:
-      radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.08), transparent 32rem),
-      color-mix(in srgb, black 76%, transparent) !important;
-    backdrop-filter: blur(7px) saturate(0.78);
-  }
-
-  :global(html[data-theme='dark']) .wake-dialog-panel {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 78%, white 22%) !important;
-    background: linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)),
-      color-mix(in srgb, var(--panel-strong) 78%, var(--color-fog))
-    ) !important;
-    box-shadow:
-      0 36px 132px rgba(0, 0, 0, 0.94),
-      0 18px 58px rgba(0, 0, 0, 0.72) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-status-running {
-    background: rgb(59 130 246 / 0.16) !important;
-    color: rgb(147 197 253) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-status-skipped {
-    background: rgb(245 158 11 / 0.18) !important;
-    color: rgb(253 224 71) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-status-success {
-    background: rgb(16 185 129 / 0.16) !important;
-    color: rgb(167 243 208) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-status-error {
-    background: rgb(239 68 68 / 0.16) !important;
-    color: rgb(252 165 165) !important;
-  }
-
-  :global(html[data-theme='dark']) .wake-dialog-panel :global(.theme-code-surface) {
-    background: color-mix(in srgb, var(--panel-strong) 78%, var(--color-snow)) !important;
-    box-shadow: none !important;
-    color: var(--color-carbon) !important;
-  }
 </style>
