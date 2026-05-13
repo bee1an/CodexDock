@@ -14,6 +14,7 @@
     type UpdatePromptInput
   } from '../../../shared/codex'
   import AppButton from './AppButton.svelte'
+  import AppButtonGroup from './AppButtonGroup.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import type { LocalizedCopy } from './app-view'
@@ -425,7 +426,7 @@
     </div>
 
     <div class="flex min-h-8 flex-wrap items-center gap-2 pt-1">
-      <div
+      <AppButtonGroup
         class="prompts-filter-shell inline-flex min-w-0 max-w-full items-center gap-0 overflow-x-auto rounded-[0.4rem] p-0.5"
       >
         <AppButton
@@ -448,7 +449,7 @@
             <span class="max-w-[8rem] truncate">{cat}</span>
           </AppButton>
         {/each}
-      </div>
+      </AppButtonGroup>
 
       <div class="flex-1"></div>
 
@@ -979,12 +980,12 @@
 {/if}
 
 <style>
-  .prompts-filter-shell {
+  :global(.prompts-filter-shell) {
     background: transparent;
     scrollbar-width: none;
   }
 
-  .prompts-filter-shell::-webkit-scrollbar {
+  :global(.prompts-filter-shell::-webkit-scrollbar) {
     display: none;
   }
 

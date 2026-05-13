@@ -15,6 +15,7 @@
     type LocalizedCopy
   } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppButtonGroup from './AppButtonGroup.svelte'
   import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
 
@@ -184,7 +185,7 @@
     <div class="grid gap-3">
       <div class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5">
         <span class="text-xs font-medium text-carbon">{copy.switchLanguage}</span>
-        <div class="flex items-center gap-1.5">
+        <AppButtonGroup ariaLabel={copy.switchLanguage}>
           {#each languageOptions as option (option.value)}
             <AppButton
               variant="filter"
@@ -196,7 +197,7 @@
               {option.label}
             </AppButton>
           {/each}
-        </div>
+        </AppButtonGroup>
 
         <div class="ml-auto flex items-center gap-2">
           <span class="text-xs font-medium text-carbon">{copy.switchTheme(themeTitle(theme, copy))}</span>

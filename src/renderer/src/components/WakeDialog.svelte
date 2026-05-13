@@ -9,6 +9,7 @@
   import { defaultWakeModel } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppButtonGroup from './AppButtonGroup.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import Checkbox from './Checkbox.svelte'
@@ -169,7 +170,7 @@
         <p class="text-[11px] leading-4 text-faint">{accountLabelText}</p>
       </div>
 
-      <div
+      <AppButtonGroup
         class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-black/5 bg-transparent p-0.5"
         data-wake-motion
       >
@@ -203,7 +204,7 @@
           <span class="i-lucide-calendar-clock h-3.5 w-3.5"></span>
           <span>{copy.wakeSchedule}</span>
         </AppButton>
-      </div>
+      </AppButtonGroup>
 
       {#if activeTab === 'session'}
         <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
@@ -525,7 +526,7 @@
       0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
   }
 
-  .wake-tab-list {
+  :global(.wake-tab-list) {
     background: transparent;
   }
 

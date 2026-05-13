@@ -44,6 +44,7 @@
   import GroupManagerDialog from './GroupManagerDialog.svelte'
   import AppButton from './AppButton.svelte'
   import Checkbox from './Checkbox.svelte'
+  import AppButtonGroup from './AppButtonGroup.svelte'
   import CostStatsView from './CostStatsView.svelte'
   import LocalGatewayView from './LocalGatewayView.svelte'
   import MotionNumber from './MotionNumber.svelte'
@@ -396,7 +397,7 @@
         </AppButton>
       {/if}
 
-      <div
+      <AppButtonGroup
         class="theme-toolbar inline-flex items-center gap-0 rounded-[0.45rem] border border-black/8 bg-black/[0.03] p-0.5"
       >
         <AppButton
@@ -497,7 +498,7 @@
           <span class="i-lucide-cog h-3.5 w-3.5"></span>
           <span>{copy.settings}</span>
         </AppButton>
-      </div>
+      </AppButtonGroup>
     </div>
   </div>
 

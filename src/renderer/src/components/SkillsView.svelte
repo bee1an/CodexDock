@@ -11,6 +11,7 @@
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
+  import AppButtonGroup from './AppButtonGroup.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
@@ -295,7 +296,7 @@
     </div>
 
     <div class="flex min-h-8 flex-wrap items-center gap-2 pt-1">
-      <div
+      <AppButtonGroup
         class="skills-filter-shell inline-flex min-w-0 max-w-full items-center gap-0 overflow-x-auto rounded-[0.4rem] p-0.5"
       >
         <AppButton
@@ -328,7 +329,7 @@
             </AppButton>
           {/if}
         {/each}
-      </div>
+      </AppButtonGroup>
 
       <div class="flex-1"></div>
 
@@ -693,12 +694,12 @@
 {/if}
 
 <style>
-  .skills-filter-shell {
+  :global(.skills-filter-shell) {
     background: transparent;
     scrollbar-width: none;
   }
 
-  .skills-filter-shell::-webkit-scrollbar {
+  :global(.skills-filter-shell::-webkit-scrollbar) {
     display: none;
   }
 
