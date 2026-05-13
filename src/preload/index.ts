@@ -55,6 +55,7 @@ const codexApp = {
   openCodex: () => ipcRenderer.invoke('codex:open-codex'),
   importCurrentAccount: () => ipcRenderer.invoke('codex:import-current-account'),
   importAccountsFromFile: () => ipcRenderer.invoke('codex:import-accounts-from-file'),
+  importAccountsFromRaw: (raw: string) => ipcRenderer.invoke('codex:import-accounts-from-raw', raw),
   exportAccountsToFile: (format?: AccountTransferFormat) =>
     ipcRenderer.invoke('codex:export-accounts-to-file', format),
   exportSelectedAccountsToFile: (accountIds: string[], format?: AccountTransferFormat) =>

@@ -344,6 +344,26 @@ function hasCredentialsRecord(record: JsonRecord): boolean {
   )
 }
 
+function isChatGptWebSession(record: JsonRecord): boolean {
+  return (
+    Boolean(readOptionalString(record['accessToken'])) &&
+    (asRecord(record['user']) != null || asRecord(record['account']) != null)
+  )
+}
+
+function normalizeChatGptWebSession(record: JsonRecord): JsonRecord {
+  const user = asRecord(record['user'])
+  const account = asRecord(record['account'])
+  return {
+    access_token: record['accessToken'],
+    expires_at: record['expires'],
+    email: user?.['email'],
+    chatgpt_user_id: user?.['id'],
+    chatgpt_account_id: account?.['id'],
+    plan_type: account?.['planType']
+  }
+}
+
 function buildQuotaExtraFromCockpit(
   value: unknown,
   exportedAt: string,
@@ -647,6 +667,15 @@ function parseFlatImportRecord(value: unknown): TemplateFileRecord | null {
   }
 
   if (!hasCredentialsRecord(record) && !hasNestedTokens(record) && !hasTopLevelTokens(record)) {
+    if (isChatGptWebSession(record)) {
+      const normalized = normalizeChatGptWebSession(record)
+      const exportedAt = normalizeIsoTimestamp(record['expires']) ?? new Date().toISOString()
+      return {
+        exported_at: exportedAt,
+        proxies: [],
+        accounts: [parseImportAccountRecord(normalized, 0, exportedAt)]
+      }
+    }
     return null
   }
 

@@ -82,6 +82,7 @@
   export let startLogin: (method: LoginMethod) => void = () => {}
   export let importCurrent: () => void = () => {}
   export let importAccountsFile: () => void = () => {}
+  export let importAccountsFromRaw: () => void = () => {}
   export let exportAccountsFile: () => void = () => {}
   export let refreshAllRateLimits: () => void = () => {}
   export let activateBestAccount: () => void = () => {}
@@ -646,6 +647,16 @@
     title={copy.importAccountsFile}
   >
     <span class="i-lucide-file-up h-3.5 w-3.5"></span>
+  </AppButton>
+  <AppButton
+    variant="icon"
+    size="xs"
+    onclick={importAccountsFromRaw}
+    disabled={loginActionBusy}
+    ariaLabel={copy.pasteSession}
+    title={copy.pasteSession}
+  >
+    <span class="i-lucide-clipboard-paste h-3.5 w-3.5"></span>
   </AppButton>
   <AppButton
     variant="icon"

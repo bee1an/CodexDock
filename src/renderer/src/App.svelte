@@ -6,6 +6,7 @@
   import AppDialog from './components/AppDialog.svelte'
   import { reveal } from './components/gsap-motion'
   import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
+  import PasteSessionDialog from './components/PasteSessionDialog.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
   import WakeDialog from './components/WakeDialog.svelte'
@@ -179,6 +180,9 @@
   let exportDialogFormat: AccountTransferFormat = 'codexdock'
   let localGatewayBusy = false
   let localGatewayApiKey = ''
+  let showPasteSessionDialog = false
+  let pasteSessionError = ''
+  let pasteSessionSaving = false
   let wakeScheduleEnabledDraft = true
   let wakeScheduleTimesDraft: string[] = ['09:00']
   let wakeSchedulePromptDraft = 'ping'
@@ -1064,6 +1068,32 @@
     openExportFormatDialog(uniqueIds)
   }
 
+  const openPasteSessionDialog = (): void => {
+    pasteSessionError = ''
+    pasteSessionSaving = false
+    showPasteSessionDialog = true
+  }
+
+  const closePasteSessionDialog = (): void => {
+    if (pasteSessionSaving) return
+    showPasteSessionDialog = false
+    pasteSessionError = ''
+  }
+
+  const submitPasteSession = async (raw: string): Promise<void> => {
+    if (pasteSessionSaving || !showPasteSessionDialog) return
+    pasteSessionSaving = true
+    pasteSessionError = ''
+    try {
+      applySnapshot(await window.codexApp.importAccountsFromRaw(raw))
+      showPasteSessionDialog = false
+    } catch (error) {
+      pasteSessionError = localizeKnownError(error, copyForLanguage().actionFailed)
+    } finally {
+      pasteSessionSaving = false
+    }
+  }
+
   const reorderAccounts = async (accountIds: string[]): Promise<void> => {
     if (!accountIds.length) {
       return
@@ -1728,6 +1758,7 @@
                 runAction('import', () => window.codexApp.importCurrentAccount())}
               importAccountsFile={() =>
                 runAction('import:file', () => window.codexApp.importAccountsFromFile())}
+              importAccountsFromRaw={() => openPasteSessionDialog()}
               exportAccountsFile={() => openExportFormatDialog()}
               {refreshAllRateLimits}
               {refreshingAllUsage}
@@ -1879,6 +1910,16 @@
       </AppButton>
     </svelte:fragment>
   </AppDialog>
+{/if}
+
+{#if showPasteSessionDialog}
+  <PasteSessionDialog
+    copy={copyForLanguage()}
+    errorMessage={pasteSessionError}
+    saving={pasteSessionSaving}
+    onClose={closePasteSessionDialog}
+    onSubmit={submitPasteSession}
+  />
 {/if}
 
 {#if wakeDialogAccount}
