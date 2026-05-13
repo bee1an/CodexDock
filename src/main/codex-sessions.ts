@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
@@ -339,6 +340,15 @@ function lastMessageFromMessages(messages: CodexSessionMessage[], fallback: stri
 
 function fallbackSessionId(filePath: string): string {
   return basename(filePath).replace(/\.jsonl$/i, '')
+}
+
+function sessionIdFromMetadata(metadata: Record<string, unknown>, filePath: string): string {
+  return (
+    stringValue(metadata.session_id) ??
+    stringValue(metadata.sessionId) ??
+    stringValue(metadata.id) ??
+    fallbackSessionId(filePath)
+  )
 }
 
 function projectName(projectPath?: string): string | undefined {
@@ -715,12 +725,15 @@ function patchSessionForProviderImport(
   sourceInstance: CodexInstanceSummary,
   sourceFilePath: string,
   targetInstance: CodexInstanceSummary,
-  target: SessionImportTarget
+  target: SessionImportTarget,
+  sourceSessionId: string,
+  targetSessionId: string
 ): Record<string, unknown>[] {
   const importedAt = new Date().toISOString()
   const sourceMeta = metadataPayload(objects)
   const importMeta = {
     importedAt,
+    sourceSessionId,
     sourceInstanceId: sourceInstance.id,
     sourceInstanceName: sourceInstance.isDefault
       ? 'Default'
@@ -735,38 +748,56 @@ function patchSessionForProviderImport(
     targetProviderId: target.providerId,
     targetProviderName: target.providerName,
     targetModelProvider: target.modelProvider,
-    targetModel: target.model
+    targetModel: target.model,
+    targetSessionId
   }
 
   return objects.map((obj) => {
-    if (!isRecord(obj.payload)) {
-      return obj
+    const patchedObj =
+      typeof obj.session_id === 'string'
+        ? {
+            ...obj,
+            session_id: targetSessionId
+          }
+        : obj
+
+    if (!isRecord(patchedObj.payload)) {
+      return patchedObj
     }
 
-    if (obj.type === 'session_meta') {
+    if (patchedObj.type === 'session_meta') {
+      const payload = {
+        ...patchedObj.payload,
+        session_id: targetSessionId,
+        forked_from_id: sourceSessionId,
+        model_provider: target.modelProvider,
+        model: target.model,
+        codexdock_import: importMeta
+      }
+      if ('sessionId' in payload) {
+        payload.sessionId = targetSessionId
+      }
+      if ('id' in payload) {
+        payload.id = targetSessionId
+      }
       return {
-        ...obj,
-        payload: {
-          ...obj.payload,
-          model_provider: target.modelProvider,
-          model: target.model,
-          codexdock_import: importMeta
-        }
+        ...patchedObj,
+        payload
       }
     }
 
-    if (obj.type === 'turn_context') {
+    if (patchedObj.type === 'turn_context') {
       return {
-        ...obj,
+        ...patchedObj,
         payload: {
-          ...obj.payload,
+          ...patchedObj.payload,
           model_provider: target.modelProvider,
           model: target.model
         }
       }
     }
 
-    return obj
+    return patchedObj
   })
 }
 
@@ -788,6 +819,8 @@ export async function copyCodexSessionToProvider(
   const objects = await readJsonlObjects(input.sourceFilePath)
   const metadata = metadataPayload(objects)
   const target = copyTargetFromInput(objects, input, targetProvider)
+  const sourceSessionId = sessionIdFromMetadata(metadata, input.sourceFilePath)
+  const targetSessionId = randomUUID()
   const targetFilePath = await uniqueImportedSessionPath(
     targetInstance.codexHome,
     input.sourceFilePath,
@@ -798,7 +831,9 @@ export async function copyCodexSessionToProvider(
     sourceInstance,
     input.sourceFilePath,
     targetInstance,
-    target
+    target,
+    sourceSessionId,
+    targetSessionId
   )
 
   await fs.mkdir(dirname(targetFilePath), { recursive: true })

@@ -414,8 +414,11 @@ describe('Codex session scanner', () => {
       instanceId: 'target',
       filePath: result.targetFilePath
     })
+    expect(copied.session.id).not.toBe('source-session')
+    expect(copied.session.id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u
+    )
     expect(copied.session).toMatchObject({
-      id: 'source-session',
       instanceId: 'target',
       modelProvider: 'custom:target-provider',
       modelProviderLabel: 'Target Provider',
@@ -435,15 +438,19 @@ describe('Codex session scanner', () => {
       string,
       unknown
     >
+    expect(meta.session_id).toBe(copied.session.id)
+    expect(meta.forked_from_id).toBe('source-session')
     expect(meta.model_provider).toBe('custom')
     expect(meta.model).toBe('gpt-5.4-mini')
     expect(meta.codexdock_import).toMatchObject({
+      sourceSessionId: 'source-session',
       sourceInstanceId: 'source',
       sourceModelProvider: 'openai',
       sourceModels: ['gpt-5.4'],
       targetProviderId: 'target-provider',
       targetModelProvider: 'custom',
-      targetModel: 'gpt-5.4-mini'
+      targetModel: 'gpt-5.4-mini',
+      targetSessionId: copied.session.id
     })
     expect(turnContext).toMatchObject({
       model_provider: 'custom',
