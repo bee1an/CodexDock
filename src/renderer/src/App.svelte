@@ -133,6 +133,15 @@
   let showDeviceLoginDetails = true
   let refreshingAllUsage = false
   let pageError = ''
+  let pageErrorTimer: ReturnType<typeof setTimeout> | null = null
+
+  const setPageError = (message: string): void => {
+    pageError = message
+    if (pageErrorTimer) clearTimeout(pageErrorTimer)
+    if (message) {
+      pageErrorTimer = setTimeout(() => { pageError = '' }, 8000)
+    }
+  }
   let loginPortOccupant: PortOccupant | null = null
   let windowFocused = true
   let killingLoginPortOccupant = false
@@ -642,12 +651,12 @@
     task: () => Promise<AppSnapshot>,
     options: ApplySnapshotOptions = {}
   ): Promise<void> => {
-    pageError = ''
+    setPageError('')
 
     try {
       applySnapshot(await task(), options)
     } catch (error) {
-      pageError = localizeKnownError(error, copyForLanguage().actionFailed)
+      setPageError(localizeKnownError(error, copyForLanguage().actionFailed))
     }
   }
 
@@ -713,14 +722,14 @@
 
   const rotateLocalGatewayKey = async (): Promise<void> =>
     runLocalGatewayAction(async () => {
-      pageError = ''
+      setPageError('')
       try {
         const result = await window.codexApp.rotateLocalGatewayKey()
         localGatewayApiKey = result.apiKey
         await navigator.clipboard.writeText(result.apiKey)
         await refreshSnapshot()
       } catch (error) {
-        pageError = localizeKnownError(error, copyForLanguage().actionFailed)
+        setPageError(localizeKnownError(error, copyForLanguage().actionFailed))
       }
     })
 
@@ -814,7 +823,7 @@
     }
 
     closeExpandablePanels(method === 'browser' ? 'browser-login' : 'device-login')
-    pageError = ''
+    setPageError('')
     loginEvent = null
     loginPortOccupant = null
     loginStarting = true
@@ -832,7 +841,7 @@
       applySnapshot(await window.codexApp.getSnapshot())
     } catch (error) {
       loginStarting = false
-      pageError = localizeKnownError(error, copyForLanguage().startLoginFailed)
+      setPageError(localizeKnownError(error, copyForLanguage().startLoginFailed))
       if (hasLoginPortConflict()) {
         await refreshLoginPortOccupant()
       }
@@ -840,14 +849,14 @@
   }
 
   const killLoginPortOccupant = async (): Promise<void> => {
-    pageError = ''
+    setPageError('')
     killingLoginPortOccupant = true
 
     try {
       loginPortOccupant = await window.codexApp.killLoginPortOccupant()
       await refreshLoginPortOccupant()
     } catch (error) {
-      pageError = localizeKnownError(error, copyForLanguage().killPortOccupantFailed)
+      setPageError(localizeKnownError(error, copyForLanguage().killPortOccupantFailed))
     } finally {
       killingLoginPortOccupant = false
     }
@@ -1712,26 +1721,37 @@
             role="alert"
             aria-live="assertive"
           >
-            <div class="grid gap-2">
-              <p>{pageError}</p>
-              {#if loginPortOccupant && hasLoginPortConflict()}
-                <div class="flex flex-wrap items-center gap-2 text-sm text-danger">
-                  <span>
-                    {copyForLanguage().portOccupied(
-                      loginPortOccupant.command,
-                      loginPortOccupant.pid
-                    )}
-                  </span>
-                  <AppButton
-                    variant="secondary"
-                    size="sm"
-                    onclick={killLoginPortOccupant}
-                    disabled={killingLoginPortOccupant}
-                  >
-                    {copyForLanguage().killPortOccupant}
-                  </AppButton>
-                </div>
-              {/if}
+            <div class="flex items-start gap-3">
+              <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true"></span>
+              <div class="grid min-w-0 flex-1 gap-2">
+                <p class="break-words">{pageError}</p>
+                {#if loginPortOccupant && hasLoginPortConflict()}
+                  <div class="flex flex-wrap items-center gap-2 text-sm text-danger">
+                    <span>
+                      {copyForLanguage().portOccupied(
+                        loginPortOccupant.command,
+                        loginPortOccupant.pid
+                      )}
+                    </span>
+                    <AppButton
+                      variant="secondary"
+                      size="sm"
+                      onclick={killLoginPortOccupant}
+                      disabled={killingLoginPortOccupant}
+                    >
+                      {copyForLanguage().killPortOccupant}
+                    </AppButton>
+                  </div>
+                {/if}
+              </div>
+              <button
+                type="button"
+                class="flex-none rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
+                aria-label="Close"
+                onclick={() => { setPageError('') }}
+              >
+                <span class="i-lucide-x h-4 w-4"></span>
+              </button>
             </div>
           </section>
         {/if}
