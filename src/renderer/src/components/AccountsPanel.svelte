@@ -33,6 +33,7 @@
     ProbeProviderModelsInput,
     ProviderModelsProbeResult,
     StatsDisplaySettings,
+    TagVisibilitySettings,
     TokenCostDetail,
     TokenCostReadOptions,
     TokenCostSummary,
@@ -44,8 +45,8 @@
   import AccountsProvidersView from './AccountsProvidersView.svelte'
   import GroupManagerDialog from './GroupManagerDialog.svelte'
   import AppButton from './AppButton.svelte'
-  import Checkbox from './Checkbox.svelte'
   import AppButtonGroup from './AppButtonGroup.svelte'
+  import Checkbox from './Checkbox.svelte'
   import CostStatsView from './CostStatsView.svelte'
   import LocalGatewayView from './LocalGatewayView.svelte'
   import MotionNumber from './MotionNumber.svelte'
@@ -93,6 +94,7 @@
   export let runningTokenCostSummary: TokenCostSummary | null
   export let runningTokenCostInstanceIds: string[]
   export let statsDisplay: StatsDisplaySettings
+  export let tagVisibility: TagVisibilitySettings = {}
   export let wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   export let loginActionBusy: boolean
   export let loginStarting = false
@@ -104,6 +106,7 @@
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
   export let openEditTokensDialog: (account: AccountSummary) => void
+  export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   export let createProvider: (input: CreateCustomProviderInput) => Promise<void>
   export let probeProviderModels: (
@@ -125,10 +128,10 @@
   export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
-  export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
+  export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let createGroup: (name: string) => Promise<void>
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
   export let deleteGroup: (group: AccountGroup) => Promise<void>
@@ -136,6 +139,7 @@
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let updateShowLocalMockData: (enabled: boolean) => void
   export let updateStatsDisplay: (statsDisplay: StatsDisplaySettings) => Promise<void>
+  export let updateTagVisibility: (tagVisibility: TagVisibilitySettings) => Promise<void>
   export let removeAccount: (account: AccountSummary) => void
   export let removeAccounts: (accountIds: string[]) => Promise<void>
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
@@ -613,7 +617,10 @@
       {openAccountInIsolatedCodex}
       {openWakeDialog}
       {openEditTokensDialog}
+      {openRefreshTokensDialog}
       {getAccountTokens}
+      {tagVisibility}
+      {updateTagVisibility}
       {reorderAccounts}
       updateAccountGroups={updateAccountGroupsWithProtection}
       {refreshAccountUsage}
@@ -639,10 +646,10 @@
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
-    />
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
+    />
   {:else if currentView === 'providers'}
     <AccountsProvidersView
       {copy}

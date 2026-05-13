@@ -15,6 +15,7 @@ import {
   accountErrorLabel,
   authPayloadsEqualForRefresh,
   authRefreshReason,
+  isPermanentAuthRefreshFailure,
   localMockUsageError,
   shouldClearStoredUsage,
   shouldRefreshStoredAuth,
@@ -64,8 +65,14 @@ export interface CodexServicesAuthRuntime {
 export function createCodexServicesAuthRuntime(
   context: CodexServicesRuntimeContext
 ): CodexServicesAuthRuntime {
-  const { store, loginCoordinator, options, authRefreshTasksByAccountId, wakeTasksByAccountId } =
-    context
+  const {
+    store,
+    loginCoordinator,
+    options,
+    authRefreshTasksByAccountId,
+    authRefreshFailuresByAccountId,
+    wakeTasksByAccountId
+  } = context
 
   async function persistRefreshedAuth(
     accountId: string,
@@ -107,11 +114,27 @@ export function createCodexServicesAuthRuntime(
         }
       }
 
-      const refreshedAuth = await refreshCodexAuthPayload(latestAuth, options.platform)
-      const persisted = await persistRefreshedAuth(accountId, refreshedAuth)
-      return {
-        ...persisted,
-        refreshed: true
+      const cachedFailure = authRefreshFailuresByAccountId.get(accountId)
+      if (cachedFailure && authPayloadsEqualForRefresh(cachedFailure.auth, latestAuth)) {
+        throw cachedFailure.error
+      }
+
+      try {
+        const refreshedAuth = await refreshCodexAuthPayload(latestAuth, options.platform)
+        authRefreshFailuresByAccountId.delete(accountId)
+        const persisted = await persistRefreshedAuth(accountId, refreshedAuth)
+        return {
+          ...persisted,
+          refreshed: true
+        }
+      } catch (error) {
+        if (isPermanentAuthRefreshFailure(error)) {
+          authRefreshFailuresByAccountId.set(accountId, {
+            auth: latestAuth,
+            error: error instanceof Error ? error : new Error('OpenAI token refresh failed')
+          })
+        }
+        throw error
       }
     })()
 
@@ -131,7 +154,7 @@ export function createCodexServicesAuthRuntime(
     options?: { skewMs?: number; allowStaleFallback?: boolean }
   ): Promise<StoredAuthRefreshResult> {
     const skewMs = options?.skewMs ?? 60_000
-    const reason = authRefreshReason(auth, skewMs)
+    const reason = authRefreshReason(auth)
     if (!reason) {
       return {
         accountId,

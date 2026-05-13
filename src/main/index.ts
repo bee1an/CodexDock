@@ -762,6 +762,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:get-account-tokens', (_, accountId: string) =>
     codexServices.accounts.getTokens(accountId)
   )
+  ipcMain.handle('codex:refresh-account-tokens', (_, accountId: string) =>
+    codexServices.accounts.refreshTokens(accountId)
+  )
   ipcMain.handle('codex:get-account-wake-schedule', (_, accountId: string) =>
     codexServices.accounts.getWakeSchedule(accountId)
   )

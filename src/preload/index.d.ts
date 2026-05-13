@@ -1,6 +1,7 @@
 import { ElectronAPI } from '@electron-toolkit/preload'
 import type {
   AccountRateLimits,
+  AccountTokenRefreshResult,
   AccountTokensDetail,
   AccountWakeSchedule,
   AccountTransferFormat,
@@ -70,6 +71,7 @@ interface CodexDesktopApi {
   updateAccountGroups: (accountId: string, groupIds: string[]) => Promise<AppSnapshot>
   updateAccountTokens: (accountId: string, input: UpdateAccountTokensInput) => Promise<AppSnapshot>
   getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
+  refreshAccountTokens: (accountId: string) => Promise<AccountTokenRefreshResult>
   getAccountWakeSchedule: (accountId: string) => Promise<AccountWakeSchedule | null>
   updateAccountWakeSchedule: (
     accountId: string,

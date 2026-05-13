@@ -28,7 +28,6 @@ import {
   type OpenCodexFromServiceTarget
 } from '../shared/codex'
 import {
-  BACKGROUND_AUTH_REFRESH_SKEW_MS,
   DEFAULT_CODEX_INSTANCE_ID,
   LOCAL_MOCK_OPEN_ERROR,
   LOCAL_MOCK_OPEN_ISOLATED_ERROR,
@@ -210,7 +209,7 @@ export function createCodexServicesInstanceRuntime(
 
     const storedAuth = await store.getStoredAuthPayload(accountId)
 
-    if (!authRefreshReason(storedAuth, BACKGROUND_AUTH_REFRESH_SKEW_MS)) {
+    if (!authRefreshReason(storedAuth)) {
       return false
     }
 

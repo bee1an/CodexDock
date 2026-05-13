@@ -18,6 +18,15 @@ import type {
 } from '../shared/codex'
 import { serializeStatsDisplaySettings } from '../shared/codex'
 
+function serializeTagVisibilitySettings(settings?: AppSettings['tagVisibility']): string {
+  const entries = Object.entries(settings ?? {})
+  if (!entries.length) {
+    return 'all'
+  }
+
+  return entries.map(([key, value]) => `${key}:${value !== false ? 'on' : 'off'}`).join(',')
+}
+
 export function printHelp(): void {
   console.log(`cdock
 
@@ -29,6 +38,7 @@ Usage:
   cdock account activate <account-id> [--json]
   cdock account best [--json]
   cdock account remove <account-id> [--json]
+  cdock account refresh-tokens <account-id> [--json]
   cdock provider list [--json]
   cdock provider create --base-url <url> --api-key <key> [--protocol openai] [--name <name>] [--model <model>] [--fast <true|false>] [--json]
   cdock provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--protocol openai] [--model <model>] [--fast <true|false>] [--json]
@@ -351,6 +361,7 @@ export function printSettings(settings: AppSettings, quiet: boolean): void {
   console.log(`codexDesktopExecutablePath=${settings.codexDesktopExecutablePath}`)
   console.log(`showLocalMockData=${settings.showLocalMockData !== false}`)
   console.log(`statsDisplay=${serializeStatsDisplaySettings(settings.statsDisplay)}`)
+  console.log(`tagVisibility=${serializeTagVisibilitySettings(settings.tagVisibility)}`)
   console.log(`toolbarIconMovable=${settings.toolbarIconMovable !== false}`)
   console.log(
     `collapsedToolbarIconDefaultPosition=${settings.collapsedToolbarIconDefaultPosition !== false}`
@@ -378,6 +389,10 @@ export function formatSettingsValue(key: keyof AppSettings, settings: AppSetting
 
   if (key === 'statsDisplay') {
     return serializeStatsDisplaySettings(settings.statsDisplay)
+  }
+
+  if (key === 'tagVisibility') {
+    return serializeTagVisibilitySettings(settings.tagVisibility)
   }
 
   return String(value ?? '')

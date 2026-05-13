@@ -4,7 +4,7 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { CodexAccountStore, type CodexAuthPayload } from '../codex-auth'
+import { CodexAccountStore, refreshCodexAuthPayload, type CodexAuthPayload } from '../codex-auth'
 import { parseTokenEndpointError } from '../codex-auth-shared'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../../shared/codex-platform'
 
@@ -53,7 +53,7 @@ function createAuthPayload(
 }
 
 describe('parseTokenEndpointError', () => {
-  it('serializes object-shaped token endpoint errors instead of showing [object Object]', () => {
+  it('extracts readable object-shaped token endpoint errors', () => {
     const raw = JSON.stringify({
       error: {
         code: 'unsupported_country_region_territory',
@@ -63,9 +63,7 @@ describe('parseTokenEndpointError', () => {
       }
     })
 
-    expect(parseTokenEndpointError(raw)).toBe(
-      '{"code":"unsupported_country_region_territory","message":"Country, region, or territory not supported","param":null,"type":"request_forbidden"}'
-    )
+    expect(parseTokenEndpointError(raw)).toBe('Country, region, or territory not supported')
   })
 
   it('keeps plain string token endpoint details readable', () => {
@@ -77,6 +75,62 @@ describe('parseTokenEndpointError', () => {
         })
       )
     ).toBe('refresh_token_expired')
+  })
+})
+
+describe('refreshCodexAuthPayload', () => {
+  it('uses the Codex JSON refresh token request format', async () => {
+    const platform = createPlatform()
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          access_token: 'access-next',
+          refresh_token: 'refresh-next',
+          id_token: createJwt({
+            'https://api.openai.com/auth': {
+              chatgpt_account_id: 'acct-a'
+            }
+          })
+        }),
+        {
+          status: 200,
+          headers: {
+            'content-type': 'application/json'
+          }
+        }
+      )
+    )
+
+    await expect(
+      refreshCodexAuthPayload(
+        {
+          auth_mode: 'chatgpt',
+          tokens: {
+            refresh_token: 'refresh-current'
+          }
+        },
+        platform
+      )
+    ).resolves.toMatchObject({
+      tokens: {
+        access_token: 'access-next',
+        refresh_token: 'refresh-next',
+        account_id: 'acct-a'
+      }
+    })
+
+    expect(platform.fetch).toHaveBeenCalledWith('https://auth.openai.com/oauth/token', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        client_id: 'app_EMoamEEZ73f0CkXaXp7hrann',
+        grant_type: 'refresh_token',
+        refresh_token: 'refresh-current'
+      }),
+      signal: undefined
+    })
   })
 })
 

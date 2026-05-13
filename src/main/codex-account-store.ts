@@ -15,6 +15,7 @@ import type {
   UpdateAccountWakeScheduleInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
+import { decodeJwtPayload } from '../shared/openai-auth'
 import {
   defaultWakeModel,
   normalizeLocalGatewaySettings,
@@ -969,17 +970,16 @@ export class CodexAccountStore {
   private toAccountSummary(account: PersistedAccount): AccountSummary {
     const summary = toAccountSummary(account)
 
-    if (summary.subscriptionExpiresAt) {
-      return summary
-    }
-
     try {
       const auth = JSON.parse(this.unprotect(account.authPayload)) as CodexAuthPayload
-      const authSummary = summarizeAuth(auth)
-      if (authSummary.subscriptionExpiresAt) {
-        return {
-          ...summary,
-          subscriptionExpiresAt: authSummary.subscriptionExpiresAt
+      const claims = decodeJwtPayload(auth.tokens?.access_token)
+      if (typeof claims.exp === 'number') {
+        summary.accessTokenExpiresAt = claims.exp * 1000
+      }
+      if (!summary.subscriptionExpiresAt) {
+        const authSummary = summarizeAuth(auth)
+        if (authSummary.subscriptionExpiresAt) {
+          summary.subscriptionExpiresAt = authSummary.subscriptionExpiresAt
         }
       }
     } catch {

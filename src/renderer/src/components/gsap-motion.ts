@@ -28,6 +28,7 @@ export interface ProgressOptions {
   duration?: number
   opacity?: number
   targetWidth?: string
+  critical?: boolean
 }
 
 type DestroyActionReturn = {
@@ -191,6 +192,67 @@ export function magnetic(node: HTMLElement, options: MagneticOptions = {}): Dest
   }
 }
 
+export interface ToastOptions {
+  duration?: number
+  autoDismissMs?: number
+}
+
+export function toastReveal(
+  node: HTMLElement,
+  options: ToastOptions = {}
+): DestroyActionReturn {
+  if (prefersReducedMotion()) {
+    return { destroy: noop }
+  }
+
+  const enterDuration = options.duration ?? 0.34
+  const autoDismissMs = options.autoDismissMs ?? 8000
+
+  let frame: number | null = window.requestAnimationFrame(() => {
+    frame = null
+    gsap.fromTo(
+      node,
+      {
+        autoAlpha: 0,
+        y: 14,
+        filter: 'blur(6px)'
+      },
+      {
+        autoAlpha: 1,
+        y: 0,
+        filter: 'blur(0px)',
+        duration: enterDuration,
+        ease: 'power3.out',
+        clearProps: 'filter'
+      }
+    )
+
+    const timerBar = node.querySelector<HTMLElement>('[data-toast-timer]')
+    if (timerBar && autoDismissMs > 0) {
+      const countdownStart = autoDismissMs - 1000
+      gsap.fromTo(
+        timerBar,
+        { scaleX: 0, transformOrigin: 'left center' },
+        {
+          scaleX: 1,
+          duration: 1,
+          delay: countdownStart / 1000,
+          ease: 'linear'
+        }
+      )
+    }
+  })
+
+  return {
+    destroy() {
+      cancelFrame(frame)
+      gsap.killTweensOf(node)
+      const timerBar = node.querySelector<HTMLElement>('[data-toast-timer]')
+      if (timerBar) gsap.killTweensOf(timerBar)
+    }
+  }
+}
+
 export function animateProgress(
   node: HTMLElement,
   options: ProgressOptions = {}
@@ -199,19 +261,33 @@ export function animateProgress(
     return { update: noop, destroy: noop }
   }
 
+  const applyShimmer = (): void => {
+    if (options.critical) {
+      node.style.backgroundImage =
+        'linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%)'
+      node.style.backgroundSize = '200% 100%'
+      node.style.animation = 'progress-shimmer 1.4s ease-in-out infinite'
+    } else {
+      node.style.backgroundImage = ''
+      node.style.backgroundSize = ''
+      node.style.animation = ''
+    }
+  }
+
   const run = (immediate = false): void => {
     const targetWidth =
       options.targetWidth ||
       node.style.width ||
       `${Math.round(node.getBoundingClientRect().width)}px`
     gsap.killTweensOf(node)
+    applyShimmer()
 
     if (immediate) {
       gsap.to(node, {
         width: targetWidth,
         opacity: 1,
         duration: options.duration ?? 0.46,
-        ease: 'power2.out'
+        ease: 'back.out(1.1)'
       })
       return
     }
@@ -227,7 +303,7 @@ export function animateProgress(
         opacity: 1,
         duration: options.duration ?? 0.52,
         delay: options.delay ?? 0,
-        ease: 'power2.out'
+        ease: 'back.out(1.1)'
       }
     )
   }
@@ -245,6 +321,9 @@ export function animateProgress(
     destroy() {
       cancelFrame(frame)
       gsap.killTweensOf(node)
+      node.style.backgroundImage = ''
+      node.style.backgroundSize = ''
+      node.style.animation = ''
     }
   }
 }

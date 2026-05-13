@@ -1,7 +1,7 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
   import { onDestroy, onMount } from 'svelte'
-  import { fly } from 'svelte/transition'
+  import { fly, slide } from 'svelte/transition'
   import {
     dragHandle,
     dragHandleZone,
@@ -17,7 +17,8 @@
     AccountTokensDetail,
     AccountWakeSchedule,
     AppLanguage,
-    LoginMethod
+    LoginMethod,
+    TagVisibilitySettings
   } from '../../../shared/codex'
   import {
     formatRelativeReset,
@@ -29,6 +30,7 @@
     accountUsageBadge,
     accountEmail,
     accountSubscriptionBadge,
+    accountTokenExpiryBadge,
     aggregateAccountQuotas,
     extraLimits,
     limitLabel,
@@ -96,6 +98,7 @@
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
   export let openEditTokensDialog: (account: AccountSummary) => void
+  export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
   export let openGroupManager: () => void = () => {}
@@ -104,6 +107,8 @@
   export let removeAccounts: (accountIds: string[]) => Promise<void>
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
+  export let tagVisibility: TagVisibilitySettings = {}
+  export let updateTagVisibility: (settings: TagVisibilitySettings) => Promise<void> = async () => {}
 
   let expandedAccountIds: string[] = []
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
@@ -168,6 +173,8 @@
   let accountGroupMenuAnchorRect: DOMRect | null = null
   let usageErrorPopoverAccountId: string | null = null
   let usageErrorPopoverAnchorRect: DOMRect | null = null
+  let tagVisibilityMenuOpen = false
+  let tagVisibilityMenuAnchorRect: DOMRect | null = null
   let sortableAccounts: AccountSummary[] = []
   let sortInteractionActive = false
   let sortDraggedAccountId = ''
@@ -266,6 +273,29 @@
   function closeUsageErrorPopover(): void {
     usageErrorPopoverAccountId = null
     usageErrorPopoverAnchorRect = null
+  }
+
+  function toggleTagVisibilityMenu(event: MouseEvent): void {
+    if (tagVisibilityMenuOpen) {
+      closeTagVisibilityMenu()
+      return
+    }
+    closeAccountActionMenu()
+    closeAccountGroupMenu()
+    closeUsageErrorPopover()
+    tagVisibilityMenuAnchorRect =
+      (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() ?? null
+    tagVisibilityMenuOpen = true
+  }
+
+  function closeTagVisibilityMenu(): void {
+    tagVisibilityMenuOpen = false
+    tagVisibilityMenuAnchorRect = null
+  }
+
+  function toggleTagSetting(key: keyof TagVisibilitySettings): void {
+    const current = tagVisibility[key] !== false
+    void updateTagVisibility({ ...tagVisibility, [key]: !current })
   }
 
   function showWakeAccount(accountId: string): boolean {
@@ -576,12 +606,14 @@
         closeAccountActionMenu()
         closeAccountGroupMenu()
         closeUsageErrorPopover()
+        closeTagVisibilityMenu()
       }
     }
     const handleScroll = (): void => {
       closeAccountActionMenu()
       closeAccountGroupMenu()
       closeUsageErrorPopover()
+      closeTagVisibilityMenu()
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)
@@ -601,6 +633,7 @@
     closeAccountActionMenu()
     closeAccountGroupMenu()
     closeUsageErrorPopover()
+    closeTagVisibilityMenu()
   }}
 />
 
@@ -670,6 +703,77 @@
   </AppButton>
 
   <div class="ml-auto flex items-center gap-1.5">
+    <div class="relative" use:stopFloatingPointerPropagation data-floating-root="">
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={toggleTagVisibilityMenu}
+        ariaLabel={copy.tagVisibilityTitle}
+        title={copy.tagVisibilityTitle}
+      >
+        <span class="i-lucide-eye h-3.5 w-3.5"></span>
+      </AppButton>
+
+      {#if tagVisibilityMenuOpen}
+        <div
+          use:portal
+          use:floatingAnchor={{
+            anchorRect: tagVisibilityMenuAnchorRect,
+            minWidth: 180,
+            matchAnchorWidth: false
+          }}
+          use:stopFloatingPointerPropagation
+          data-floating-root=""
+          transition:fly={{ y: -6, duration: 200 }}
+          class="theme-tag-picker-surface z-[999] w-[200px] rounded-[1.1rem] p-1.5"
+          style="background-color: var(--panel-strong); box-shadow: var(--elevation-2), 0 0 0 1px var(--line-strong);"
+        >
+          <div class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+            {copy.tagVisibilityTitle}
+          </div>
+          <button
+            class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+            type="button"
+            onclick={() => toggleTagSetting('subscription')}
+          >
+            <Checkbox checked={tagVisibility.subscription !== false} />
+            <span>{copy.tagVisibilitySubscription}</span>
+          </button>
+          <button
+            class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+            type="button"
+            onclick={() => toggleTagSetting('tokenExpiry')}
+          >
+            <Checkbox checked={tagVisibility.tokenExpiry !== false} />
+            <span>{copy.tagVisibilityTokenExpiry}</span>
+          </button>
+          <button
+            class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+            type="button"
+            onclick={() => toggleTagSetting('wakeSchedule')}
+          >
+            <Checkbox checked={tagVisibility.wakeSchedule !== false} />
+            <span>{copy.tagVisibilityWakeSchedule}</span>
+          </button>
+          <button
+            class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+            type="button"
+            onclick={() => toggleTagSetting('groups')}
+          >
+            <Checkbox checked={tagVisibility.groups !== false} />
+            <span>{copy.tagVisibilityGroups}</span>
+          </button>
+          <button
+            class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+            type="button"
+            onclick={() => toggleTagSetting('quotaSummary')}
+          >
+            <Checkbox checked={tagVisibility.quotaSummary !== false} />
+            <span>{copy.tagVisibilityQuotaSummary}</span>
+          </button>
+        </div>
+      {/if}
+    </div>
     <AppButton
       variant="secondary"
       size="xs"
@@ -907,8 +1011,8 @@
   {/if}
 </div>
 
-{#if visibleAccounts.length && quotaSummary.totalAccounts > 0}
-  <div class="px-4 pt-3">
+{#if visibleAccounts.length && quotaSummary.totalAccounts > 0 && tagVisibility.quotaSummary !== false}
+  <div class="px-4 pt-3" transition:slide={{ duration: 200 }}>
     <div
       class="theme-quota-summary flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[0.55rem] border border-black/8 bg-white px-3.5 py-2.5"
     >
@@ -1002,11 +1106,16 @@
           language,
           copy
         )}
+        {@const tokenBadge = accountTokenExpiryBadge(
+          account.accessTokenExpiresAt,
+          language,
+          copy
+        )}
         {@const assignableGroups = availableGroupsForAccount(groups, account)}
         <article
           class={`theme-account-row group grid items-center gap-3 px-2.5 py-2.5 md:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] ${accountRowTone(
             actionAccount
-          )}`}
+          )} ${isSortShadowAccount(account) ? 'is-dnd-shadow' : ''}`}
           animate:flip={{ duration: flipDurationMs }}
           aria-label={accountEmail(account, copy)}
         >
@@ -1075,8 +1184,9 @@
                 {planLabel(usageByAccountId[accountId]?.planType)}
               </span>
 
-              {#if subscriptionBadge}
+              {#if subscriptionBadge && tagVisibility.subscription !== false}
                 <span
+                  transition:fly={{ x: -8, duration: 180 }}
                   class={`inline-flex max-w-full items-center gap-1 rounded-[0.32rem] border px-1.75 py-0.5 text-[10px] font-medium leading-none ${
                     subscriptionBadge.expired
                       ? 'border-red-500/16 bg-red-500/10 text-red-700'
@@ -1091,8 +1201,29 @@
                 </span>
               {/if}
 
-              {#if showWakeAccount(accountId) && hasEnabledWakeSchedule(accountId)}
+              {#if tokenBadge && tagVisibility.tokenExpiry !== false}
                 <button
+                  type="button"
+                  transition:fly={{ x: -8, duration: 180 }}
+                  class={`inline-flex max-w-full items-center gap-1 rounded-[0.32rem] border px-1.75 py-0.5 text-[10px] font-medium leading-none transition-colors duration-140 hover:bg-black/[0.04] ${
+                    tokenBadge.expired
+                      ? 'border-red-500/16 bg-red-500/10 text-red-700'
+                      : tokenBadge.critical
+                        ? 'border-amber-500/16 bg-amber-500/12 text-amber-700'
+                        : 'border-orange-500/14 bg-orange-500/10 text-orange-700'
+                  }`}
+                  title={tokenBadge.title}
+                  onclick={() => openRefreshTokensDialog(actionAccount)}
+                  disabled={loginActionBusy}
+                >
+                  <span class="i-lucide-key-round h-3 w-3 flex-none"></span>
+                  <span class="truncate">{tokenBadge.label}</span>
+                </button>
+              {/if}
+
+              {#if showWakeAccount(accountId) && hasEnabledWakeSchedule(accountId) && tagVisibility.wakeSchedule !== false}
+                <button
+                  transition:fly={{ x: -8, duration: 180 }}
                   class="theme-wake-schedule-pill inline-flex min-w-0 max-w-full items-center rounded-[0.32rem] border border-sky-500/16 bg-sky-500/10 px-2 py-0.75 text-[10px] text-sky-700 transition-colors duration-140 hover:bg-sky-500/14"
                   type="button"
                   onclick={() => openWakeDialog(actionAccount, 'schedule')}
@@ -1104,28 +1235,31 @@
                 </button>
               {/if}
 
-              {#each accountGroupsForDisplay(groups, account) as group (group.id)}
-                {@const groupLinkKey = `${accountId}:${group.id}`}
-                <span
-                  class="theme-tag-assigned inline-flex max-w-full items-center rounded-[0.32rem] border border-emerald-500/14 bg-emerald-500/10 px-1.75 py-0.5 text-[10px] font-medium leading-none text-emerald-700"
-                >
-                  <span class="max-w-28 truncate">{group.name}</span>
-                  <button
-                    class="theme-tag-remove ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
-                    type="button"
-                    onclick={() => void removeGroupFromAccount(actionAccount, group.id)}
-                    disabled={loginActionBusy || groupMutationBusy}
-                    aria-label={`${copy.removeGroup} · ${group.name}`}
-                    title={copy.removeGroup}
+              {#if tagVisibility.groups !== false}
+                {#each accountGroupsForDisplay(groups, account) as group (group.id)}
+                  {@const groupLinkKey = `${accountId}:${group.id}`}
+                  <span
+                    transition:fly={{ x: -8, duration: 180 }}
+                    class="theme-tag-assigned inline-flex max-w-full items-center rounded-[0.32rem] border border-emerald-500/14 bg-emerald-500/10 px-1.75 py-0.5 text-[10px] font-medium leading-none text-emerald-700"
                   >
-                    {#if removingGroupLink === groupLinkKey}
-                      <span class="i-lucide-loader-circle h-2.5 w-2.5 animate-spin"></span>
-                    {:else}
-                      <span class="i-lucide-x h-2.5 w-2.5"></span>
-                    {/if}
-                  </button>
-                </span>
-              {/each}
+                    <span class="max-w-28 truncate">{group.name}</span>
+                    <button
+                      class="theme-tag-remove ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
+                      type="button"
+                      onclick={() => void removeGroupFromAccount(actionAccount, group.id)}
+                      disabled={loginActionBusy || groupMutationBusy}
+                      aria-label={`${copy.removeGroup} · ${group.name}`}
+                      title={copy.removeGroup}
+                    >
+                      {#if removingGroupLink === groupLinkKey}
+                        <span class="i-lucide-loader-circle h-2.5 w-2.5 animate-spin"></span>
+                      {:else}
+                        <span class="i-lucide-x h-2.5 w-2.5"></span>
+                      {/if}
+                    </button>
+                  </span>
+                {/each}
+              {/if}
             </div>
 
             {#if usageBadge}
@@ -1223,7 +1357,8 @@
                     use:animateProgress={{
                       targetWidth: progressWidth(usageByAccountId[accountId]?.primary?.usedPercent),
                       delay: Math.min(accountIndex * 0.028, 0.14),
-                      duration: 0.46
+                      duration: 0.46,
+                      critical: (usageByAccountId[accountId]?.primary?.usedPercent ?? 0) > 85
                     }}
                   ></span>
                 </span>
@@ -1282,7 +1417,8 @@
                         usageByAccountId[accountId]?.secondary?.usedPercent
                       ),
                       delay: Math.min(accountIndex * 0.028 + 0.03, 0.18),
-                      duration: 0.5
+                      duration: 0.5,
+                      critical: (usageByAccountId[accountId]?.secondary?.usedPercent ?? 0) > 85
                     }}
                   ></span>
                 </span>
@@ -1460,6 +1596,23 @@
                   <button
                     class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                     type="button"
+                    onclick={() => {
+                      openRefreshTokensDialog(actionAccount)
+                      closeAccountActionMenu()
+                    }}
+                    disabled={loginActionBusy}
+                  >
+                    <span
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
+                    >
+                      <span class="i-lucide-refresh-cw h-4 w-4"></span>
+                    </span>
+                    <span class="flex-1">{copy.forceRefreshTokensButton}</span>
+                  </button>
+
+                  <button
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    type="button"
                     onclick={() => void exportSingleAccount(actionAccount)}
                     disabled={loginActionBusy}
                   >
@@ -1567,6 +1720,7 @@
                 tokensLoading={tokensLoadingAccountId === accountId}
                 tokensError={tokensErrorByAccountId[accountId] ?? ''}
                 onReloadTokens={() => void loadTokensForAccount(accountId)}
+                onForceRefreshTokens={() => openRefreshTokensDialog(actionAccount)}
               />
             </div>
           {/if}
@@ -1822,5 +1976,29 @@
 
   :global(html[data-theme='dark']) .theme-selection-danger:hover {
     background: color-mix(in srgb, rgb(239 68 68) 12%, var(--surface-hover)) !important;
+  }
+
+  :global(.theme-account-row.is-dnd-shadow) + .theme-account-row {
+    transform: translateY(3px);
+    transition: transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
+  }
+
+  :global(.theme-account-row.is-dnd-shadow) + .theme-account-row::before {
+    content: '' !important;
+    position: absolute;
+    top: -1px;
+    right: 0.75rem;
+    left: 0.75rem;
+    height: 1px;
+    background: color-mix(in srgb, var(--color-carbon) 22%, transparent);
+    opacity: 1;
+    transition: opacity 0.18s ease;
+    pointer-events: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.theme-account-row.is-dnd-shadow) + .theme-account-row {
+      transform: none;
+    }
   }
 </style>

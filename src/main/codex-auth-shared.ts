@@ -74,6 +74,7 @@ function defaultSettings(): AppSettings {
     codexDesktopExecutablePath: '',
     showLocalMockData: true,
     statsDisplay: defaultStatsDisplaySettings(),
+    tagVisibility: {},
     toolbarIconMovable: true,
     collapsedToolbarIconDefaultPosition: true,
     localGateway: normalizeLocalGatewaySettings()
@@ -240,15 +241,63 @@ function parseTokenEndpointError(raw: string): string {
 
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>
+    const errorValue = parsed.error
+    const nestedError =
+      errorValue && typeof errorValue === 'object' ? (errorValue as Record<string, unknown>) : null
+
     return (
       stringifyTokenEndpointErrorValue(parsed.error_description) ??
       stringifyTokenEndpointErrorValue(parsed.message) ??
-      stringifyTokenEndpointErrorValue(parsed.error) ??
+      stringifyTokenEndpointErrorValue(nestedError?.message) ??
+      stringifyTokenEndpointErrorValue(nestedError?.code) ??
+      stringifyTokenEndpointErrorValue(parsed.code) ??
+      stringifyTokenEndpointErrorValue(errorValue) ??
       stringifyTokenEndpointErrorValue(parsed) ??
       fallback
     )
   } catch {
     return fallback
+  }
+}
+
+function extractTokenEndpointErrorCode(raw: string): string | undefined {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const errorValue = parsed.error
+    if (errorValue && typeof errorValue === 'object') {
+      const code = (errorValue as Record<string, unknown>).code
+      if (typeof code === 'string' && code.trim()) {
+        return code.trim()
+      }
+    }
+    if (typeof errorValue === 'string' && errorValue.trim()) {
+      return errorValue.trim()
+    }
+    if (typeof parsed.code === 'string' && parsed.code.trim()) {
+      return parsed.code.trim()
+    }
+  } catch {
+    // Ignore malformed error bodies; callers still use the textual detail.
+  }
+
+  return undefined
+}
+
+export class CodexAuthRefreshError extends Error {
+  readonly status: number
+  readonly code?: string
+  readonly permanent: boolean
+
+  constructor(status: number, detail: string, code?: string) {
+    const normalizedDetail = detail || 'Unknown token refresh error'
+    const suffix =
+      code && !normalizedDetail.includes(code) ? `${code}: ${normalizedDetail}` : normalizedDetail
+    super(`OpenAI token refresh failed (${status}): ${suffix}`)
+    this.name = 'CodexAuthRefreshError'
+    this.status = status
+    this.code = code
+    // GitHub openai/codex treats 401 refresh responses as non-retryable and caches them.
+    this.permanent = status === 401
   }
 }
 
@@ -291,14 +340,14 @@ export async function killTcpPortOccupant(port: number): Promise<PortOccupant | 
 
   process.kill(occupant.pid, 'SIGTERM')
   return occupant
+}
+
 export async function getOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
   return getTcpPortOccupant(OPENAI_CALLBACK_PORT)
 }
 
 export async function killOpenAiCallbackPortOccupant(): Promise<PortOccupant | null> {
   return killTcpPortOccupant(OPENAI_CALLBACK_PORT)
-}
-
 }
 
 function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexAuthPayload {
@@ -325,27 +374,24 @@ export async function refreshCodexAuthPayload(
     throw new Error('Missing refresh token required for token refresh.')
   }
 
-  const body = [
-    ['grant_type', 'refresh_token'],
-    ['refresh_token', refreshToken],
-    ['client_id', OPENAI_OAUTH_CLIENT_ID]
-  ]
-    .map(([key, value]) => `${key}=${encodeFormComponent(value)}`)
-    .join('&')
-
   const response = await platform.fetch(OPENAI_TOKEN_URL, {
     method: 'POST',
     headers: {
-      'content-type': 'application/x-www-form-urlencoded'
+      'content-type': 'application/json'
     },
-    body,
+    body: JSON.stringify({
+      client_id: OPENAI_OAUTH_CLIENT_ID,
+      grant_type: 'refresh_token',
+      refresh_token: refreshToken
+    }),
     signal
   })
   const raw = await response.text()
 
   if (!response.ok) {
     const detail = parseTokenEndpointError(raw)
-    throw new Error(`OpenAI token refresh failed (${response.status}): ${detail}`)
+    const code = extractTokenEndpointErrorCode(raw)
+    throw new CodexAuthRefreshError(response.status, detail, code)
   }
 
   const parsed = JSON.parse(raw) as TokenEndpointPayload
@@ -513,6 +559,7 @@ export {
   normalizeGroupName,
   normalizeWakeSchedule,
   parseTokenEndpointError,
+  extractTokenEndpointErrorCode,
   resolveAccountId,
   resolveSubject,
   summarizeAuth,

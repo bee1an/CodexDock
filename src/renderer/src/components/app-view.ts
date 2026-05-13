@@ -332,6 +332,15 @@ export const messages = {
     subscriptionExpiresAt: '订阅到期',
     subscriptionRemaining: (value: string) => `订阅剩余 ${value}`,
     subscriptionExpiredAgo: (value: string) => `订阅已过期 ${value}`,
+    tokenExpiresAtLabel: 'Token 过期时间',
+    tokenExpiringSoon: (value: string) => `Token ${value} 后过期`,
+    tokenExpiredAgo: (value: string) => `Token 已过期 ${value}`,
+    tagVisibilityTitle: '显示控制',
+    tagVisibilitySubscription: '订阅到期',
+    tagVisibilityTokenExpiry: 'Token 过期',
+    tagVisibilityWakeSchedule: '唤醒计划',
+    tagVisibilityGroups: '分组标签',
+    tagVisibilityQuotaSummary: '额度总汇',
     openCodex: '打开 Codex',
     openCodexIsolated: '多开 Codex',
     openCustomProvider: '启动提供商',
@@ -467,6 +476,25 @@ export const messages = {
     accountDetailsTokenLoading: '读取中…',
     accountDetailsTokenLoadFailed: (message: string) => `读取令牌失败：${message}`,
     accountDetailsTokenRefresh: '刷新',
+    forceRefreshTokensTitle: '强制刷新令牌',
+    forceRefreshTokensDescription: '使用 refresh_token 向 OpenAI 请求新的 access_token 和 id_token，无论当前令牌是否过期。',
+    forceRefreshTokensButton: '强制刷新',
+    forceRefreshTokensRunning: '刷新中…',
+    forceRefreshTokensSuccess: '刷新成功',
+    forceRefreshTokensError: '刷新失败',
+    forceRefreshTokensIdle: '就绪',
+    forceRefreshTokensBefore: '刷新前',
+    forceRefreshTokensAfter: '刷新后',
+    forceRefreshTokensAccessToken: 'Access Token',
+    forceRefreshTokensRefreshToken: 'Refresh Token',
+    forceRefreshTokensIdToken: 'ID Token',
+    forceRefreshTokensLogTitle: '操作日志',
+    forceRefreshTokensLogEmpty: '等待操作…',
+    forceRefreshTokensShowRaw: '显示原始日志',
+    forceRefreshTokensHideRaw: '隐藏原始日志',
+    forceRefreshTokensRawWarning: '原始日志包含敏感令牌信息，确定要显示吗？',
+    forceRefreshTokensConfirmRaw: '确认显示',
+    forceRefreshTokensNoExpiry: '无过期信息',
     accountDetailsCreditsUnlimited: '无限额',
     accountDetailsCreditsNone: '无',
     accountDetailsEmpty: '--',
@@ -604,14 +632,14 @@ export const messages = {
     portOccupied: (command: string, pid: number) => `1455 端口当前被 ${command} (${pid}) 占用`,
     killPortOccupant: '结束占用进程',
     killPortOccupantFailed: '无法结束占用 1455 端口的进程',
-    emptyStateTitle: '还没有账号',
-    emptyStateDescription: '导入当前登录，或者新建一次回调登录。',
-    importCurrentHint: '导入当前登录',
-    importCurrentDetail: '适合你已经在本机 Codex 里登录过账号的情况。',
     localGatewayPortOccupied: (port: number, command: string, pid: number) =>
       `本地服务端口 ${port} 当前被 ${command} (${pid}) 占用`,
     killLocalGatewayPortOccupant: '结束占用本地服务端口的进程',
     killLocalGatewayPortOccupantFailed: '无法结束占用本地服务端口的进程',
+    emptyStateTitle: '还没有账号',
+    emptyStateDescription: '导入当前登录，或者新建一次回调登录。',
+    importCurrentHint: '导入当前登录',
+    importCurrentDetail: '适合你已经在本机 Codex 里登录过账号的情况。',
     callbackLoginHint: '新建回调登录',
     callbackLoginDetail: '适合补充新账号，授权完成后会自动回调导入。',
     deviceLoginHint: '设备码登录',
@@ -865,14 +893,14 @@ export const messages = {
     costReference: (value: string) => `Cost reference ${value}`,
     updatedAt: 'Updated',
     dailyTrend: '30-day daily trend',
+    trendMetric: 'Trend metric',
+    trendMetricTokens: 'Tokens',
+    trendMetricCost: 'Cost',
     modelBreakdown: 'Model breakdown',
     instanceUsage: 'Instance usage / consumption',
     instanceUsageDescription:
       'Aggregates 30-day tokens by instance, with cost kept as context only.',
     displayConfig: 'Display config',
-    trendMetric: 'Trend metric',
-    trendMetricTokens: 'Tokens',
-    trendMetricCost: 'Cost',
     displayConfigDescription: 'Checked charts stay visible on the stats page and persist locally.',
     noChartsVisible: 'All charts are hidden. Re-enable them from the display config above.',
     sessionUsed: 'Session used',
@@ -931,6 +959,15 @@ export const messages = {
     subscriptionExpiresAt: 'Subscription expires',
     subscriptionRemaining: (value: string) => `Subscription ${value} left`,
     subscriptionExpiredAgo: (value: string) => `Subscription expired ${value} ago`,
+    tokenExpiresAtLabel: 'Token expires at',
+    tokenExpiringSoon: (value: string) => `Token expires in ${value}`,
+    tokenExpiredAgo: (value: string) => `Token expired ${value} ago`,
+    tagVisibilityTitle: 'Display',
+    tagVisibilitySubscription: 'Subscription',
+    tagVisibilityTokenExpiry: 'Token Expiry',
+    tagVisibilityWakeSchedule: 'Wake Schedule',
+    tagVisibilityGroups: 'Groups',
+    tagVisibilityQuotaSummary: 'Quota Summary',
     openCodex: 'Open Codex',
     openCodexIsolated: 'Open isolated Codex',
     openCustomProvider: 'Launch provider',
@@ -1068,6 +1105,25 @@ export const messages = {
     accountDetailsTokenLoading: 'Loading…',
     accountDetailsTokenLoadFailed: (message: string) => `Failed to load tokens: ${message}`,
     accountDetailsTokenRefresh: 'Refresh',
+    forceRefreshTokensTitle: 'Force Refresh Tokens',
+    forceRefreshTokensDescription: 'Request new access_token and id_token from OpenAI using the refresh_token, regardless of current expiry state.',
+    forceRefreshTokensButton: 'Force Refresh',
+    forceRefreshTokensRunning: 'Refreshing…',
+    forceRefreshTokensSuccess: 'Refresh successful',
+    forceRefreshTokensError: 'Refresh failed',
+    forceRefreshTokensIdle: 'Ready',
+    forceRefreshTokensBefore: 'Before',
+    forceRefreshTokensAfter: 'After',
+    forceRefreshTokensAccessToken: 'Access Token',
+    forceRefreshTokensRefreshToken: 'Refresh Token',
+    forceRefreshTokensIdToken: 'ID Token',
+    forceRefreshTokensLogTitle: 'Operation log',
+    forceRefreshTokensLogEmpty: 'Waiting for operation…',
+    forceRefreshTokensShowRaw: 'Show raw logs',
+    forceRefreshTokensHideRaw: 'Hide raw logs',
+    forceRefreshTokensRawWarning: 'Raw logs contain sensitive token data. Are you sure?',
+    forceRefreshTokensConfirmRaw: 'Confirm',
+    forceRefreshTokensNoExpiry: 'No expiry info',
     accountDetailsCreditsUnlimited: 'Unlimited',
     accountDetailsCreditsNone: 'None',
     accountDetailsEmpty: '--',
@@ -1212,6 +1268,11 @@ export const messages = {
       `Port 1455 is currently in use by ${command} (${pid})`,
     killPortOccupant: 'Kill occupying process',
     killPortOccupantFailed: 'Unable to terminate the process using port 1455',
+    localGatewayPortOccupied: (port: number, command: string, pid: number) =>
+      `Local service port ${port} is currently in use by ${command} (${pid})`,
+    killLocalGatewayPortOccupant: 'Kill local service port process',
+    killLocalGatewayPortOccupantFailed:
+      'Unable to terminate the process using the local service port',
     emptyStateTitle: 'No accounts yet',
     emptyStateDescription: 'Import the current login or start a callback login.',
     importCurrentHint: 'Import current login',
@@ -1220,11 +1281,6 @@ export const messages = {
     callbackLoginHint: 'Start callback login',
     callbackLoginDetail:
       'Best when you want to add another account and let the local callback finish automatically.',
-    localGatewayPortOccupied: (port: number, command: string, pid: number) =>
-      `Local service port ${port} is currently in use by ${command} (${pid})`,
-    killLocalGatewayPortOccupant: 'Kill local service port process',
-    killLocalGatewayPortOccupantFailed:
-      'Unable to terminate the process using the local service port',
     deviceLoginHint: 'Use device code',
     deviceLoginDetail:
       'Best when you want to approve the login on another browser or device and let CodexDock poll automatically.'
@@ -1368,6 +1424,35 @@ export function accountSubscriptionBadge(
     title: `${copy.subscriptionExpiresAt}: ${dateTime}`,
     expired,
     critical: remainingMs <= 3 * 24 * 60 * 60 * 1000
+  }
+}
+
+export function accountTokenExpiryBadge(
+  accessTokenExpiresAt: number | undefined,
+  language: AppLanguage,
+  copy: Pick<LocalizedCopy, 'tokenExpiresAtLabel' | 'tokenExpiringSoon' | 'tokenExpiredAgo'>,
+  now = Date.now()
+): { label: string; title: string; expired: boolean; critical: boolean } | null {
+  if (!accessTokenExpiresAt) {
+    return null
+  }
+
+  const remainingMs = accessTokenExpiresAt - now
+  if (remainingMs > 8 * 24 * 60 * 60 * 1000) {
+    return null
+  }
+
+  const duration = formatDurationCompact(remainingMs, language)
+  const expired = remainingMs <= 0
+  const dateTime = new Date(accessTokenExpiresAt).toLocaleString(
+    language === 'zh-CN' ? 'zh-CN' : 'en-US'
+  )
+
+  return {
+    label: expired ? copy.tokenExpiredAgo(duration) : copy.tokenExpiringSoon(duration),
+    title: `${copy.tokenExpiresAtLabel}: ${dateTime}`,
+    expired,
+    critical: remainingMs <= 1 * 24 * 60 * 60 * 1000
   }
 }
 

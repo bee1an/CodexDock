@@ -33,6 +33,7 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'codexDesktopExecutablePath',
   'statsDisplay',
   'localGateway',
+  'tagVisibility',
   'toolbarIconMovable',
   'collapsedToolbarIconDefaultPosition'
 ]
@@ -209,6 +210,11 @@ export function parseSettingsValue(
     case 'localGateway':
       throw new CliError(
         'localGateway cannot be set as a single value; use gateway commands instead',
+        EXIT_USAGE
+      )
+    case 'tagVisibility':
+      throw new CliError(
+        'tagVisibility cannot be set as a single value; use the UI to configure tag visibility',
         EXIT_USAGE
       )
   }

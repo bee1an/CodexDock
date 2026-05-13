@@ -4,9 +4,10 @@
   import AccountsPanel from './components/AccountsPanel.svelte'
   import AppButton from './components/AppButton.svelte'
   import AppDialog from './components/AppDialog.svelte'
-  import { reveal } from './components/gsap-motion'
+  import { reveal, toastReveal } from './components/gsap-motion'
   import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
   import PasteSessionDialog from './components/PasteSessionDialog.svelte'
+  import RefreshAccountTokensDialog from './components/RefreshAccountTokensDialog.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
   import WakeDialog from './components/WakeDialog.svelte'
@@ -42,6 +43,7 @@
     ProbeProviderModelsInput,
     ProviderModelsProbeResult,
     StatsDisplaySettings,
+    TagVisibilitySettings,
     UpdateAccountWakeScheduleInput,
     WakeAccountRequestResult,
     WakeAccountRateLimitsInput,
@@ -144,8 +146,10 @@
     }
   }
   let loginPortOccupant: PortOccupant | null = null
+  let localGatewayPortOccupant: PortOccupant | null = null
   let windowFocused = true
   let killingLoginPortOccupant = false
+  let killingLocalGatewayPortOccupant = false
   let accountActionKey = ''
   let providerOpeningId = ''
   let updateState: AppUpdateState = {
@@ -153,10 +157,8 @@
     delivery: 'auto',
     currentVersion: '--',
     supported: false
-  let localGatewayPortOccupant: PortOccupant | null = null
   }
   let usageByAccountId: Record<string, AccountRateLimits> = {}
-  let killingLocalGatewayPortOccupant = false
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
   let wakingAccountId = ''
@@ -198,6 +200,10 @@
   let editTokensSaving = false
   let editTokensLoading = false
   let editTokensLoadRequestId = 0
+  let refreshTokensDialogAccount: AccountSummary | null = null
+  let refreshTokensStatus: 'idle' | 'running' | 'success' | 'error' = 'idle'
+  let refreshTokensResult: import('../../shared/codex').AccountTokenRefreshResult | null = null
+  let refreshTokensError = ''
   const isTrayView =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tray') === '1'
   let prefersDark = false
@@ -432,13 +438,6 @@
     return message.includes('1455') && (message.includes('占用') || message.includes('in use'))
   }
 
-  const refreshLoginPortOccupant = async (): Promise<void> => {
-    loginPortOccupant = await window.codexApp.getLoginPortOccupant()
-  }
-
-  const loginActionBusy = (): boolean => loginStarting || killingLoginPortOccupant
-
-  const refreshAppMeta = async (): Promise<void> => {
   const localGatewayPort = (): number => snapshot.settings.localGateway?.port ?? 11456
 
   const hasLocalGatewayPortConflict = (): boolean => {
@@ -453,12 +452,19 @@
     )
   }
 
-    appMeta = await window.codexApp.getAppMeta()
-    applySnapshot(rawSnapshot)
+  const refreshLoginPortOccupant = async (): Promise<void> => {
+    loginPortOccupant = await window.codexApp.getLoginPortOccupant()
   }
 
   const refreshLocalGatewayPortOccupant = async (): Promise<void> => {
     localGatewayPortOccupant = await window.codexApp.getLocalGatewayPortOccupant()
+  }
+
+  const loginActionBusy = (): boolean => loginStarting || killingLoginPortOccupant
+
+  const refreshAppMeta = async (): Promise<void> => {
+    appMeta = await window.codexApp.getAppMeta()
+    applySnapshot(rawSnapshot)
   }
 
   const refreshUpdateState = async (): Promise<void> => {
@@ -893,13 +899,6 @@
     }
   }
 
-  const removeAccount = async (account: AccountSummary): Promise<void> => {
-    if (
-      !window.confirm(copyForLanguage().removeConfirm(accountLabel(account, copyForLanguage())))
-    ) {
-      return
-    }
-
   const killLocalGatewayPortOccupant = async (): Promise<void> => {
     setPageError('')
     killingLocalGatewayPortOccupant = true
@@ -913,6 +912,13 @@
       killingLocalGatewayPortOccupant = false
     }
   }
+
+  const removeAccount = async (account: AccountSummary): Promise<void> => {
+    if (
+      !window.confirm(copyForLanguage().removeConfirm(accountLabel(account, copyForLanguage())))
+    ) {
+      return
+    }
 
     await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
   }
@@ -997,6 +1003,46 @@
       )
     } finally {
       editTokensSaving = false
+    }
+  }
+
+  const openRefreshTokensDialog = (account: AccountSummary): void => {
+    refreshTokensDialogAccount = account
+    refreshTokensStatus = 'idle'
+    refreshTokensResult = null
+    refreshTokensError = ''
+  }
+
+  const closeRefreshTokensDialog = (): void => {
+    if (refreshTokensStatus === 'running') {
+      return
+    }
+    refreshTokensDialogAccount = null
+    refreshTokensStatus = 'idle'
+    refreshTokensResult = null
+    refreshTokensError = ''
+  }
+
+  const submitRefreshTokens = async (): Promise<void> => {
+    if (!refreshTokensDialogAccount || refreshTokensStatus === 'running') {
+      return
+    }
+
+    refreshTokensStatus = 'running'
+    refreshTokensError = ''
+    refreshTokensResult = null
+
+    try {
+      const result = await window.codexApp.refreshAccountTokens(refreshTokensDialogAccount.id)
+      refreshTokensResult = result
+      refreshTokensStatus = result.success ? 'success' : 'error'
+      refreshTokensError = result.error ?? ''
+      if (result.success) {
+        await refreshSnapshot()
+      }
+    } catch (error) {
+      refreshTokensStatus = 'error'
+      refreshTokensError = error instanceof Error ? error.message : String(error)
     }
   }
 
@@ -1494,6 +1540,12 @@
     )
   }
 
+  const updateTagVisibility = async (tagVisibility: TagVisibilitySettings): Promise<void> => {
+    await runAction('settings:tag-visibility', () =>
+      window.codexApp.updateSettings({ tagVisibility })
+    )
+  }
+
   const openMainPanel = async (): Promise<void> => {
     applySnapshot(await window.codexApp.openMainWindow())
   }
@@ -1725,6 +1777,9 @@
               {updateLocalGatewayModelMappings}
               {updateLocalGatewayAllowedGroups}
               {updateLocalGatewayAllowedAccounts}
+              {localGatewayPortOccupant}
+              {killingLocalGatewayPortOccupant}
+              {killLocalGatewayPortOccupant}
               {openProviderInCodex}
               {reorderAccounts}
               {createGroup}
@@ -1733,12 +1788,12 @@
               {updateAccountGroups}
               refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
               {updateShowLocalMockData}
-              {localGatewayPortOccupant}
-              {killingLocalGatewayPortOccupant}
-              {killLocalGatewayPortOccupant}
               {updateStatsDisplay}
+              tagVisibility={snapshot.settings.tagVisibility ?? {}}
+              {updateTagVisibility}
               {openWakeDialog}
               {openEditTokensDialog}
+              {openRefreshTokensDialog}
               getAccountTokens={(accountId) => window.codexApp.getAccountTokens(accountId)}
               {removeAccount}
               {removeAccounts}
@@ -1792,7 +1847,7 @@
 
         {#if pageError}
           <section
-            use:reveal={{ delay: 0 }}
+            use:toastReveal={{ autoDismissMs: 8000 }}
             class="theme-surface theme-error-panel fixed bottom-20 left-1/2 z-[60] w-[min(calc(100vw-2rem),52rem)] -translate-x-1/2 rounded-[1rem] border border-danger/18 bg-white px-4 py-3.5 text-sm text-danger shadow-[0_20px_60px_-36px_var(--paper-shadow),0_10px_30px_-24px_var(--paper-shadow)]"
             role="alert"
             aria-live="assertive"
@@ -1829,6 +1884,10 @@
                 <span class="i-lucide-x h-4 w-4"></span>
               </button>
             </div>
+            <span
+              data-toast-timer
+              class="absolute bottom-0 left-4 right-4 h-px origin-left scale-x-0 rounded-full bg-danger/40"
+            ></span>
           </section>
         {/if}
       </div>
@@ -1963,6 +2022,19 @@
     saving={editTokensSaving}
     onClose={closeEditTokensDialog}
     onSave={saveAccountTokens}
+  />
+{/if}
+
+{#if refreshTokensDialogAccount}
+  <RefreshAccountTokensDialog
+    copy={copyForLanguage()}
+    accountLabelText={accountLabel(refreshTokensDialogAccount, copyForLanguage())}
+    status={refreshTokensStatus}
+    result={refreshTokensResult}
+    errorMessage={refreshTokensError}
+    busy={refreshTokensStatus === 'running'}
+    onClose={closeRefreshTokensDialog}
+    onSubmit={submitRefreshTokens}
   />
 {/if}
 
@@ -2421,5 +2493,38 @@
 
   :global(html[data-theme='dark'] .theme-status-idle) {
     background: var(--dot-idle) !important;
+  }
+
+  @keyframes status-dot-breath {
+    0%,
+    100% {
+      opacity: 0.62;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes progress-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  :global(.theme-status-active),
+  :global(.gateway-status-pill-running span:first-child),
+  :global(.theme-provider-status) {
+    animation: status-dot-breath 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :global(.theme-status-active),
+    :global(.gateway-status-pill-running span:first-child),
+    :global(.theme-provider-status) {
+      animation: none;
+    }
   }
 </style>

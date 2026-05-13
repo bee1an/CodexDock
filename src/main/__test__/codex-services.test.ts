@@ -2322,7 +2322,7 @@ describe('createCodexServices', () => {
     expect(nextSnapshot.accounts.map((account) => account.email)).toEqual(['b@example.com'])
   })
 
-  it('refreshes sessions when Codex-style last_refresh is stale', async () => {
+  it('keeps fresh access tokens even when last_refresh is stale', async () => {
     const env = await createEnvironment()
     const platform = createPlatform()
     const services = createCodexServices({
@@ -2335,6 +2335,33 @@ describe('createCodexServices', () => {
       ...createAuthPayload('acct-a', 'a@example.com'),
       last_refresh: '2026-03-11T00:00:00.000Z'
     })
+    await services.accounts.importCurrent()
+
+    const snapshot = await services.getSnapshot()
+    const account = snapshot.accounts[0]
+
+    await expect(services.accounts.refreshExpiringSession(account.id)).resolves.toBe(false)
+
+    expect(platform.fetch).not.toHaveBeenCalled()
+  })
+
+  it('refreshes sessions when Codex-style last_refresh is stale and token expiry is unavailable', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    const staleAuth = createAuthPayload('acct-a', 'a@example.com')
+    staleAuth.last_refresh = '2026-03-11T00:00:00.000Z'
+    staleAuth.tokens.access_token = createJwt({
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-a'
+      }
+    })
+    await writeGlobalAuth(env.globalAuthPath, staleAuth)
     await services.accounts.importCurrent()
 
     const snapshot = await services.getSnapshot()
@@ -2361,10 +2388,14 @@ describe('createCodexServices', () => {
       platform
     })
 
-    await writeGlobalAuth(env.globalAuthPath, {
-      ...createAuthPayload('acct-a', 'a@example.com'),
-      last_refresh: '2026-03-11T00:00:00.000Z'
+    const staleAuth = createAuthPayload('acct-a', 'a@example.com')
+    staleAuth.last_refresh = '2026-03-11T00:00:00.000Z'
+    staleAuth.tokens.access_token = createJwt({
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-a'
+      }
     })
+    await writeGlobalAuth(env.globalAuthPath, staleAuth)
     await services.accounts.importCurrent()
 
     const snapshot = await services.getSnapshot()
@@ -2384,6 +2415,76 @@ describe('createCodexServices', () => {
     expect(platform.fetch).toHaveBeenCalledTimes(1)
   })
 
+  it('does not retry permanent refresh token failures for unchanged auth', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    const staleAuth = createAuthPayload('acct-a', 'a@example.com')
+    staleAuth.last_refresh = '2026-03-11T00:00:00.000Z'
+    staleAuth.tokens.access_token = createJwt({
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-a'
+      }
+    })
+    await writeGlobalAuth(env.globalAuthPath, staleAuth)
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValue(
+      createJsonResponse(
+        {
+          error: {
+            code: 'refresh_token_expired',
+            message: 'Refresh token expired'
+          }
+        },
+        401
+      )
+    )
+
+    await expect(services.accounts.refreshExpiringSession(account.id)).rejects.toThrow(
+      'refresh_token_expired'
+    )
+    await expect(services.accounts.refreshExpiringSession(account.id)).rejects.toThrow(
+      'refresh_token_expired'
+    )
+
+    expect(platform.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses one guarded refresh for concurrent manual token refreshes', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const account = (await services.getSnapshot()).accounts[0]
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockImplementationOnce(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      return createJsonResponse(createRefreshPayload('acct-a', 'a@example.com', 'refresh-acct-a-2'))
+    })
+
+    const [first, second] = await Promise.all([
+      services.accounts.refreshTokens(account.id),
+      services.accounts.refreshTokens(account.id)
+    ])
+
+    expect(first.success).toBe(true)
+    expect(second.success).toBe(true)
+    expect(platform.fetch).toHaveBeenCalledTimes(1)
+  })
+
   it('syncs a Codex-refreshed global auth file before using the stored refresh token', async () => {
     const env = await createEnvironment()
     const platform = createPlatform()
@@ -2393,10 +2494,14 @@ describe('createCodexServices', () => {
       platform
     })
 
-    await writeGlobalAuth(env.globalAuthPath, {
-      ...createAuthPayload('acct-a', 'a@example.com'),
-      last_refresh: '2026-03-11T00:00:00.000Z'
+    const staleAuth = createAuthPayload('acct-a', 'a@example.com')
+    staleAuth.last_refresh = '2026-03-11T00:00:00.000Z'
+    staleAuth.tokens.access_token = createJwt({
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-a'
+      }
     })
+    await writeGlobalAuth(env.globalAuthPath, staleAuth)
     await services.accounts.importCurrent()
 
     const account = (await services.getSnapshot()).accounts[0]
@@ -2425,10 +2530,14 @@ describe('createCodexServices', () => {
       platform
     })
 
-    await writeGlobalAuth(env.globalAuthPath, {
-      ...createAuthPayload('acct-a', 'a@example.com'),
-      last_refresh: '2026-03-11T00:00:00.000Z'
+    const staleAuth = createAuthPayload('acct-a', 'a@example.com')
+    staleAuth.last_refresh = '2026-03-11T00:00:00.000Z'
+    staleAuth.tokens.access_token = createJwt({
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-a'
+      }
     })
+    await writeGlobalAuth(env.globalAuthPath, staleAuth)
     await services.accounts.importCurrent()
 
     const account = (await services.getSnapshot()).accounts[0]

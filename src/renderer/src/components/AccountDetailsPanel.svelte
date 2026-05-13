@@ -31,6 +31,7 @@
   export let tokensLoading = false
   export let tokensError = ''
   export let onReloadTokens: () => void = () => {}
+  export let onForceRefreshTokens: () => void = () => {}
 
   let tick = Date.now()
   let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -288,20 +289,32 @@
         <h4 class="text-[10px] font-semibold uppercase tracking-[0.1em] text-faint">
           {copy.accountDetailsSectionTokens}
         </h4>
-        <AppButton
-          variant="ghost"
-          size="xs"
-          onclick={onReloadTokens}
-          disabled={tokensLoading}
-          title={copy.accountDetailsTokenRefresh}
-          ariaLabel={copy.accountDetailsTokenRefresh}
-        >
-          {#if tokensLoading}
-            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
-          {:else}
-            <span class="i-lucide-refresh-cw h-3.5 w-3.5"></span>
-          {/if}
-        </AppButton>
+        <div class="flex items-center gap-1">
+          <AppButton
+            variant="ghost"
+            size="xs"
+            onclick={onForceRefreshTokens}
+            disabled={tokensLoading}
+            title={copy.forceRefreshTokensButton}
+            ariaLabel={copy.forceRefreshTokensButton}
+          >
+            <span class="i-lucide-rotate-cw h-3.5 w-3.5"></span>
+          </AppButton>
+          <AppButton
+            variant="ghost"
+            size="xs"
+            onclick={onReloadTokens}
+            disabled={tokensLoading}
+            title={copy.accountDetailsTokenRefresh}
+            ariaLabel={copy.accountDetailsTokenRefresh}
+          >
+            {#if tokensLoading}
+              <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+            {:else}
+              <span class="i-lucide-refresh-cw h-3.5 w-3.5"></span>
+            {/if}
+          </AppButton>
+        </div>
       </header>
 
       {#if tokensError}

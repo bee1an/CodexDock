@@ -7,6 +7,7 @@ export type {
   TokenEndpointPayload
 } from './codex-auth-shared'
 export {
+  CodexAuthRefreshError,
   getOpenAiCallbackPortOccupant,
   getTcpPortOccupant,
   killOpenAiCallbackPortOccupant,

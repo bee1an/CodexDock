@@ -218,6 +218,48 @@ async function execute(
           printIfNeeded(`Updated tokens for account: ${accountLabel(updated) ?? accountId}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
+        case 'refresh-tokens': {
+          const accountId = rest[0]
+          if (!accountId) {
+            throw new CliError(
+              'Usage: cdock account refresh-tokens <account-id>',
+              EXIT_USAGE
+            )
+          }
+
+          const result = await runtime.services.accounts.refreshTokens(accountId)
+
+          if (!flags.json) {
+            printIfNeeded(`Account: ${result.accountLabel}`, silent)
+            printIfNeeded(`Result: ${result.success ? 'success' : 'failed'}`, silent)
+            if (result.error) {
+              printIfNeeded(`Error: ${result.error}`, silent)
+            }
+            printIfNeeded('', silent)
+            printIfNeeded('Before:', silent)
+            printIfNeeded(`  Access Token expires: ${result.before.accessTokenExpiresAt ? new Date(result.before.accessTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+            printIfNeeded(`  Refresh Token expires: ${result.before.refreshTokenExpiresAt ? new Date(result.before.refreshTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+            printIfNeeded(`  ID Token expires: ${result.before.idTokenExpiresAt ? new Date(result.before.idTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+            if (result.after) {
+              printIfNeeded('After:', silent)
+              printIfNeeded(`  Access Token expires: ${result.after.accessTokenExpiresAt ? new Date(result.after.accessTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+              printIfNeeded(`  Refresh Token expires: ${result.after.refreshTokenExpiresAt ? new Date(result.after.refreshTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+              printIfNeeded(`  ID Token expires: ${result.after.idTokenExpiresAt ? new Date(result.after.idTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+            }
+            if (result.sanitizedLogs.length) {
+              printIfNeeded('', silent)
+              printIfNeeded('Log:', silent)
+              for (const entry of result.sanitizedLogs) {
+                printIfNeeded(`  [${entry.timestamp}] ${entry.message}`, silent)
+              }
+            }
+          }
+
+          return {
+            code: result.success ? EXIT_OK : EXIT_FAILURE,
+            payload: toCliResult({ ...result, rawLogs: [] })
+          }
+        }
         default:
           throw new CliError('Unknown account command', EXIT_USAGE)
       }

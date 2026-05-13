@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import { electronAPI } from '@electron-toolkit/preload'
 import type {
+  AccountTokenRefreshResult,
   AccountWakeSchedule,
   AccountTokensDetail,
   AccountTransferFormat,
@@ -72,6 +73,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:update-account-tokens', accountId, input),
   getAccountTokens: (accountId: string): Promise<AccountTokensDetail> =>
     ipcRenderer.invoke('codex:get-account-tokens', accountId),
+  refreshAccountTokens: (accountId: string): Promise<AccountTokenRefreshResult> =>
+    ipcRenderer.invoke('codex:refresh-account-tokens', accountId),
   getAccountWakeSchedule: (accountId: string): Promise<AccountWakeSchedule | null> =>
     ipcRenderer.invoke('codex:get-account-wake-schedule', accountId),
   updateAccountWakeSchedule: (accountId: string, input: UpdateAccountWakeScheduleInput) =>

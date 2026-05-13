@@ -87,6 +87,14 @@ export const accountTransferFormats = [
 export type AccountTransferFormat = (typeof accountTransferFormats)[number]
 export const defaultWakeModel = 'gpt-5.4-mini'
 
+export interface TagVisibilitySettings {
+  subscription?: boolean
+  tokenExpiry?: boolean
+  wakeSchedule?: boolean
+  groups?: boolean
+  quotaSummary?: boolean
+}
+
 export interface AppSettings {
   usagePollingMinutes: number
   statusBarAccountIds: string[]
@@ -99,6 +107,7 @@ export interface AppSettings {
   toolbarIconMovable?: boolean
   collapsedToolbarIconDefaultPosition?: boolean
   localGateway?: LocalGatewaySettings
+  tagVisibility?: TagVisibilitySettings
 }
 
 export interface CustomProviderSummary {
@@ -297,6 +306,7 @@ export interface AccountSummary {
   name?: string
   accountId?: string
   subscriptionExpiresAt?: string
+  accessTokenExpiresAt?: number
   groupIds: string[]
   createdAt: string
   updatedAt: string
@@ -322,6 +332,31 @@ export interface AccountTokensDetail {
   refreshToken?: string
   idToken?: string
   accountId?: string
+}
+
+export interface AccountTokenRefreshLogEntry {
+  timestamp: string
+  message: string
+  sensitive: boolean
+}
+
+export interface AccountTokenRefreshResult {
+  success: boolean
+  accountId: string
+  accountLabel: string
+  before: {
+    accessTokenExpiresAt: number | null
+    refreshTokenExpiresAt: number | null
+    idTokenExpiresAt: number | null
+  }
+  after: {
+    accessTokenExpiresAt: number | null
+    refreshTokenExpiresAt: number | null
+    idTokenExpiresAt: number | null
+  } | null
+  sanitizedLogs: AccountTokenRefreshLogEntry[]
+  rawLogs: AccountTokenRefreshLogEntry[]
+  error: string | null
 }
 
 export interface CurrentSessionSummary {

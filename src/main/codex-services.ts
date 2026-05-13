@@ -4,7 +4,8 @@ import {
   CodexAccountStore,
   CodexLoginCoordinator,
   getOpenAiCallbackPortOccupant,
-  killOpenAiCallbackPortOccupant
+  killOpenAiCallbackPortOccupant,
+  type CodexAuthPayload
 } from './codex-auth'
 import {
   CodexInstanceStore,
@@ -22,6 +23,8 @@ import { CodexProviderStore } from './codex-providers'
 import {
   type AppSnapshot,
   type CodexInstanceSummary,
+  type AccountTokenRefreshLogEntry,
+  type AccountTokenRefreshResult,
   canRunWakeRequest,
   isLocalMockAccount,
   resolveBestAccount,
@@ -30,7 +33,8 @@ import {
 import type {
   CodexServices,
   CreateCodexServicesOptions,
-  StoredAuthRefreshResult
+  StoredAuthRefreshResult,
+  AuthScopedRefreshFailure
 } from './codex-services-shared'
 import { DEFAULT_CODEX_INSTANCE_ID, customProviderLabel } from './codex-services-shared'
 import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
@@ -46,6 +50,7 @@ import {
 import { createCodexSkillService } from './codex-skills'
 import { createCodexPromptService } from './codex-prompts'
 import { CodexLocalGatewayService } from './local-gateway'
+import { decodeJwtPayload } from '../shared/openai-auth'
 
 export type { CodexServices, CreateCodexServicesOptions } from './codex-services-shared'
 export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
@@ -80,6 +85,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     loadHydratedSnapshotForLoginEvent
   )
   const authRefreshTasksByAccountId = new Map<string, Promise<StoredAuthRefreshResult>>()
+  const authRefreshFailuresByAccountId = new Map<string, AuthScopedRefreshFailure>()
   const wakeTasksByAccountId = new Map<string, Promise<WakeAccountRateLimitsResult>>()
   const context = {
     store,
@@ -88,6 +94,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     loginCoordinator,
     options,
     authRefreshTasksByAccountId,
+    authRefreshFailuresByAccountId,
     wakeTasksByAccountId
   }
 
@@ -114,6 +121,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   })
 
   const {
+    refreshStoredAuthGuarded,
     readStoredMockUsage,
     readUsageForAuth,
     readUsageForAuthResult,
@@ -363,7 +371,120 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         await store.patchAccountWakeSchedule(accountId, patch)
         return getSnapshot()
       },
-      get: (accountId) => store.getAccountSummary(accountId)
+      get: (accountId) => store.getAccountSummary(accountId),
+      refreshTokens: async (accountId): Promise<AccountTokenRefreshResult> => {
+        const account = await store.getAccountSummary(accountId)
+        const label = account.email ?? account.name ?? account.accountId ?? account.id
+        const sanitizedLogs: AccountTokenRefreshLogEntry[] = []
+        const rawLogs: AccountTokenRefreshLogEntry[] = []
+
+        const ts = (): string => new Date().toISOString()
+        const sanitizeToken = (token?: string): string => {
+          if (!token) return '(empty)'
+          if (token.length <= 12) return `***[len=${token.length}]`
+          return `${token.slice(0, 6)}...${token.slice(-4)} [len=${token.length}]`
+        }
+        const jwtExp = (token?: string): number | null => {
+          const payload = decodeJwtPayload(token)
+          return typeof payload.exp === 'number' ? payload.exp * 1000 : null
+        }
+
+        const pushLog = (message: string, rawMessage?: string): void => {
+          const timestamp = ts()
+          sanitizedLogs.push({ timestamp, message, sensitive: rawMessage !== undefined })
+          rawLogs.push({
+            timestamp,
+            message: rawMessage ?? message,
+            sensitive: rawMessage !== undefined
+          })
+        }
+
+        let auth: CodexAuthPayload
+        try {
+          auth = await store.getStoredAuthPayload(accountId)
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error)
+          pushLog(`Failed to load auth payload: ${msg}`)
+          return {
+            success: false,
+            accountId,
+            accountLabel: label,
+            before: {
+              accessTokenExpiresAt: null,
+              refreshTokenExpiresAt: null,
+              idTokenExpiresAt: null
+            },
+            after: null,
+            sanitizedLogs,
+            rawLogs,
+            error: msg
+          }
+        }
+
+        const before = {
+          accessTokenExpiresAt: jwtExp(auth.tokens?.access_token),
+          refreshTokenExpiresAt: jwtExp(auth.tokens?.refresh_token),
+          idTokenExpiresAt: jwtExp(auth.tokens?.id_token)
+        }
+
+        pushLog(`Account: ${label}`)
+        pushLog(
+          `Refresh token: ${sanitizeToken(auth.tokens?.refresh_token)}`,
+          `Refresh token: ${auth.tokens?.refresh_token ?? '(empty)'}`
+        )
+        pushLog('Starting guarded refresh with the latest saved auth...')
+
+        try {
+          const refreshed = await refreshStoredAuthGuarded(accountId, auth)
+          const refreshedAuth = refreshed.auth
+
+          if (refreshed.refreshed) {
+            pushLog('Refresh request succeeded and refreshed tokens were persisted')
+          } else {
+            pushLog('Stored auth changed before refresh; using the latest saved tokens')
+          }
+          pushLog(
+            `New access token: ${sanitizeToken(refreshedAuth.tokens?.access_token)}`,
+            `New access token: ${refreshedAuth.tokens?.access_token ?? '(empty)'}`
+          )
+          pushLog(
+            `New id token: ${sanitizeToken(refreshedAuth.tokens?.id_token)}`,
+            `New id token: ${refreshedAuth.tokens?.id_token ?? '(empty)'}`
+          )
+
+          const after = {
+            accessTokenExpiresAt: jwtExp(refreshedAuth.tokens?.access_token),
+            refreshTokenExpiresAt: jwtExp(refreshedAuth.tokens?.refresh_token),
+            idTokenExpiresAt: jwtExp(refreshedAuth.tokens?.id_token)
+          }
+
+          pushLog('Force refresh completed successfully')
+
+          return {
+            success: true,
+            accountId: refreshed.accountId,
+            accountLabel: label,
+            before,
+            after,
+            sanitizedLogs,
+            rawLogs,
+            error: null
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : String(error)
+          pushLog(`Refresh failed: ${msg}`)
+          return {
+            success: false,
+            accountId,
+            accountLabel: label,
+            before,
+            after: null,
+            sanitizedLogs,
+            rawLogs,
+            error: msg
+          }
+        }
+      }
     },
     groups: {
       create: async (name) => {

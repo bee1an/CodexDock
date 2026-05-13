@@ -3,6 +3,7 @@ import {
   CodexLoginCoordinator,
   getOpenAiCallbackPortOccupant,
   killOpenAiCallbackPortOccupant,
+  CodexAuthRefreshError,
   type CodexAuthPayload
 } from './codex-auth'
 import { CodexInstanceStore } from './codex-instances'
@@ -13,6 +14,7 @@ import {
   type AccountRateLimits,
   type AccountSummary,
   type AccountGroup,
+  type AccountTokenRefreshResult,
   type AccountTokensDetail,
   type AccountTransferFormat,
   type AccountWakeSchedule,
@@ -70,7 +72,6 @@ import { decodeJwtPayload } from '../shared/openai-auth'
 
 const DEFAULT_CODEX_INSTANCE_ID = '__default__'
 const CODEX_TOKEN_REFRESH_INTERVAL_MS = 8 * 24 * 60 * 60_000
-const BACKGROUND_AUTH_REFRESH_SKEW_MS = 5 * 60_000
 const LOCAL_MOCK_OPEN_ERROR = 'Local mock accounts do not support opening Codex.'
 const LOCAL_MOCK_OPEN_ISOLATED_ERROR = 'Local mock accounts do not support opening isolated Codex.'
 const LOCAL_MOCK_MISSING_USAGE_ERROR = 'Local mock account is missing seeded rate limits.'
@@ -128,16 +129,14 @@ function lastRefreshIsStale(
   return refreshedAt <= Date.now() - intervalMs
 }
 
-function authRefreshReason(
-  auth: CodexAuthPayload,
-  skewMs = 60_000
-): 'expires-soon' | 'stale' | null {
+function authRefreshReason(auth: CodexAuthPayload): 'expires-soon' | 'stale' | null {
   if (!auth.tokens?.refresh_token) {
     return null
   }
 
-  if (accessTokenExpiresSoon(auth.tokens.access_token, skewMs)) {
-    return 'expires-soon'
+  const payload = decodeJwtPayload(auth.tokens.access_token)
+  if (typeof payload.exp === 'number') {
+    return payload.exp * 1000 <= Date.now() ? 'expires-soon' : null
   }
 
   if (lastRefreshIsStale(auth.last_refresh)) {
@@ -204,6 +203,10 @@ function shouldClearStoredUsage(error: unknown): boolean {
     return error.status === 401 || error.status === 403
   }
 
+  if (error instanceof CodexAuthRefreshError) {
+    return error.permanent
+  }
+
   if (!(error instanceof Error)) {
     return false
   }
@@ -221,6 +224,34 @@ function shouldClearStoredUsage(error: unknown): boolean {
   }
 
   return (
+    message.includes('(401)') ||
+    message.includes('invalid_grant') ||
+    message.includes('refresh_token_expired') ||
+    message.includes('refresh_token_reused') ||
+    message.includes('refresh_token_invalidated') ||
+    message.includes('expired') ||
+    message.includes('revoked') ||
+    message.includes('already used') ||
+    message.includes('invalid token')
+  )
+}
+
+function isPermanentAuthRefreshFailure(error: unknown): boolean {
+  if (error instanceof CodexAuthRefreshError) {
+    return error.permanent
+  }
+
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  if (!message.includes('openai token refresh failed')) {
+    return false
+  }
+
+  return (
+    message.includes('(401)') ||
     message.includes('invalid_grant') ||
     message.includes('refresh_token_expired') ||
     message.includes('refresh_token_reused') ||
@@ -332,6 +363,7 @@ export interface CodexServices {
       patch: Partial<AccountWakeSchedule>
     ): Promise<AppSnapshot>
     get(accountId: string): Promise<AccountSummary>
+    refreshTokens(accountId: string): Promise<AccountTokenRefreshResult>
   }
   groups: {
     create(name: string): Promise<AppSnapshot>
@@ -462,6 +494,11 @@ interface StoredWakeReadResult {
   requestResult: WakeAccountRateLimitsResult['requestResult']
 }
 
+interface AuthScopedRefreshFailure {
+  auth: CodexAuthPayload
+  error: Error
+}
+
 export interface CodexServicesRuntimeContext {
   store: CodexAccountStore
   instanceStore: CodexInstanceStore
@@ -469,14 +506,15 @@ export interface CodexServicesRuntimeContext {
   loginCoordinator: CodexLoginCoordinator
   options: CreateCodexServicesOptions
   authRefreshTasksByAccountId: Map<string, Promise<StoredAuthRefreshResult>>
+  authRefreshFailuresByAccountId: Map<string, AuthScopedRefreshFailure>
   wakeTasksByAccountId: Map<string, Promise<WakeAccountRateLimitsResult>>
 }
 
 export {
   type StoredUsageReadResult,
   type StoredWakeReadResult,
+  type AuthScopedRefreshFailure,
   DEFAULT_CODEX_INSTANCE_ID,
-  BACKGROUND_AUTH_REFRESH_SKEW_MS,
   LOCAL_MOCK_OPEN_ERROR,
   LOCAL_MOCK_OPEN_ISOLATED_ERROR,
   LOCAL_MOCK_MISSING_USAGE_ERROR,
@@ -491,6 +529,7 @@ export {
   resolveOptionalAccountId,
   shouldRefreshStoredAuth,
   shouldClearStoredUsage,
+  isPermanentAuthRefreshFailure,
   localMockUsageError,
   makeHealthCheck,
   reportIsOk,
