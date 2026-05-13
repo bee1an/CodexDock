@@ -4,9 +4,9 @@
   import AccountsPanel from './components/AccountsPanel.svelte'
   import AppButton from './components/AppButton.svelte'
   import AppDialog from './components/AppDialog.svelte'
+  import AppInput from './components/AppInput.svelte'
   import { reveal, toastReveal } from './components/gsap-motion'
   import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
-  import PasteSessionDialog from './components/PasteSessionDialog.svelte'
   import RefreshAccountTokensDialog from './components/RefreshAccountTokensDialog.svelte'
   import HeroPanel from './components/HeroPanel.svelte'
   import TrayPanel from './components/TrayPanel.svelte'
@@ -44,6 +44,7 @@
     ProviderModelsProbeResult,
     StatsDisplaySettings,
     TagVisibilitySettings,
+    UpdateAccountHealthInput,
     UpdateAccountWakeScheduleInput,
     WakeAccountRequestResult,
     WakeAccountRateLimitsInput,
@@ -112,6 +113,7 @@
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
@@ -142,7 +144,9 @@
     pageError = message
     if (pageErrorTimer) clearTimeout(pageErrorTimer)
     if (message) {
-      pageErrorTimer = setTimeout(() => { pageError = '' }, 8000)
+      pageErrorTimer = setTimeout(() => {
+        pageError = ''
+      }, 8000)
     }
   }
   let loginPortOccupant: PortOccupant | null = null
@@ -182,9 +186,11 @@
   let exportDialogFormat: AccountTransferFormat = 'codexdock'
   let localGatewayBusy = false
   let localGatewayApiKey = ''
-  let showPasteSessionDialog = false
   let pasteSessionError = ''
   let pasteSessionSaving = false
+  let showImportMethodDialog = false
+  let importDialogStep: 'choose' | 'paste' = 'choose'
+  let importDialogRawInput = ''
   let wakeScheduleEnabledDraft = true
   let wakeScheduleTimesDraft: string[] = ['09:00']
   let wakeSchedulePromptDraft = 'ping'
@@ -475,7 +481,12 @@
     appMeta.isPackaged === false || appMeta.platform === 'win32'
 
   const bestAccount = (): AccountSummary | null =>
-    resolveBestAccount(snapshot.accounts, usageByAccountId, snapshot.activeAccountId)
+    resolveBestAccount(
+      snapshot.accounts,
+      usageByAccountId,
+      snapshot.activeAccountId,
+      snapshot.accountHealthByAccountId
+    )
 
   const canAutoPollUsage = (accountId: string): boolean => {
     if (usageErrorByAccountId[accountId]) {
@@ -530,7 +541,11 @@
     snapshot = {
       ...visibleSnapshot,
       usageByAccountId: nextUsageByAccountId,
-      usageErrorByAccountId: nextUsageErrorByAccountId
+      usageErrorByAccountId: nextUsageErrorByAccountId,
+      accountHealthByAccountId: accountScopedRecord(
+        visibleSnapshot.accounts,
+        visibleSnapshot.accountHealthByAccountId ?? {}
+      )
     }
     applyTheme(visibleSnapshot.settings.theme)
     usageByAccountId = nextUsageByAccountId
@@ -923,6 +938,15 @@
     await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
   }
 
+  const updateAccountHealth = async (
+    account: AccountSummary,
+    input: UpdateAccountHealthInput
+  ): Promise<void> => {
+    await runAction(`account-health:${account.id}:${input.status}`, () =>
+      window.codexApp.updateAccountHealth(account.id, input)
+    )
+  }
+
   const openEditTokensDialog = (account: AccountSummary): void => {
     editTokensDialogAccount = account
     editTokensAccessTokenDraft = ''
@@ -1114,25 +1138,35 @@
     openExportFormatDialog(uniqueIds)
   }
 
-  const openPasteSessionDialog = (): void => {
+  const openImportMethodDialog = (): void => {
+    importDialogStep = 'choose'
+    importDialogRawInput = ''
     pasteSessionError = ''
     pasteSessionSaving = false
-    showPasteSessionDialog = true
+    showImportMethodDialog = true
   }
 
-  const closePasteSessionDialog = (): void => {
+  const closeImportMethodDialog = (): void => {
     if (pasteSessionSaving) return
-    showPasteSessionDialog = false
-    pasteSessionError = ''
+    showImportMethodDialog = false
   }
 
-  const submitPasteSession = async (raw: string): Promise<void> => {
-    if (pasteSessionSaving || !showPasteSessionDialog) return
+  const selectImportFromFile = (): void => {
+    showImportMethodDialog = false
+    void runAction('import:file', () => window.codexApp.importAccountsFromFile())
+  }
+
+  const selectImportFromSession = (): void => {
+    importDialogStep = 'paste'
+  }
+
+  const submitImportDialogPaste = async (): Promise<void> => {
+    if (pasteSessionSaving || !importDialogRawInput.trim()) return
     pasteSessionSaving = true
     pasteSessionError = ''
     try {
-      applySnapshot(await window.codexApp.importAccountsFromRaw(raw))
-      showPasteSessionDialog = false
+      applySnapshot(await window.codexApp.importAccountsFromRaw(importDialogRawInput))
+      showImportMethodDialog = false
     } catch (error) {
       pasteSessionError = localizeKnownError(error, copyForLanguage().actionFailed)
     } finally {
@@ -1740,6 +1774,7 @@
               {usageByAccountId}
               {usageLoadingByAccountId}
               {usageErrorByAccountId}
+              accountHealthByAccountId={snapshot.accountHealthByAccountId}
               tokenCostByInstanceId={snapshot.tokenCostByInstanceId}
               tokenCostErrorByInstanceId={snapshot.tokenCostErrorByInstanceId}
               runningTokenCostSummary={snapshot.runningTokenCostSummary}
@@ -1786,6 +1821,7 @@
               {updateGroup}
               {deleteGroup}
               {updateAccountGroups}
+              {updateAccountHealth}
               refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
               {updateShowLocalMockData}
               {updateStatsDisplay}
@@ -1811,9 +1847,7 @@
               {startLogin}
               importCurrent={() =>
                 runAction('import', () => window.codexApp.importCurrentAccount())}
-              importAccountsFile={() =>
-                runAction('import:file', () => window.codexApp.importAccountsFromFile())}
-              importAccountsFromRaw={() => openPasteSessionDialog()}
+              importAccountsFile={() => openImportMethodDialog()}
               exportAccountsFile={() => openExportFormatDialog()}
               {refreshAllRateLimits}
               {refreshingAllUsage}
@@ -1848,12 +1882,13 @@
         {#if pageError}
           <section
             use:toastReveal={{ autoDismissMs: 8000 }}
-            class="theme-surface theme-error-panel fixed bottom-20 left-1/2 z-[60] w-[min(calc(100vw-2rem),52rem)] -translate-x-1/2 rounded-[1rem] border border-danger/18 bg-white px-4 py-3.5 text-sm text-danger shadow-[0_20px_60px_-36px_var(--paper-shadow),0_10px_30px_-24px_var(--paper-shadow)]"
+            class="theme-surface theme-error-panel fixed bottom-20 left-1/2 z-[60] w-[min(calc(100vw-2rem),52rem)] -translate-x-1/2 rounded-[1rem] border border-danger/18 bg-[var(--panel-strong)] px-4 py-3.5 text-sm text-danger shadow-[0_20px_60px_-36px_var(--paper-shadow),0_10px_30px_-24px_var(--paper-shadow)]"
             role="alert"
             aria-live="assertive"
           >
             <div class="flex items-start gap-3">
-              <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true"></span>
+              <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true">
+              </span>
               <div class="grid min-w-0 flex-1 gap-2">
                 <p class="break-words">{pageError}</p>
                 {#if loginPortOccupant && hasLoginPortConflict()}
@@ -1879,7 +1914,9 @@
                 type="button"
                 class="flex-none rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
                 aria-label="Close"
-                onclick={() => { setPageError('') }}
+                onclick={() => {
+                  setPageError('')
+                }}
               >
                 <span class="i-lucide-x h-4 w-4"></span>
               </button>
@@ -1922,7 +1959,7 @@
       {#each exportFormatOptionOrder as format (format)}
         <label
           data-motion-item
-          class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-black/14 bg-black/[0.045]' : 'border-black/8 bg-transparent'}`}
+          class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-[var(--line-strong)] bg-[var(--surface-soft)]' : 'border-[var(--card-border)] bg-transparent'}`}
         >
           <div class="flex items-start gap-3">
             <input
@@ -1971,14 +2008,110 @@
   </AppDialog>
 {/if}
 
-{#if showPasteSessionDialog}
-  <PasteSessionDialog
-    copy={copyForLanguage()}
-    errorMessage={pasteSessionError}
-    saving={pasteSessionSaving}
-    onClose={closePasteSessionDialog}
-    onSubmit={submitPasteSession}
-  />
+{#if showImportMethodDialog}
+  <AppDialog
+    ariaLabel={importDialogStep === 'choose'
+      ? copyForLanguage().importMethodTitle
+      : copyForLanguage().pasteSessionTitle}
+    title={importDialogStep === 'choose'
+      ? copyForLanguage().importMethodTitle
+      : copyForLanguage().pasteSessionTitle}
+    showClose
+    closeLabel={copyForLanguage().closeDialog}
+    maxWidthClass={importDialogStep === 'choose' ? 'max-w-sm' : 'max-w-2xl'}
+    closeDisabled={pasteSessionSaving}
+    onclose={closeImportMethodDialog}
+  >
+    {#if importDialogStep === 'choose'}
+      <div class="grid gap-3">
+        <div
+          role="button"
+          tabindex="0"
+          class="theme-import-method-card grid cursor-pointer gap-1 rounded-2xl border border-[var(--card-border)] bg-transparent px-4 py-3 text-left transition-colors duration-140 hover:border-[var(--line-strong)] hover:bg-[var(--surface-soft)]"
+          onclick={selectImportFromFile}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') selectImportFromFile()
+          }}
+        >
+          <div class="flex items-start gap-3">
+            <span class="i-lucide-file-up mt-0.5 h-4 w-4 shrink-0 text-muted-strong"></span>
+            <div class="grid gap-0.5">
+              <span class="text-sm font-medium text-carbon">
+                {copyForLanguage().importFromFile}
+              </span>
+              <span class="text-xs leading-5 text-muted-strong">
+                {copyForLanguage().importFromFileDescription}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div
+          role="button"
+          tabindex="0"
+          class="theme-import-method-card grid cursor-pointer gap-1 rounded-2xl border border-[var(--card-border)] bg-transparent px-4 py-3 text-left transition-colors duration-140 hover:border-[var(--line-strong)] hover:bg-[var(--surface-soft)]"
+          onclick={selectImportFromSession}
+          onkeydown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') selectImportFromSession()
+          }}
+        >
+          <div class="flex items-start gap-3">
+            <span class="i-lucide-clipboard-paste mt-0.5 h-4 w-4 shrink-0 text-muted-strong"></span>
+            <div class="grid gap-0.5">
+              <span class="text-sm font-medium text-carbon">
+                {copyForLanguage().importFromSession}
+              </span>
+              <span class="text-xs leading-5 text-muted-strong">
+                {copyForLanguage().importFromSessionDescription}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    {:else}
+      <div class="flex flex-col gap-4">
+        <p class="text-[13px] text-[var(--ink-faint)]">{copyForLanguage().pasteSessionHint}</p>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-[13px] font-medium text-carbon" for="paste-session-input">
+            {copyForLanguage().pasteSessionLabel}
+          </label>
+          <AppInput
+            id="paste-session-input"
+            multiline
+            rows={8}
+            size="md"
+            bind:value={importDialogRawInput}
+            placeholder={copyForLanguage().pasteSessionPlaceholder}
+            spellcheck={false}
+            disabled={pasteSessionSaving}
+          />
+        </div>
+        {#if pasteSessionError}
+          <p class="text-[13px] text-danger" role="alert">{pasteSessionError}</p>
+        {/if}
+      </div>
+    {/if}
+
+    <svelte:fragment slot="footer">
+      {#if importDialogStep === 'paste'}
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={closeImportMethodDialog}
+          disabled={pasteSessionSaving}
+        >
+          {copyForLanguage().exportFormatCancel}
+        </AppButton>
+        <AppButton
+          variant="primary"
+          size="sm"
+          onclick={submitImportDialogPaste}
+          disabled={pasteSessionSaving || !importDialogRawInput.trim()}
+        >
+          {copyForLanguage().pasteSessionConfirm}
+        </AppButton>
+      {/if}
+    </svelte:fragment>
+  </AppDialog>
 {/if}
 
 {#if wakeDialogAccount}
@@ -2094,17 +2227,9 @@
     opacity: 1;
   }
 
-  :global(html[data-theme='dark']) .mac-inactive-traffic-lights span {
-    background: #3c4848;
-  }
-
   :global(.theme-workspace) {
     background: var(--color-snow) !important;
     box-shadow: none;
-  }
-
-  :global(html[data-theme='dark']) .app-shell {
-    background: var(--color-snow);
   }
 
   :global(.theme-surface) {
@@ -2121,6 +2246,25 @@
     box-shadow:
       0 28px 84px -40px rgba(0, 0, 0, 0.48),
       0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
+  }
+
+  :global(.theme-import-method-card) {
+    border-color: var(--card-border) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft)) !important;
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 56%, transparent);
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  :global(.theme-import-method-card:hover),
+  :global(.theme-import-method-card:focus-visible) {
+    border-color: var(--line-strong) !important;
+    background: var(--surface-soft) !important;
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 76%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--line-strong) 34%, transparent);
   }
 
   :global(.wake-dialog-backdrop) {
@@ -2245,7 +2389,6 @@
     box-shadow: none;
   }
 
-  :global(.theme-provider-card:hover),
   :global(.theme-tag-manager-card:hover) {
     background: var(--surface-hover) !important;
   }
@@ -2282,217 +2425,6 @@
 
   :global(.border-soft) {
     border-color: var(--color-arctic-mist);
-  }
-
-  :global(html[data-theme='dark'] .theme-surface) {
-    border-color: var(--line-strong) !important;
-    background: var(--panel-strong) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-tray-panel) {
-    border-color: var(--line-strong) !important;
-    background: var(--color-fog) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-soft-panel),
-  :global(html[data-theme='dark'] .theme-toolbar),
-  :global(html[data-theme='dark'] .theme-version-pill),
-  :global(html[data-theme='dark'] .theme-plan-neutral),
-  :global(html[data-theme='dark'] .theme-menu-choice-active),
-  :global(html[data-theme='dark'] .theme-provider-toggle) {
-    background: var(--surface-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-soft-panel) {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark'] [class*='bg-white']) {
-    background-color: var(--panel-strong) !important;
-  }
-
-  :global(html[data-theme='dark'] [class*='text-black']) {
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-primary-button) {
-    background: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-ghost-button) {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--color-fog) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-ghost-button:disabled) {
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-version-pill) {
-    color: var(--ink-soft-strong) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-neutral) {
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-plus) {
-    background: rgb(16 185 129 / 0.18) !important;
-    color: rgb(110 231 183) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-pro) {
-    background: rgb(14 165 233 / 0.18) !important;
-    color: rgb(125 211 252) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-team) {
-    background: rgb(245 158 11 / 0.18) !important;
-    color: rgb(253 224 71) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-plan-enterprise) {
-    background: rgb(244 63 94 / 0.18) !important;
-    color: rgb(253 164 175) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-ghost-button),
-  :global(html[data-theme='dark'] .theme-icon-button),
-  :global(html[data-theme='dark'] .theme-row-button),
-  :global(html[data-theme='dark'] .theme-menu-choice),
-  :global(html[data-theme='dark'] .theme-select) {
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-ghost-button:hover),
-  :global(html[data-theme='dark'] .theme-icon-button:hover),
-  :global(html[data-theme='dark'] .theme-row-button:hover),
-  :global(html[data-theme='dark'] .theme-menu-choice:hover),
-  :global(html[data-theme='dark'] .theme-select:hover) {
-    background: var(--surface-hover) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-ghost-button:focus-visible),
-  :global(html[data-theme='dark'] .theme-icon-button:focus-visible),
-  :global(html[data-theme='dark'] .theme-row-button:focus-visible),
-  :global(html[data-theme='dark'] .theme-menu-choice:focus-visible),
-  :global(html[data-theme='dark'] .theme-select:focus-visible) {
-    box-shadow: 0 0 0 2px var(--ring) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-select) {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--panel-strong) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-card) {
-    background: transparent !important;
-    box-shadow: none !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-input),
-  :global(html[data-theme='dark'] .theme-provider-toggle) {
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-input) {
-    background: color-mix(in srgb, var(--panel-strong) 86%, var(--surface-soft) 14%) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-input::placeholder) {
-    color: var(--ink-faint) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-toggle) {
-    background: color-mix(in srgb, var(--surface-soft) 88%, var(--color-fog) 12%) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-status) {
-    background: rgb(96 165 250 / 0.7) !important;
-    box-shadow: 0 0 0 4px rgb(96 165 250 / 0.08) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-badge) {
-    border-color: rgb(56 189 248 / 0.16) !important;
-    background: rgb(14 165 233 / 0.1) !important;
-    color: rgb(186 230 253 / 0.88) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-fast-badge) {
-    border-color: rgb(16 185 129 / 0.16) !important;
-    background: rgb(16 185 129 / 0.1) !important;
-    color: rgb(167 243 208 / 0.88) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-provider-meta) {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-    background: color-mix(in srgb, var(--surface-soft) 82%, var(--color-fog) 18%) !important;
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-select option) {
-    color: var(--color-carbon);
-    background: var(--panel-strong);
-  }
-
-  :global(html[data-theme='dark'] .theme-inline-code) {
-    background: var(--panel-strong) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-code-surface) {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--code-bg) !important;
-    color: var(--code-ink) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-error-panel) {
-    border-color: color-mix(in srgb, var(--danger) 22%, transparent) !important;
-    background: color-mix(in srgb, var(--danger) 6%, var(--panel-strong)) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-account-card) {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--panel-strong) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-account-card-active) {
-    border-color: var(--line-strong) !important;
-    background: color-mix(in srgb, var(--surface-soft) 66%, var(--panel-strong)) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-export-format-option) {
-    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-fog) 8%) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-progress-track) {
-    background: var(--progress-track) !important;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 70%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-progress-fill) {
-    background: var(--progress-fill) !important;
-    box-shadow: 0 0 0 1px color-mix(in srgb, var(--progress-fill) 45%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-active-pill) {
-    background: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-status-active) {
-    background: var(--success) !important;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark'] .theme-status-idle) {
-    background: var(--dot-idle) !important;
   }
 
   @keyframes status-dot-breath {

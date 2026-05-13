@@ -1,5 +1,6 @@
 <script lang="ts">
   import type {
+    AccountHealth,
     AccountRateLimits,
     AccountSummary,
     AccountTokensDetail,
@@ -30,8 +31,10 @@
   export let tokens: AccountTokensDetail | null = null
   export let tokensLoading = false
   export let tokensError = ''
+  export let health: AccountHealth | undefined = undefined
   export let onReloadTokens: () => void = () => {}
   export let onForceRefreshTokens: () => void = () => {}
+  export let onMarkNormal: () => void = () => {}
 
   let tick = Date.now()
   let tickTimer: ReturnType<typeof setInterval> | null = null
@@ -72,6 +75,9 @@
   $: createdAt = formatTimestampWithRelative(account.createdAt, language, timestampCopy, tick)
   $: updatedAt = formatTimestampWithRelative(account.updatedAt, language, timestampCopy, tick)
   $: lastUsedAt = formatTimestampWithRelative(account.lastUsedAt, language, timestampCopy, tick)
+  $: healthMarkedAt = health
+    ? formatTimestampWithRelative(health.markedAt, language, timestampCopy, tick)
+    : copy.accountDetailsEmpty
   $: subscriptionExpiresAt = account.subscriptionExpiresAt
     ? formatTimestampWithRelative(account.subscriptionExpiresAt, language, timestampCopy, tick)
     : copy.accountDetailsEmpty
@@ -139,6 +145,26 @@
     return String(credits.balance)
   }
 
+  function healthLabel(): string {
+    return health ? copy.accountHealthAuthError : copy.accountHealthNormal
+  }
+
+  function healthTitle(): string {
+    if (!health) {
+      return copy.accountHealthNormal
+    }
+
+    const lines = [
+      copy.accountHealthAuthErrorHint(health.reason),
+      `${copy.accountHealthSource}: ${health.source}`,
+      `${copy.accountHealthMarkedAt}: ${healthMarkedAt}`
+    ]
+    if (health.httpStatus) {
+      lines.push(`${copy.accountHealthHttpStatus}: ${health.httpStatus}`)
+    }
+    return lines.join('\n')
+  }
+
   let copiedKey = ''
   let copiedTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -171,12 +197,12 @@
 </script>
 
 <div
-  class="theme-account-details rounded-[0.85rem] border border-black/8 bg-black/[0.02] px-3 py-3"
+  class="theme-account-details rounded-[0.85rem] border border-[var(--card-border)] bg-[var(--surface-soft)] px-3 py-3"
 >
   <div class="grid gap-3 md:grid-cols-2">
     <!-- 身份信息 -->
     <section
-      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-white/60 px-3 py-2.5"
+      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-[var(--panel-strong)] px-3 py-2.5"
     >
       <h4 class="text-[10px] font-semibold uppercase tracking-[0.1em] text-faint">
         {copy.accountDetailsSectionIdentity}
@@ -230,12 +256,41 @@
             {copiedKey === 'rowId' ? copy.accountDetailsCopied : copy.accountDetailsCopyValue}
           </button>
         </dd>
+
+        <dt class="text-muted-strong">{copy.accountDetailsFieldHealth}</dt>
+        <dd class="min-w-0">
+          <div class="flex min-w-0 flex-col">
+            <span
+              class={`truncate ${health ? 'font-semibold text-red-700' : 'text-carbon'}`}
+              title={healthTitle()}
+            >
+              {healthLabel()}
+            </span>
+            {#if health}
+              <span class="truncate text-[11px] text-faint" title={health.reason}>
+                {health.reason} · {healthMarkedAt}
+              </span>
+            {/if}
+          </div>
+        </dd>
+        <dd>
+          {#if health}
+            <button
+              class="theme-details-copy-btn"
+              type="button"
+              onclick={onMarkNormal}
+              title={copy.markAccountNormal}
+            >
+              {copy.markAccountNormal}
+            </button>
+          {/if}
+        </dd>
       </dl>
     </section>
 
     <!-- 订阅与计划 -->
     <section
-      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-white/60 px-3 py-2.5"
+      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-[var(--panel-strong)] px-3 py-2.5"
     >
       <h4 class="text-[10px] font-semibold uppercase tracking-[0.1em] text-faint">
         {copy.accountDetailsSectionSubscription}
@@ -283,7 +338,7 @@
 
     <!-- 令牌状态 -->
     <section
-      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-white/60 px-3 py-2.5"
+      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-[var(--panel-strong)] px-3 py-2.5"
     >
       <header class="flex items-center justify-between gap-2">
         <h4 class="text-[10px] font-semibold uppercase tracking-[0.1em] text-faint">
@@ -387,7 +442,7 @@
 
     <!-- 时间戳与唤醒 -->
     <section
-      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-white/60 px-3 py-2.5"
+      class="theme-account-details-card flex flex-col gap-1.5 rounded-[0.65rem] bg-[var(--panel-strong)] px-3 py-2.5"
     >
       <h4 class="text-[10px] font-semibold uppercase tracking-[0.1em] text-faint">
         {copy.accountDetailsSectionTimestamps}
@@ -460,12 +515,4 @@
     color: var(--color-carbon);
   }
 
-  :global(html[data-theme='dark']) .theme-account-details {
-    background: color-mix(in srgb, var(--surface-soft) 70%, transparent) !important;
-    border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-account-details-card {
-    background: var(--panel-strong) !important;
-  }
 </style>

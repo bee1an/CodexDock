@@ -11,6 +11,7 @@
   } from 'svelte-dnd-action'
 
   import type {
+    AccountHealth,
     AccountRateLimits,
     AccountSummary,
     AccountGroup,
@@ -18,10 +19,12 @@
     AccountWakeSchedule,
     AppLanguage,
     LoginMethod,
-    TagVisibilitySettings
+    TagVisibilitySettings,
+    UpdateAccountHealthInput
   } from '../../../shared/codex'
   import {
     formatRelativeReset,
+    isAccountHealthBlocking,
     isLocalMockAccount,
     remainingPercent,
     supportsWakeSessionQuota
@@ -75,6 +78,7 @@
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
   export let usageErrorByAccountId: Record<string, string>
+  export let accountHealthByAccountId: Record<string, AccountHealth> = {}
   export let wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   export let loginActionBusy: boolean
   export let loginStarting = false
@@ -84,7 +88,6 @@
   export let startLogin: (method: LoginMethod) => void = () => {}
   export let importCurrent: () => void = () => {}
   export let importAccountsFile: () => void = () => {}
-  export let importAccountsFromRaw: () => void = () => {}
   export let exportAccountsFile: () => void = () => {}
   export let refreshAllRateLimits: () => void = () => {}
   export let activateBestAccount: () => void = () => {}
@@ -101,6 +104,10 @@
   export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
+  export let updateAccountHealth: (
+    account: AccountSummary,
+    input: UpdateAccountHealthInput
+  ) => Promise<void> = async () => {}
   export let openGroupManager: () => void = () => {}
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let removeAccount: (account: AccountSummary) => void
@@ -180,6 +187,7 @@
   let sortDraggedAccountId = ''
   let removingSelection = false
   let removingGroupLink = ''
+  let updatingHealthAccountId = ''
   let accountWorkbenchRendered = accountWorkbenchExpanded
   let accountWorkbenchPanelOpen = accountWorkbenchExpanded
   let lastAccountWorkbenchExpanded = accountWorkbenchExpanded
@@ -346,6 +354,30 @@
     return wakeScheduleSummaryText(schedule, copy.wakeSchedule)
   }
 
+  function accountHealth(accountId: string): AccountHealth | undefined {
+    return accountHealthByAccountId[accountId]
+  }
+
+  function accountHealthBlocked(account: AccountSummary): boolean {
+    return isAccountHealthBlocking(accountHealth(sortableAccountId(account)))
+  }
+
+  function accountHealthTitle(health: AccountHealth | undefined): string {
+    if (!health) {
+      return copy.accountHealthNormal
+    }
+
+    const lines = [
+      copy.accountHealthAuthErrorHint(health.reason),
+      `${copy.accountHealthSource}: ${health.source}`,
+      `${copy.accountHealthMarkedAt}: ${health.markedAt}`
+    ]
+    if (health.httpStatus) {
+      lines.push(`${copy.accountHealthHttpStatus}: ${health.httpStatus}`)
+    }
+    return lines.join('\n')
+  }
+
   function isSortShadowAccount(account: AccountSummary): boolean {
     const sortableAccount = account as AccountSummary & Record<string, unknown>
     return (
@@ -489,18 +521,19 @@
     return (
       loginActionBusy ||
       accountActionBusy(sortableAccountId(account)) ||
+      accountHealthBlocked(account) ||
       isLocalMockAccount(account)
     )
   }
 
   function accountRefreshDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || usageLoading || isLocalMockAccount(account)
+    return loginActionBusy || usageLoading || accountHealthBlocked(account) || isLocalMockAccount(account)
   }
 
   function wakeDialogDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || Boolean(wakingAccountId) || usageLoading
+    return loginActionBusy || Boolean(wakingAccountId) || usageLoading || accountHealthBlocked(account)
   }
 
   function accountMoreActionsLabel(): string {
@@ -511,6 +544,23 @@
     await updateAccountGroups(account, [...account.groupIds, groupId])
     closeAccountActionMenu()
     closeAccountGroupMenu()
+  }
+
+  async function markAccountNormal(account: AccountSummary): Promise<void> {
+    const accountId = sortableAccountId(account)
+    if (loginActionBusy || updatingHealthAccountId === accountId) {
+      return
+    }
+
+    updatingHealthAccountId = accountId
+    try {
+      await updateAccountHealth(account, { status: 'normal' })
+      closeAccountActionMenu()
+    } finally {
+      if (updatingHealthAccountId === accountId) {
+        updatingHealthAccountId = ''
+      }
+    }
   }
 
   async function removeGroupFromAccount(account: AccountSummary, groupId: string): Promise<void> {
@@ -637,7 +687,7 @@
   }}
 />
 
-<div class="flex flex-none flex-wrap items-center gap-1.5 border-b border-black/8 px-4 py-2">
+<div class="flex flex-none flex-wrap items-center gap-1.5 border-b border-[var(--card-border)] px-4 py-2">
   <AppButton
     variant="secondary"
     size="xs"
@@ -680,16 +730,6 @@
     title={copy.importAccountsFile}
   >
     <span class="i-lucide-file-up h-3.5 w-3.5"></span>
-  </AppButton>
-  <AppButton
-    variant="icon"
-    size="xs"
-    onclick={importAccountsFromRaw}
-    disabled={loginActionBusy}
-    ariaLabel={copy.pasteSession}
-    title={copy.pasteSession}
-  >
-    <span class="i-lucide-clipboard-paste h-3.5 w-3.5"></span>
   </AppButton>
   <AppButton
     variant="icon"
@@ -797,9 +837,9 @@
   </div>
 </div>
 
-<div class="theme-workbench-toolbar border-b border-black/8 px-4 py-1.5">
+<div class="theme-workbench-toolbar border-b border-[var(--workbench-border)] px-4 py-1.5">
   <button
-    class="theme-workbench-toggle flex w-full items-center justify-between gap-3 rounded-[0.35rem] border-0 bg-transparent px-1.5 py-1 text-left transition-colors duration-140 hover:bg-black/[0.03]"
+    class="theme-workbench-toggle flex w-full items-center justify-between gap-3 rounded-[0.35rem] border-0 bg-transparent px-1.5 py-1 text-left transition-colors duration-140 hover:bg-[var(--workbench-toggle-hover-bg)]"
     type="button"
     aria-expanded={accountWorkbenchExpanded}
     aria-controls="account-workbench-panel"
@@ -826,7 +866,7 @@
       >
         {#if selectedVisibleCount}
           <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
+            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
           >
             <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
             <span class="truncate">{copy.selectedAccountCount(selectedVisibleCount)}</span>
@@ -835,7 +875,7 @@
 
         {#if activeGroupFilter !== 'all'}
           <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
+            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
           >
             <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
             <span class="max-w-[12rem] truncate"
@@ -847,7 +887,7 @@
     {/if}
 
     <span
-      class={`theme-workbench-chevron inline-flex h-6 w-6 items-center justify-center rounded-[0.35rem] border border-black/8 bg-white text-black/58 transition-[transform,background-color,color] duration-180 ${
+      class={`theme-workbench-chevron inline-flex h-6 w-6 items-center justify-center rounded-[0.35rem] border border-[var(--chevron-border)] bg-[var(--chevron-bg)] text-[var(--chevron-color)] transition-[transform,background-color,color] duration-180 ${
         accountWorkbenchExpanded ? 'rotate-180' : ''
       }`}
     >
@@ -922,14 +962,14 @@
 
       {#if showAccountSelectionTools}
         <div
-          class={`theme-selection-toolbar flex flex-wrap items-center justify-between gap-2 border-t border-black/6 pt-3 ${
+          class={`theme-selection-toolbar flex flex-wrap items-center justify-between gap-2 border-t border-[var(--card-border)] pt-3 ${
             selectedVisibleCount ? 'theme-selection-toolbar-active' : 'theme-selection-toolbar-idle'
           }`}
         >
           <div class="flex min-w-0 flex-wrap items-center gap-1.5">
             {#if selectedVisibleCount}
               <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-carbon"
+                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium text-carbon"
               >
                 <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
                 <span>{copy.selectedAccountCount(selectedVisibleCount)}</span>
@@ -938,7 +978,7 @@
 
             {#if activeGroupFilter !== 'all'}
               <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-black/8 bg-white px-1.5 py-0.5 text-[10px] font-medium text-carbon"
+                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium text-carbon"
               >
                 <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
                 <span>{groupFilterLabel(activeGroupFilter, groups, copy)}</span>
@@ -1002,7 +1042,7 @@
         </div>
       {:else if !showAccountFilterTools}
         <div
-          class="theme-workbench-empty rounded-[0.85rem] border border-dashed border-black/8 bg-white px-3 py-3 text-[12px] text-muted-strong"
+          class="theme-workbench-empty rounded-[0.85rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-3 py-3 text-[12px] text-muted-strong"
         >
           {copy.emptyFilterTools}
         </div>
@@ -1014,20 +1054,20 @@
 {#if visibleAccounts.length && quotaSummary.totalAccounts > 0 && tagVisibility.quotaSummary !== false}
   <div class="px-4 pt-3" transition:slide={{ duration: 200 }}>
     <div
-      class="theme-quota-summary flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[0.55rem] border border-black/8 bg-white px-3.5 py-2.5"
+      class="theme-quota-summary flex flex-wrap items-center gap-x-4 gap-y-2 rounded-[0.55rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-3.5 py-2.5"
     >
       <span class="text-[12px] font-semibold text-carbon">{copy.quotaSummaryTitle}</span>
 
       <div class="theme-quota-summary-row flex min-w-0 flex-1 items-center gap-3">
         <div
-          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-black/[0.03] px-2.5 py-1.5"
+          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-[var(--quota-item-bg)] px-2.5 py-1.5"
         >
           <span class="i-lucide-timer flex-none text-[13px] text-emerald-600"></span>
           <span class="flex-none text-[11px] font-medium text-muted-strong"
             >{copy.quotaSummaryPrimaryLabel}</span
           >
           <span
-            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-black/[0.06]"
+            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-[var(--quota-bar-bg)]"
           >
             <span
               class="theme-quota-summary-bar-fill absolute inset-y-0 left-0 rounded-full bg-emerald-500/80 transition-[width] duration-300 ease-out"
@@ -1043,17 +1083,17 @@
           </span>
         </div>
 
-        <span class="h-6 w-px flex-none bg-black/10" aria-hidden="true"></span>
+        <span class="h-6 w-px flex-none bg-[var(--quota-divider)]" aria-hidden="true"></span>
 
         <div
-          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-black/[0.03] px-2.5 py-1.5"
+          class="theme-quota-summary-item flex min-w-0 flex-1 items-center gap-2 rounded-[0.4rem] bg-[var(--quota-item-bg)] px-2.5 py-1.5"
         >
           <span class="i-lucide-calendar-range flex-none text-[13px] text-sky-600"></span>
           <span class="flex-none text-[11px] font-medium text-muted-strong"
             >{copy.quotaSummarySecondaryLabel}</span
           >
           <span
-            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-black/[0.06]"
+            class="theme-quota-summary-bar relative h-2 min-w-[3.5rem] flex-1 overflow-hidden rounded-full bg-[var(--quota-bar-bg)]"
           >
             <span
               class="theme-quota-summary-bar-fill absolute inset-y-0 left-0 rounded-full bg-sky-500/80 transition-[width] duration-300 ease-out"
@@ -1100,6 +1140,8 @@
       {#each sortableAccounts as account, accountIndex (account.id)}
         {@const accountId = sortableAccountId(account)}
         {@const actionAccount = accountWithSortableId(account)}
+        {@const health = accountHealth(accountId)}
+        {@const healthBlocked = isAccountHealthBlocking(health)}
         {@const usageBadge = accountUsageBadge(usageErrorByAccountId[accountId], account, copy)}
         {@const subscriptionBadge = accountSubscriptionBadge(
           account.subscriptionExpiresAt,
@@ -1139,8 +1181,8 @@
             <label
               class={`theme-account-selector inline-flex h-7 w-7 flex-none items-center justify-center rounded-[0.35rem] border transition-[border-color,background-color,box-shadow] duration-180 ${
                 selectedAccountIds.includes(accountId)
-                  ? 'border-black/18 bg-white text-black'
-                  : 'border-black/10 bg-white text-black/72'
+                  ? 'border-[var(--selector-border-checked)] bg-[var(--selector-bg)] text-carbon'
+                  : 'border-[var(--selector-border)] bg-[var(--selector-bg)] text-[var(--selector-color)]'
               }`}
               title={copy.selectAccount}
             >
@@ -1170,7 +1212,7 @@
           <div class="grid min-w-0 gap-2.5 overflow-visible">
             <div class="flex min-w-0 items-center gap-2">
               <span
-                class={`h-2 w-2 flex-none rounded-full ${activeAccountId === accountId ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-black/14'}`}
+                class={`h-2 w-2 flex-none rounded-full ${activeAccountId === accountId ? 'theme-status-active bg-success ring-3 ring-emerald-500/12' : 'theme-status-idle bg-[var(--dot-idle)]'}`}
               ></span>
               <p class="min-w-0 truncate text-sm font-medium leading-5 text-carbon">
                 {accountEmail(account, copy)}
@@ -1183,6 +1225,17 @@
               >
                 {planLabel(usageByAccountId[accountId]?.planType)}
               </span>
+
+              {#if healthBlocked}
+                <span
+                  transition:fly={{ x: -8, duration: 180 }}
+                  class="inline-flex max-w-full items-center gap-1 rounded-[0.32rem] border border-red-500/18 bg-red-500/10 px-1.75 py-0.5 text-[10px] font-semibold leading-none text-red-700"
+                  title={accountHealthTitle(health)}
+                >
+                  <span class="i-lucide-shield-alert h-3 w-3 flex-none"></span>
+                  <span class="truncate">{copy.accountHealthAuthError}</span>
+                </span>
+              {/if}
 
               {#if subscriptionBadge && tagVisibility.subscription !== false}
                 <span
@@ -1205,7 +1258,7 @@
                 <button
                   type="button"
                   transition:fly={{ x: -8, duration: 180 }}
-                  class={`inline-flex max-w-full items-center gap-1 rounded-[0.32rem] border px-1.75 py-0.5 text-[10px] font-medium leading-none transition-colors duration-140 hover:bg-black/[0.04] ${
+                  class={`inline-flex max-w-full items-center gap-1 rounded-[0.32rem] border px-1.75 py-0.5 text-[10px] font-medium leading-none transition-colors duration-140 hover:bg-[var(--surface-hover)] ${
                     tokenBadge.expired
                       ? 'border-red-500/16 bg-red-500/10 text-red-700'
                       : tokenBadge.critical
@@ -1240,11 +1293,11 @@
                   {@const groupLinkKey = `${accountId}:${group.id}`}
                   <span
                     transition:fly={{ x: -8, duration: 180 }}
-                    class="theme-tag-assigned inline-flex max-w-full items-center rounded-[0.32rem] border border-emerald-500/14 bg-emerald-500/10 px-1.75 py-0.5 text-[10px] font-medium leading-none text-emerald-700"
+                    class="theme-tag-assigned inline-flex max-w-full items-center rounded-[0.32rem] border border-[var(--tag-assigned-border)] bg-[var(--tag-assigned-bg)] px-1.75 py-0.5 text-[10px] font-medium leading-none text-[var(--tag-assigned-color)]"
                   >
                     <span class="max-w-28 truncate">{group.name}</span>
                     <button
-                      class="theme-tag-remove ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-transparent p-0 text-emerald-700/72 transition-colors duration-140 hover:bg-emerald-500/12 hover:text-emerald-800"
+                      class="theme-tag-remove ml-1 inline-flex h-3.5 w-3.5 items-center justify-center rounded-full bg-transparent p-0 text-[var(--tag-remove-color)] transition-colors duration-140 hover:bg-[var(--tag-remove-hover-bg)] hover:text-[var(--tag-remove-hover-color)]"
                       type="button"
                       onclick={() => void removeGroupFromAccount(actionAccount, group.id)}
                       disabled={loginActionBusy || groupMutationBusy}
@@ -1266,7 +1319,7 @@
               {@const errorLines = usageErrorLines(usageBadge.detail)}
               <div class="min-w-0">
                 <button
-                  class={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-left text-[11px] leading-4 transition-colors duration-140 hover:bg-black/[0.04] ${usageErrorToneClass(
+                  class={`inline-flex min-w-0 max-w-full items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-left text-[11px] leading-4 transition-colors duration-140 hover:bg-[var(--surface-hover)] ${usageErrorToneClass(
                     usageBadge.kind
                   )}`}
                   type="button"
@@ -1312,7 +1365,7 @@
                       </button>
                     </div>
                     <div
-                      class="max-h-52 overflow-auto rounded-[0.85rem] bg-black/[0.035] p-2.5 text-[12px] leading-5 text-carbon"
+                      class="max-h-52 overflow-auto rounded-[0.85rem] bg-[var(--surface-soft)] p-2.5 text-[12px] leading-5 text-carbon"
                     >
                       <pre
                         class="m-0 whitespace-pre-wrap break-words font-sans">{usageBadge.detail}</pre>
@@ -1328,7 +1381,7 @@
           >
             {#if !usageByAccountId[accountId] || usageByAccountId[accountId]?.primary}
               <div
-                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
+                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-[var(--soft-panel-border)] bg-[var(--soft-panel-bg)] px-2.5 py-1.5 text-[10px] text-muted-strong"
                 title={`${copy.sessionQuota} · ${
                   usageByAccountId[accountId]?.primary
                     ? `${remainingPercent(usageByAccountId[accountId].primary?.usedPercent)}%`
@@ -1349,10 +1402,10 @@
                   <span class="inline-flex h-4 items-center leading-none">--</span>
                 {/if}
                 <span
-                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-[var(--soft-panel-border)]"
                 >
                   <span
-                    class="theme-progress-fill block h-full rounded-full bg-black/70"
+                    class="theme-progress-fill block h-full rounded-full bg-[var(--progress-fill)]"
                     style={`width: ${progressWidth(usageByAccountId[accountId]?.primary?.usedPercent)}`}
                     use:animateProgress={{
                       targetWidth: progressWidth(usageByAccountId[accountId]?.primary?.usedPercent),
@@ -1383,7 +1436,7 @@
 
             {#if !usageByAccountId[accountId] || usageByAccountId[accountId]?.secondary}
               <div
-                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px] text-muted-strong"
+                class="theme-soft-panel inline-grid grid-cols-[auto_auto_3.5rem_2.75rem] items-center gap-x-2 rounded-full border border-[var(--soft-panel-border)] bg-[var(--soft-panel-bg)] px-2.5 py-1.5 text-[10px] text-muted-strong"
                 title={`${copy.weeklyQuota} · ${
                   usageByAccountId[accountId]?.secondary
                     ? `${remainingPercent(usageByAccountId[accountId].secondary?.usedPercent)}%`
@@ -1407,10 +1460,10 @@
                   <span class="inline-flex h-4 items-center leading-none">--</span>
                 {/if}
                 <span
-                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-black/8"
+                  class="theme-progress-track self-center h-1.5 w-14 overflow-hidden rounded-full bg-[var(--soft-panel-border)]"
                 >
                   <span
-                    class="theme-progress-fill block h-full rounded-full bg-black/70"
+                    class="theme-progress-fill block h-full rounded-full bg-[var(--progress-fill)]"
                     style={`width: ${progressWidth(usageByAccountId[accountId]?.secondary?.usedPercent)}`}
                     use:animateProgress={{
                       targetWidth: progressWidth(
@@ -1444,7 +1497,7 @@
             {#if extraLimits(usageByAccountId, accountId).length}
               {#each extraLimits(usageByAccountId, accountId) as limit (`${accountId}:${limit.limitId ?? 'extra'}`)}
                 <div
-                  class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-black/6 bg-black/[0.03] px-2.5 py-1.5 text-[10px]"
+                  class="theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--soft-panel-bg)] px-2.5 py-1.5 text-[10px]"
                 >
                   <span class="font-medium uppercase tracking-[0.08em]">{limitLabel(limit)}</span>
                   {#if limit.primary}
@@ -1531,6 +1584,27 @@
                   >
                     {accountMoreActionsLabel()}
                   </div>
+
+                  {#if healthBlocked}
+                    <button
+                      class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                      type="button"
+                      onclick={() => void markAccountNormal(actionAccount)}
+                      disabled={loginActionBusy || updatingHealthAccountId === accountId}
+                    >
+                      <span
+                        class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-red-500/10 text-red-700 transition-colors duration-140 group-hover:bg-[var(--color-snow)]"
+                      >
+                        {#if updatingHealthAccountId === accountId}
+                          <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+                        {:else}
+                          <span class="i-lucide-shield-check h-4 w-4"></span>
+                        {/if}
+                      </span>
+                      <span class="flex-1">{copy.markAccountNormal}</span>
+                    </button>
+                    <div class="mx-2 my-1.5 border-t border-[var(--color-arctic-mist)]"></div>
+                  {/if}
 
                   {#if showWakeAccount(accountId)}
                     <button
@@ -1719,8 +1793,10 @@
                 tokens={tokensByAccountId[accountId] ?? null}
                 tokensLoading={tokensLoadingAccountId === accountId}
                 tokensError={tokensErrorByAccountId[accountId] ?? ''}
+                {health}
                 onReloadTokens={() => void loadTokensForAccount(accountId)}
                 onForceRefreshTokens={() => openRefreshTokensDialog(actionAccount)}
+                onMarkNormal={() => void markAccountNormal(actionAccount)}
               />
             </div>
           {/if}
@@ -1734,7 +1810,7 @@
   </div>
 {:else}
   <div
-    class="theme-tag-empty flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.875rem] border border-dashed border-black/10 bg-black/[0.02] px-4 py-8 text-center"
+    class="theme-tag-empty flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.875rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-4 py-8 text-center"
   >
     <p class="text-sm text-muted-strong">{copy.noAccountsForFilter}</p>
   </div>
@@ -1752,7 +1828,7 @@
 
   .accounts-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
+    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
   }
 
   .accounts-scrollbar::-webkit-scrollbar {
@@ -1768,16 +1844,16 @@
     border: 2px solid transparent;
     border-radius: 999px;
     background-clip: padding-box;
-    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
+    background-color: var(--scrollbar-thin-thumb);
   }
 
   .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
+    background-color: var(--scrollbar-thin-thumb-hover);
   }
 
   .theme-account-divider {
     height: 1px;
-    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
+    background: var(--row-divider);
   }
 
   .theme-account-expand-btn :global(.i-lucide-chevron-down) {
@@ -1795,7 +1871,7 @@
 
   .theme-workbench-toggle:hover .theme-workbench-chevron,
   .theme-workbench-toggle:focus-visible .theme-workbench-chevron {
-    background: rgba(24, 24, 27, 0.06);
+    background: var(--surface-hover);
     color: var(--color-carbon);
   }
 
@@ -1832,103 +1908,6 @@
     opacity: 0.48;
   }
 
-  :global(html[data-theme='dark']) .accounts-scrollbar {
-    scrollbar-color: color-mix(in srgb, var(--color-arctic-mist) 48%, transparent) transparent;
-  }
-
-  :global(html[data-theme='dark']) .accounts-scrollbar::-webkit-scrollbar-thumb {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 38%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .theme-account-divider {
-    background: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-picker-surface,
-  :global(html[data-theme='dark']) .theme-tag-empty {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-assigned {
-    background: rgb(16 185 129 / 0.14) !important;
-    border-color: rgb(16 185 129 / 0.18) !important;
-    color: rgb(167 243 208) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-remove {
-    color: rgb(167 243 208 / 0.78) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-remove:hover {
-    background: rgb(16 185 129 / 0.16) !important;
-    color: rgb(209 250 229) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-picker-plus {
-    background: var(--surface-soft) !important;
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-picker-item {
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-picker-item:hover,
-  :global(html[data-theme='dark']) .theme-tag-picker-item:focus-visible {
-    background: color-mix(in srgb, var(--surface-hover) 88%, transparent) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-tag-picker-item:hover .theme-tag-picker-plus,
-  :global(html[data-theme='dark']) .theme-tag-picker-item:focus-visible .theme-tag-picker-plus {
-    background: color-mix(in srgb, var(--color-carbon) 10%, var(--surface-soft)) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-workbench-toolbar {
-    background: color-mix(in srgb, var(--surface-soft) 90%, var(--color-fog) 10%) !important;
-    border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-workbench-toggle,
-  :global(html[data-theme='dark']) .theme-workbench-summary-pill,
-  :global(html[data-theme='dark']) .theme-workbench-chevron,
-  :global(html[data-theme='dark']) .theme-workbench-empty {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-workbench-toggle:hover {
-    background: color-mix(in srgb, var(--surface-hover) 84%, var(--panel-strong) 16%) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-workbench-toggle:hover .theme-workbench-chevron,
-  :global(html[data-theme='dark']) .theme-workbench-toggle:focus-visible .theme-workbench-chevron {
-    background: var(--surface-hover) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-toolbar-idle {
-    color: var(--color-carbon) !important;
-    border-top-color: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-toolbar-active {
-    color: var(--color-carbon) !important;
-    border-top-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-divider {
-    background: color-mix(in srgb, var(--color-arctic-mist) 72%, transparent) !important;
-  }
-
   .theme-reset-time-neutral {
     color: var(--ink-soft-strong);
   }
@@ -1938,44 +1917,7 @@
   }
 
   .theme-quota-summary-bar {
-    background: color-mix(in srgb, var(--color-carbon) 8%, transparent);
-  }
-
-  :global(html[data-theme='dark']) .theme-quota-summary {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-quota-summary-bar {
-    background: color-mix(in srgb, var(--color-snow) 14%, transparent) !important;
-  }
-
-  :global(html[data-theme='dark']) .account-drag-button {
-    border-color: var(--color-arctic-mist);
-    color: var(--ink-soft);
-  }
-
-  :global(html[data-theme='dark']) .theme-account-card-selected {
-    background: var(--panel-strong) !important;
-    border-color: var(--color-arctic-mist) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-account-selector {
-    border-color: var(--color-arctic-mist) !important;
-    background: var(--panel-strong) !important;
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-account-selector-input {
-    accent-color: var(--color-carbon);
-  }
-
-  :global(html[data-theme='dark']) .theme-reset-time-neutral {
-    color: rgb(255 255 255 / 0.88) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-selection-danger:hover {
-    background: color-mix(in srgb, rgb(239 68 68) 12%, var(--surface-hover)) !important;
+    background: var(--quota-bar-bg);
   }
 
   :global(.theme-account-row.is-dnd-shadow) + .theme-account-row {

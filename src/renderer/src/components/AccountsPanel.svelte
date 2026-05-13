@@ -1,7 +1,8 @@
 <script lang="ts">
   import type { DndEvent as SortEvent } from 'svelte-dnd-action'
 
-  import type {
+	import type {
+    AccountHealth,
     AccountRateLimits,
     AccountSummary,
     AccountGroup,
@@ -38,6 +39,7 @@
     TokenCostReadOptions,
     TokenCostSummary,
     ReadCodexSessionDetailInput,
+    UpdateAccountHealthInput,
     UpdateCustomProviderInput
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
@@ -89,6 +91,7 @@
   export let usageByAccountId: Record<string, AccountRateLimits>
   export let usageLoadingByAccountId: Record<string, boolean>
   export let usageErrorByAccountId: Record<string, string>
+  export let accountHealthByAccountId: Record<string, AccountHealth> = {}
   export let tokenCostByInstanceId: Record<string, TokenCostSummary>
   export let tokenCostErrorByInstanceId: Record<string, string>
   export let runningTokenCostSummary: TokenCostSummary | null
@@ -136,6 +139,10 @@
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
   export let deleteGroup: (group: AccountGroup) => Promise<void>
   export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
+  export let updateAccountHealth: (
+    account: AccountSummary,
+    input: UpdateAccountHealthInput
+  ) => Promise<void>
   export let refreshAccountUsage: (account: AccountSummary) => void
   export let updateShowLocalMockData: (enabled: boolean) => void
   export let updateStatsDisplay: (statsDisplay: StatsDisplaySettings) => Promise<void>
@@ -358,7 +365,7 @@
           CodexDock
         </span>
         <span
-          class="theme-version-pill inline-flex items-center rounded-[0.3rem] border border-black/6 bg-transparent px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-faint"
+          class="theme-version-pill inline-flex items-center rounded-[0.3rem] border border-[var(--soft-panel-border)] bg-transparent px-1.5 py-0.5 text-[9px] font-medium tabular-nums text-faint"
         >
           v{workspaceVersion}
         </span>
@@ -386,7 +393,7 @@
 
       {#if showLocalMockToggle}
         <label
-          class="topbar-mock-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] border border-black/8 bg-black/[0.03] px-2 py-1.5 text-[11px] text-muted-strong"
+          class="topbar-mock-toggle inline-flex items-center gap-1.5 rounded-[0.35rem] border border-[var(--card-border)] bg-[var(--surface-soft)] px-2 py-1.5 text-[11px] text-muted-strong"
         >
           <Checkbox
             checked={showLocalMockData}
@@ -406,7 +413,7 @@
       {/if}
 
       <AppButtonGroup
-        class="theme-toolbar inline-flex items-center gap-0 rounded-[0.45rem] border border-black/8 bg-black/[0.03] p-0.5"
+        class="theme-toolbar inline-flex items-center gap-0 rounded-[0.45rem] border border-[var(--card-border)] bg-[var(--surface-soft)] p-0.5"
       >
         <AppButton
           variant="filter"
@@ -595,6 +602,7 @@
       {usageByAccountId}
       {usageLoadingByAccountId}
       {usageErrorByAccountId}
+      {accountHealthByAccountId}
       {wakeSchedulesByAccountId}
       {loginActionBusy}
       {loginStarting}
@@ -623,6 +631,7 @@
       {updateTagVisibility}
       {reorderAccounts}
       updateAccountGroups={updateAccountGroupsWithProtection}
+      {updateAccountHealth}
       {refreshAccountUsage}
       {removeAccount}
       {removeAccounts}
@@ -757,20 +766,4 @@
     position: relative;
   }
 
-  :global(html[data-theme='dark']) .theme-view-toggle-active {
-    background: var(--panel-strong) !important;
-    color: var(--color-carbon) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-view-toggle-idle {
-    color: var(--ink-soft) !important;
-  }
-
-  :global(html[data-theme='dark']) .theme-view-toggle-idle:hover {
-    background: var(--surface-hover) !important;
-  }
-
-  :global(html[data-theme='dark']) .workspace-topbar {
-    border-bottom-color: transparent;
-  }
 </style>

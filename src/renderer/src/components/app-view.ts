@@ -57,6 +57,11 @@ export const messages = {
     pasteSessionLabel: 'Session JSON',
     pasteSessionPlaceholder: '{"user":{...},"accessToken":"eyJ...","account":{...}}',
     pasteSessionConfirm: '导入',
+    importMethodTitle: '选择导入方式',
+    importFromFile: '从文件导入',
+    importFromFileDescription: '选择本地 JSON 文件导入账号。',
+    importFromSession: '粘贴 Session',
+    importFromSessionDescription: '粘贴 ChatGPT 网页端的 session JSON 导入。',
     exportAccountsFile: '导出账号文件',
     toolbarDialogTitle: '快捷工具',
     closeDialog: '关闭',
@@ -325,6 +330,14 @@ export const messages = {
     accountExpired: '已过期',
     accountUsageRefreshFailed: '刷新失败',
     accountExpiredHint: '登录态已失效，请重新登录或重新导入当前登录。',
+    accountHealthNormal: '正常',
+    accountHealthAuthError: '账号异常',
+    accountHealthAuthErrorHint: (reason: string) =>
+      `该账号已被排除，需要手动修复后再标记为正常。原因：${reason}`,
+    accountHealthSource: '来源',
+    accountHealthMarkedAt: '标记时间',
+    accountHealthHttpStatus: 'HTTP 状态',
+    markAccountNormal: '标记为正常',
     sessionQuota: '5小时',
     weeklyQuota: '周限额',
     sessionReset: '5小时重置',
@@ -452,6 +465,7 @@ export const messages = {
     accountDetailsFieldName: '昵称',
     accountDetailsFieldAccountId: 'Account ID',
     accountDetailsFieldRowId: '本地 ID',
+    accountDetailsFieldHealth: '账号状态',
     accountDetailsFieldPlanType: '计划类型',
     accountDetailsFieldLimitName: '额度名称',
     accountDetailsFieldSubscriptionExpiresAt: '订阅到期',
@@ -665,6 +679,11 @@ export const messages = {
     pasteSessionLabel: 'Session JSON',
     pasteSessionPlaceholder: '{"user":{...},"accessToken":"eyJ...","account":{...}}',
     pasteSessionConfirm: 'Import',
+    importMethodTitle: 'Choose import method',
+    importFromFile: 'Import from file',
+    importFromFileDescription: 'Select a local JSON file to import accounts.',
+    importFromSession: 'Paste session',
+    importFromSessionDescription: 'Paste ChatGPT web session JSON to import.',
     exportAccountsFile: 'Export account file',
     toolbarDialogTitle: 'Quick tools',
     closeDialog: 'Close',
@@ -952,6 +971,14 @@ export const messages = {
     accountExpired: 'Expired',
     accountUsageRefreshFailed: 'Refresh failed',
     accountExpiredHint: 'Session is no longer valid. Sign in again or re-import the current login.',
+    accountHealthNormal: 'Normal',
+    accountHealthAuthError: 'Account issue',
+    accountHealthAuthErrorHint: (reason: string) =>
+      `This account is excluded until you repair it and mark it normal. Reason: ${reason}`,
+    accountHealthSource: 'Source',
+    accountHealthMarkedAt: 'Marked at',
+    accountHealthHttpStatus: 'HTTP status',
+    markAccountNormal: 'Mark as normal',
     sessionQuota: 'Session',
     weeklyQuota: 'Weekly',
     sessionReset: 'Session resets',
@@ -1081,6 +1108,7 @@ export const messages = {
     accountDetailsFieldName: 'Name',
     accountDetailsFieldAccountId: 'Account ID',
     accountDetailsFieldRowId: 'Local ID',
+    accountDetailsFieldHealth: 'Account status',
     accountDetailsFieldPlanType: 'Plan type',
     accountDetailsFieldLimitName: 'Limit name',
     accountDetailsFieldSubscriptionExpiresAt: 'Subscription expires',
@@ -1330,7 +1358,7 @@ export function planLabel(planType?: string | null): string {
 export function planTagClass(planType?: string | null): string {
   switch ((planType ?? '').toLowerCase()) {
     case 'free':
-      return 'theme-plan-neutral bg-black/[0.05] text-black/72'
+      return 'theme-plan-neutral bg-[var(--surface-soft)] text-[var(--ink-soft)]'
     case 'plus':
       return 'theme-plan-plus bg-emerald-500/12 text-emerald-700'
     case 'pro':
@@ -1340,7 +1368,7 @@ export function planTagClass(planType?: string | null): string {
     case 'enterprise':
       return 'theme-plan-enterprise bg-rose-500/14 text-rose-700'
     default:
-      return 'theme-plan-neutral bg-black/[0.05] text-black/72'
+      return 'theme-plan-neutral bg-[var(--surface-soft)] text-[var(--ink-soft)]'
   }
 }
 
