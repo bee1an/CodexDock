@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   accountScopedRecord,
   accountSubscriptionBadge,
+  accountTokenExpiryBadge,
   accountUsageBadge,
   extraLimits,
   messages,
@@ -173,6 +174,22 @@ describe('app view account usage badge', () => {
       critical: true
     })
     expect(badge?.title).toContain('订阅到期')
+  })
+
+  it('only shows token expiration badges within 3 days', () => {
+    const now = Date.parse('2026-05-13T00:00:00.000Z')
+
+    expect(
+      accountTokenExpiryBadge(now + 4 * 24 * 60 * 60_000, 'zh-CN', messages['zh-CN'], now)
+    ).toBeNull()
+
+    expect(
+      accountTokenExpiryBadge(now + 3 * 24 * 60 * 60_000, 'zh-CN', messages['zh-CN'], now)
+    ).toMatchObject({
+      label: 'Token 3天0小时 后过期',
+      expired: false,
+      critical: false
+    })
   })
 
   it('preserves usage records by account id after account reorder snapshots', () => {

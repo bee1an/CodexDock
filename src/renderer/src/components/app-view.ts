@@ -1438,7 +1438,7 @@ export function accountTokenExpiryBadge(
   }
 
   const remainingMs = accessTokenExpiresAt - now
-  if (remainingMs > 8 * 24 * 60 * 60 * 1000) {
+  if (remainingMs > 3 * 24 * 60 * 60 * 1000) {
     return null
   }
 
