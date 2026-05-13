@@ -143,9 +143,7 @@ function normalizeWakeSchedule(
 
 function normalizePersistedState(parsed: PersistedState | LegacyPersistedState): PersistedState {
   const raw = parsed as Record<string, unknown>
-  const rawAccounts = (raw.accounts ?? []) as Array<
-    PersistedAccount & { tagIds?: string[] }
-  >
+  const rawAccounts = (raw.accounts ?? []) as Array<PersistedAccount & { tagIds?: string[] }>
   const rawGroups = (raw.groups ?? raw.tags ?? []) as AccountGroup[]
 
   return {

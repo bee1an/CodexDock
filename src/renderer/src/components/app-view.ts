@@ -474,7 +474,8 @@ export const messages = {
     deleteProviderConfirm: (label: string) => `删除提供商 ${label}？`,
     providerBadge: '自定义提供商',
     providerEmptyName: 'custom',
-    providerCreateDialogDescription: '填写兼容 OpenAI 的接口地址和 Key，可先请求模型列表再选择模型。',
+    providerCreateDialogDescription:
+      '填写兼容 OpenAI 的接口地址和 Key，可先请求模型列表再选择模型。',
     providerModelProbe: '请求模型列表',
     providerModelProbeLoading: '请求中…',
     providerModelProbeFailed: '请求模型列表失败，请检查 Base URL 和 API Key。',
@@ -1134,7 +1135,8 @@ export const messages = {
       'Select at least one group or account before starting the local gateway. Only selected accounts or accounts in selected groups will be routed.',
     localGatewayAllowedGroupsEmpty:
       'No groups yet. Create one from group management on the accounts page first.',
-    localGatewayAllowedGroupsRequired: 'Select at least one group or account before starting the gateway.',
+    localGatewayAllowedGroupsRequired:
+      'Select at least one group or account before starting the gateway.',
     localGatewayAllowedTargetsAdd: 'Add group or account',
     instanceManager: 'Instances',
     instanceManagerHint:

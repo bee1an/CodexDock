@@ -414,9 +414,7 @@
     applySnapshot(await window.codexApp.getSnapshot())
   }
 
-  const closeExpandablePanels = (
-    except?: 'browser-login' | 'device-login'
-  ): void => {
+  const closeExpandablePanels = (except?: 'browser-login' | 'device-login'): void => {
     if (except !== 'browser-login') {
       showCallbackLoginDetails = false
     }
@@ -1653,7 +1651,8 @@
               {localGatewayApiKey}
               localGatewayModelMappings={snapshot.settings.localGateway?.modelMappings ?? []}
               localGatewayAllowedGroupIds={snapshot.settings.localGateway?.allowedGroupIds ?? []}
-              localGatewayAllowedAccountIds={snapshot.settings.localGateway?.allowedAccountIds ?? []}
+              localGatewayAllowedAccountIds={snapshot.settings.localGateway?.allowedAccountIds ??
+                []}
               groups={snapshot.groups}
               activeAccountId={snapshot.activeAccountId}
               {usageByAccountId}
@@ -1842,7 +1841,7 @@
               name="account-export-format"
               value={format}
               checked={exportDialogFormat === format}
-              on:change={() => {
+              onchange={() => {
                 exportDialogFormat = format
               }}
             />

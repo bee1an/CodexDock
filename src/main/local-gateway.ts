@@ -849,9 +849,9 @@ export class CodexLocalGatewayService {
         const message =
           response.statusCode === 200
             ? undefined
-            : (logMessageFromResponseBody(readCapturedBody()) ||
+            : logMessageFromResponseBody(readCapturedBody()) ||
               response.statusMessage ||
-              `HTTP ${response.statusCode}`)
+              `HTTP ${response.statusCode}`
         void this.pushLog({
           method: request.method ?? 'GET',
           path: url.pathname,
@@ -1593,7 +1593,7 @@ export class CodexLocalGatewayService {
       const entries = Array.isArray(parsed)
         ? parsed
         : Array.isArray((parsed as { logs?: unknown }).logs)
-          ? ((parsed as { logs: unknown[] }).logs)
+          ? (parsed as { logs: unknown[] }).logs
           : []
 
       this.requestLogs = entries
