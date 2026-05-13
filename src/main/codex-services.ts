@@ -26,6 +26,7 @@ import {
   type AccountTokenRefreshLogEntry,
   type AccountTokenRefreshResult,
   canRunWakeRequest,
+  isAccountHealthBlocking,
   isLocalMockAccount,
   resolveBestAccount,
   type WakeAccountRateLimitsResult
@@ -316,6 +317,12 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return serializeAccountExport(sources, exportedAt, format)
       },
       activate: async (accountId) => {
+        const snapshot = await getSnapshot()
+        if (isAccountHealthBlocking((snapshot.accountHealthByAccountId ?? {})[accountId])) {
+          throw new Error(
+            'Account is marked as auth_error. Repair it and mark it normal before using it.'
+          )
+        }
         await store.activateAccount(accountId)
         return getSnapshot()
       },
@@ -324,7 +331,8 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         const bestAccount = resolveBestAccount(
           snapshot.accounts,
           snapshot.usageByAccountId,
-          snapshot.activeAccountId
+          snapshot.activeAccountId,
+          snapshot.accountHealthByAccountId
         )
 
         if (!bestAccount || bestAccount.id === snapshot.activeAccountId) {
@@ -355,6 +363,10 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       },
       updateTokens: async (accountId, input) => {
         await store.updateAccountTokens(accountId, input)
+        return getSnapshot()
+      },
+      updateHealth: async (accountId, input) => {
+        await store.updateAccountHealth(accountId, input)
         return getSnapshot()
       },
       getTokens: (accountId) => store.getAccountTokens(accountId),

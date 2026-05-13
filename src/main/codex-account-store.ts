@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs'
 import { dirname, join } from 'node:path'
 
 import type {
+  AccountHealthSource,
   AccountRateLimits,
   AccountSummary,
   AccountGroup,
@@ -11,6 +12,7 @@ import type {
   AppSettings,
   AppSnapshot,
   CurrentSessionSummary,
+  UpdateAccountHealthInput,
   UpdateAccountTokensInput,
   UpdateAccountWakeScheduleInput
 } from '../shared/codex'
@@ -92,6 +94,7 @@ export class CodexAccountStore {
         settings: state.settings,
         usageByAccountId: state.usageByAccountId,
         usageErrorByAccountId: state.usageErrorByAccountId,
+        accountHealthByAccountId: state.accountHealthByAccountId,
         wakeSchedulesByAccountId: state.wakeSchedulesByAccountId,
         tokenCostByInstanceId: {},
         tokenCostErrorByInstanceId: {},
@@ -196,6 +199,90 @@ export class CodexAccountStore {
       const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
       delete nextUsageErrorByAccountId[accountId]
       state.usageErrorByAccountId = nextUsageErrorByAccountId
+      await this.writeState(state)
+    })
+  }
+
+  async markAccountAuthError(
+    accountId: string,
+    reason: string,
+    source: AccountHealthSource,
+    httpStatus?: number
+  ): Promise<void> {
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
+
+      state.accountHealthByAccountId = {
+        ...state.accountHealthByAccountId,
+        [accountId]: {
+          status: 'auth_error',
+          reason: reason.trim() || 'Account authentication failed.',
+          source,
+          markedAt: new Date().toISOString(),
+          ...(httpStatus ? { httpStatus } : {})
+        }
+      }
+      await this.writeState(state)
+    })
+  }
+
+  async clearAccountHealth(accountId: string): Promise<void> {
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
+
+      const nextAccountHealthByAccountId = { ...state.accountHealthByAccountId }
+      delete nextAccountHealthByAccountId[accountId]
+      state.accountHealthByAccountId = nextAccountHealthByAccountId
+
+      const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
+      delete nextUsageErrorByAccountId[accountId]
+      state.usageErrorByAccountId = nextUsageErrorByAccountId
+
+      await this.writeState(state)
+    })
+  }
+
+  async updateAccountHealth(
+    accountId: string,
+    input: UpdateAccountHealthInput
+  ): Promise<void> {
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
+
+      if (input.status === 'normal') {
+        const nextAccountHealthByAccountId = { ...state.accountHealthByAccountId }
+        delete nextAccountHealthByAccountId[accountId]
+        state.accountHealthByAccountId = nextAccountHealthByAccountId
+
+        const nextUsageErrorByAccountId = { ...state.usageErrorByAccountId }
+        delete nextUsageErrorByAccountId[accountId]
+        state.usageErrorByAccountId = nextUsageErrorByAccountId
+
+        await this.writeState(state)
+        return
+      }
+
+      state.accountHealthByAccountId = {
+        ...state.accountHealthByAccountId,
+        [accountId]: {
+          status: 'auth_error',
+          reason: input.reason?.trim() || 'Account authentication failed.',
+          source: 'manual',
+          markedAt: new Date().toISOString()
+        }
+      }
       await this.writeState(state)
     })
   }
@@ -584,6 +671,14 @@ export class CodexAccountStore {
           delete state.usageErrorByAccountId[previousId]
         }
 
+        if (state.accountHealthByAccountId[previousId]) {
+          state.accountHealthByAccountId = {
+            ...state.accountHealthByAccountId,
+            [identity]: state.accountHealthByAccountId[previousId]
+          }
+          delete state.accountHealthByAccountId[previousId]
+        }
+
         if (state.wakeSchedulesByAccountId[previousId]) {
           state.wakeSchedulesByAccountId = {
             ...state.wakeSchedulesByAccountId,
@@ -606,6 +701,9 @@ export class CodexAccountStore {
 
       if (state.usageErrorByAccountId[identity]) {
         delete state.usageErrorByAccountId[identity]
+      }
+      if (state.accountHealthByAccountId[identity]) {
+        delete state.accountHealthByAccountId[identity]
       }
 
       await this.writeState(state)
@@ -745,6 +843,14 @@ export class CodexAccountStore {
           delete state.usageErrorByAccountId[previousId]
         }
 
+        if (state.accountHealthByAccountId[previousId]) {
+          state.accountHealthByAccountId = {
+            ...state.accountHealthByAccountId,
+            [identity]: state.accountHealthByAccountId[previousId]
+          }
+          delete state.accountHealthByAccountId[previousId]
+        }
+
         if (state.wakeSchedulesByAccountId[previousId]) {
           state.wakeSchedulesByAccountId = {
             ...state.wakeSchedulesByAccountId,
@@ -766,6 +872,9 @@ export class CodexAccountStore {
 
       if (state.usageErrorByAccountId[identity]) {
         delete state.usageErrorByAccountId[identity]
+      }
+      if (state.accountHealthByAccountId[identity]) {
+        delete state.accountHealthByAccountId[identity]
       }
 
       await this.writeState(state)
@@ -797,6 +906,10 @@ export class CodexAccountStore {
 
       if (state.usageErrorByAccountId[accountId]) {
         delete state.usageErrorByAccountId[accountId]
+      }
+
+      if (state.accountHealthByAccountId[accountId]) {
+        delete state.accountHealthByAccountId[accountId]
       }
 
       if (state.wakeSchedulesByAccountId[accountId]) {
@@ -914,6 +1027,14 @@ export class CodexAccountStore {
           delete state.usageErrorByAccountId[previousId]
         }
 
+        if (state.accountHealthByAccountId[previousId]) {
+          state.accountHealthByAccountId = {
+            ...state.accountHealthByAccountId,
+            [identity]: state.accountHealthByAccountId[previousId]
+          }
+          delete state.accountHealthByAccountId[previousId]
+        }
+
         if (state.wakeSchedulesByAccountId[previousId]) {
           state.wakeSchedulesByAccountId = {
             ...state.wakeSchedulesByAccountId,
@@ -955,6 +1076,9 @@ export class CodexAccountStore {
 
     if (state.usageErrorByAccountId[identity]) {
       delete state.usageErrorByAccountId[identity]
+    }
+    if (state.accountHealthByAccountId[identity]) {
+      delete state.accountHealthByAccountId[identity]
     }
 
     await this.writeState(state)

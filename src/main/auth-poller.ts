@@ -1,4 +1,4 @@
-import type { AccountSummary, AppSnapshot } from '../shared/codex'
+import { isAccountHealthBlocking, type AccountSummary, type AppSnapshot } from '../shared/codex'
 
 export interface AuthRefreshController {
   start(): void
@@ -77,9 +77,15 @@ export function createAuthRefreshController(
       try {
         const snapshot = await options.getSnapshot()
         cleanupRetryState(snapshot)
+        const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
 
         let changed = false
         for (const account of snapshot.accounts) {
+          if (isAccountHealthBlocking(accountHealthByAccountId[account.id])) {
+            retryAfterByAccountId.delete(account.id)
+            continue
+          }
+
           const retryAfter = retryAfterByAccountId.get(account.id)
           if (retryAfter && retryAfter > Date.now()) {
             continue

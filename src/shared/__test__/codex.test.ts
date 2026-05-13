@@ -75,6 +75,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
@@ -188,6 +189,20 @@ describe('codex shared helpers', () => {
           [mockAccount.id]: 'mock error',
           [realAccount.id]: 'real error'
         },
+        accountHealthByAccountId: {
+          [mockAccount.id]: {
+            status: 'auth_error',
+            reason: 'mock auth error',
+            source: 'gateway',
+            markedAt: '2026-03-08T00:00:00.000Z'
+          },
+          [realAccount.id]: {
+            status: 'auth_error',
+            reason: 'real auth error',
+            source: 'gateway',
+            markedAt: '2026-03-08T00:00:00.000Z'
+          }
+        },
         wakeSchedulesByAccountId: {
           [mockAccount.id]: {
             enabled: true,
@@ -212,6 +227,7 @@ describe('codex shared helpers', () => {
     expect(filtered.settings.statusBarAccountIds).toEqual([realAccount.id])
     expect(Object.keys(filtered.usageByAccountId)).toEqual([realAccount.id])
     expect(Object.keys(filtered.usageErrorByAccountId)).toEqual([realAccount.id])
+    expect(Object.keys(filtered.accountHealthByAccountId)).toEqual([realAccount.id])
     expect(Object.keys(filtered.wakeSchedulesByAccountId)).toEqual([realAccount.id])
   })
 
@@ -267,6 +283,20 @@ describe('codex shared helpers', () => {
           [mockAccount.id]: 'mock error',
           [realAccount.id]: 'real error'
         },
+        accountHealthByAccountId: {
+          [mockAccount.id]: {
+            status: 'auth_error',
+            reason: 'mock auth error',
+            source: 'gateway',
+            markedAt: '2026-03-08T00:00:00.000Z'
+          },
+          [realAccount.id]: {
+            status: 'auth_error',
+            reason: 'real auth error',
+            source: 'gateway',
+            markedAt: '2026-03-08T00:00:00.000Z'
+          }
+        },
         wakeSchedulesByAccountId: {
           [mockAccount.id]: {
             enabled: true,
@@ -291,6 +321,7 @@ describe('codex shared helpers', () => {
     expect(filtered.settings.statusBarAccountIds).toEqual([mockAccount.id])
     expect(Object.keys(filtered.usageByAccountId)).toEqual([mockAccount.id])
     expect(Object.keys(filtered.usageErrorByAccountId)).toEqual([mockAccount.id])
+    expect(Object.keys(filtered.accountHealthByAccountId)).toEqual([mockAccount.id])
     expect(Object.keys(filtered.wakeSchedulesByAccountId)).toEqual([mockAccount.id])
   })
 
@@ -368,6 +399,28 @@ describe('codex shared helpers', () => {
     }
 
     expect(resolveBestAccount(accounts, usageByAccountId, 'a')?.id).toBe('a')
+  })
+
+  it('excludes accounts with blocking account health from best-account selection', () => {
+    const accounts = [
+      createAccount('a', { email: 'a@example.com' }),
+      createAccount('b', { email: 'b@example.com' })
+    ]
+    const usageByAccountId = {
+      a: createUsage({ primary: { usedPercent: 10, windowDurationMins: 300, resetsAt: null } }),
+      b: createUsage({ primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: null } })
+    }
+
+    expect(
+      resolveBestAccount(accounts, usageByAccountId, 'a', {
+        a: {
+          status: 'auth_error',
+          reason: '401',
+          source: 'gateway',
+          markedAt: '2026-03-08T00:00:00.000Z'
+        }
+      })?.id
+    ).toBe('b')
   })
 
   it('returns null when no account has both 5h and weekly quota left', () => {

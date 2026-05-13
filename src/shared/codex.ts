@@ -300,6 +300,23 @@ export interface WakeAccountRateLimitsResult {
   requestResult: WakeAccountRequestResult | null
 }
 
+export type AccountHealthStatus = 'normal' | 'auth_error'
+
+export type AccountHealthSource = 'gateway' | 'refresh' | 'usage' | 'manual'
+
+export interface AccountHealth {
+  status: Exclude<AccountHealthStatus, 'normal'>
+  reason: string
+  markedAt: string
+  source: AccountHealthSource
+  httpStatus?: number
+}
+
+export interface UpdateAccountHealthInput {
+  status: AccountHealthStatus
+  reason?: string
+}
+
 export interface AccountSummary {
   id: string
   email?: string
@@ -569,6 +586,7 @@ export interface AppSnapshot {
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
   usageErrorByAccountId: Record<string, string>
+  accountHealthByAccountId: Record<string, AccountHealth>
   wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
   tokenCostByInstanceId: Record<string, TokenCostSummary>
   tokenCostErrorByInstanceId: Record<string, string>
@@ -617,6 +635,7 @@ export interface CliAccountListPayload {
   accounts: AccountSummary[]
   activeAccountId?: string
   currentSession: CurrentSessionSummary | null
+  accountHealthByAccountId?: Record<string, AccountHealth>
 }
 
 export interface CliLoginResult {
@@ -907,6 +926,10 @@ export function filterLocalMockAppSnapshot(snapshot: AppSnapshot): AppSnapshot {
     },
     usageByAccountId: filterSnapshotRecord(snapshot.usageByAccountId, visibleAccountIds),
     usageErrorByAccountId: filterSnapshotRecord(snapshot.usageErrorByAccountId, visibleAccountIds),
+    accountHealthByAccountId: filterSnapshotRecord(
+      snapshot.accountHealthByAccountId ?? {},
+      visibleAccountIds
+    ),
     wakeSchedulesByAccountId: filterSnapshotRecord(
       snapshot.wakeSchedulesByAccountId,
       visibleAccountIds
@@ -1056,13 +1079,18 @@ function timestampScore(value?: string): number {
 export function resolveBestAccount(
   accounts: AccountSummary[],
   usageByAccountId: Record<string, AccountRateLimits>,
-  activeAccountId?: string
+  activeAccountId?: string,
+  accountHealthByAccountId: Record<string, AccountHealth> = {}
 ): AccountSummary | null {
-  if (!accounts.length) {
+  const usableAccounts = accounts.filter(
+    (account) => !isAccountHealthBlocking(accountHealthByAccountId[account.id])
+  )
+
+  if (!usableAccounts.length) {
     return null
   }
 
-  const rankedAccounts = [...accounts].sort((left, right) => {
+  const rankedAccounts = [...usableAccounts].sort((left, right) => {
     const leftUsage = usageByAccountId[left.id]
     const rightUsage = usageByAccountId[right.id]
     const leftQuota = accountQuotaScore(leftUsage)
@@ -1124,6 +1152,14 @@ export function resolveBestAccount(
       (account) => accountQuotaScore(usageByAccountId[account.id]).hasAvailableQuota
     ) ?? null
   )
+}
+
+export function accountHealthStatus(health?: AccountHealth | null): AccountHealthStatus {
+  return health?.status ?? 'normal'
+}
+
+export function isAccountHealthBlocking(health?: AccountHealth | null): boolean {
+  return accountHealthStatus(health) === 'auth_error'
 }
 
 export function statusBarAccounts(

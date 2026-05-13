@@ -16,6 +16,7 @@ import type { StoredAuthRefreshResult } from './codex-services-shared'
 import { getTcpPortOccupant } from './codex-auth-shared'
 import {
   isLocalMockAccount,
+  isAccountHealthBlocking,
   localGatewayBaseUrl,
   maskLocalGatewayApiKey,
   normalizeLocalGatewaySettings,
@@ -33,6 +34,7 @@ import {
 } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { resolveChatGptAccountIdFromTokens } from '../shared/openai-auth'
+import { shouldMarkAccountAuthError } from './codex-services-shared'
 
 type StickyTarget =
   | { kind: 'account'; id: string; protocol: 'openai'; expiresAt: number }
@@ -311,6 +313,24 @@ function logMessageFromResponseBody(rawBody: string): string | undefined {
   } catch {
     return truncateLogMessage(trimmed)
   }
+}
+
+function isGatewayAuthFailureStatus(status: number): boolean {
+  return status === 401 || status === 403
+}
+
+async function authFailureReasonFromResponse(upstream: Response): Promise<string> {
+  const fallback = `Upstream returned HTTP ${upstream.status}.`
+  const raw = await upstream
+    .clone()
+    .text()
+    .catch(() => '')
+  const message = logMessageFromResponseBody(raw)
+  return message ? `${fallback} ${message}` : fallback
+}
+
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
 }
 
 function installResponseBodyCapture(response: ServerResponse): () => string {
@@ -654,6 +674,7 @@ export class CodexLocalGatewayService {
   private logsLoadTask: Promise<void> | null = null
   private logsPersistTask: Promise<void> | null = null
   private stickyTargets = new Map<string, StickyTarget>()
+  private allowedTargetsSignature = ''
 
   constructor(
     private readonly options: {
@@ -800,7 +821,22 @@ export class CodexLocalGatewayService {
 
   private async settings(): Promise<LocalGatewaySettings> {
     const snapshot = await this.options.store.getSnapshot(false)
-    return normalizeLocalGatewaySettings(snapshot.settings.localGateway)
+    const settings = normalizeLocalGatewaySettings(snapshot.settings.localGateway)
+    this.clearStickyWhenAllowedTargetsChange(settings)
+    return settings
+  }
+
+  private clearStickyWhenAllowedTargetsChange(settings: LocalGatewaySettings): void {
+    const signature = JSON.stringify({
+      groups: [...settings.allowedGroupIds].sort(),
+      accounts: [...settings.allowedAccountIds].sort()
+    })
+
+    if (this.allowedTargetsSignature && this.allowedTargetsSignature !== signature) {
+      this.stickyTargets.clear()
+    }
+
+    this.allowedTargetsSignature = signature
   }
 
   private async ensureApiKey(): Promise<LocalGatewaySettings> {
@@ -963,10 +999,14 @@ export class CodexLocalGatewayService {
     const snapshot = await this.options.store.getSnapshot(false)
     const providers = await this.options.providerStore.list()
     const allowed = await this.allowedTargetSets()
+    const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
     const data = [
       ...snapshot.accounts
         .filter(
-          (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
+          (account) =>
+            !isLocalMockAccount(account) &&
+            !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
+            this.matchesAllowedTargets(account, allowed)
         )
         .map((account) => ({
           id: account.email ? `codex:${account.email}` : `codex:${account.id}`,
@@ -986,10 +1026,14 @@ export class CodexLocalGatewayService {
     const snapshot = await this.options.store.getSnapshot(false)
     const providers = await this.options.providerStore.list()
     const allowed = await this.allowedTargetSets()
+    const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
     const modelIds = new Set(providers.map((provider) => provider.model))
     if (
       snapshot.accounts.some(
-        (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
+        (account) =>
+          !isLocalMockAccount(account) &&
+          !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
+          this.matchesAllowedTargets(account, allowed)
       )
     ) {
       modelIds.add('gpt-5.4')
@@ -1377,29 +1421,127 @@ export class CodexLocalGatewayService {
     jsonBody: Record<string, unknown>
   ): Promise<Response> {
     const stickyKey = stickyKeyFromRequest(request.headers, jsonBody)
-    const sticky = stickyKey ? this.resolveSticky(stickyKey, 'openai') : null
-    const account =
-      sticky?.kind === 'account' ? await this.accountById(sticky.id) : await this.bestAccount()
-    if (!account) {
-      throw new Error('No available Codex account for local gateway.')
+    const attemptedAccountIds = new Set<string>()
+
+    while (true) {
+      const account = await this.selectAccountForCodexRequest(stickyKey, attemptedAccountIds)
+      if (!account) {
+        throw new Error('No available Codex account for local gateway.')
+      }
+
+      attemptedAccountIds.add(account.id)
+      const attempt = await this.fetchCodexWithAccountAndRefresh(account, request, body)
+      if (!attempt.upstream) {
+        continue
+      }
+
+      if (isGatewayAuthFailureStatus(attempt.upstream.status)) {
+        await this.markGatewayAccountAuthError(
+          attempt.account.id,
+          await authFailureReasonFromResponse(attempt.upstream),
+          attempt.upstream.status
+        )
+        if (stickyKey) {
+          this.evictSticky(stickyKey)
+        }
+        continue
+      }
+
+      if (stickyKey && attempt.upstream.ok) {
+        this.rememberSticky(stickyKey, {
+          kind: 'account',
+          id: attempt.account.id,
+          protocol: 'openai',
+          expiresAt: this.stickyExpiresAt()
+        })
+      }
+      return attempt.upstream
+    }
+  }
+
+  private async selectAccountForCodexRequest(
+    stickyKey: string | null,
+    excludedAccountIds: Set<string>
+  ): Promise<AccountSummary | null> {
+    if (stickyKey) {
+      const sticky = this.resolveSticky(stickyKey, 'openai')
+      if (sticky?.kind === 'account') {
+        if (excludedAccountIds.has(sticky.id)) {
+          this.evictSticky(stickyKey)
+        } else {
+          const stickyAccount = await this.accountById(sticky.id)
+          if (stickyAccount) {
+            return stickyAccount
+          }
+          this.evictSticky(stickyKey)
+        }
+      }
     }
 
-    const upstream = await this.fetchCodexWithAccount(account, request, body)
-    if ((upstream.status === 401 || upstream.status === 403) && account.id) {
+    return this.bestAccount(excludedAccountIds)
+  }
+
+  private async fetchCodexWithAccountAndRefresh(
+    account: AccountSummary,
+    request: IncomingMessage,
+    body: Buffer
+  ): Promise<{ account: AccountSummary; upstream: Response | null }> {
+    let upstream: Response
+    try {
+      upstream = await this.fetchCodexWithAccount(account, request, body)
+    } catch (error) {
+      if (shouldMarkAccountAuthError(error)) {
+        await this.markGatewayAccountAuthError(
+          account.id,
+          errorMessage(error, 'Selected Codex account failed before upstream request.')
+        )
+        return { account, upstream: null }
+      }
+      throw error
+    }
+
+    if (!isGatewayAuthFailureStatus(upstream.status)) {
+      return { account, upstream }
+    }
+
+    let refreshed: StoredAuthRefreshResult
+    try {
       const auth = await this.options.store.getStoredAuthPayload(account.id)
-      await this.options.refreshStoredAuthGuarded(account.id, auth)
-      return this.fetchCodexWithAccount(account, request, body)
+      refreshed = await this.options.refreshStoredAuthGuarded(account.id, auth)
+    } catch (error) {
+      if (shouldMarkAccountAuthError(error)) {
+        await this.markGatewayAccountAuthError(
+          account.id,
+          errorMessage(error, 'Failed to refresh selected Codex account.'),
+          upstream.status
+        )
+        return { account, upstream: null }
+      }
+      throw error
     }
 
-    if (stickyKey && upstream.ok) {
-      this.rememberSticky(stickyKey, {
-        kind: 'account',
-        id: account.id,
-        protocol: 'openai',
-        expiresAt: this.stickyExpiresAt()
-      })
+    const retryAccount = await this.accountById(refreshed.accountId)
+    if (!retryAccount) {
+      this.evictStickyForAccount(account.id)
+      return { account, upstream: null }
     }
-    return upstream
+
+    try {
+      return {
+        account: retryAccount,
+        upstream: await this.fetchCodexWithAccount(retryAccount, request, body)
+      }
+    } catch (error) {
+      if (shouldMarkAccountAuthError(error)) {
+        await this.markGatewayAccountAuthError(
+          retryAccount.id,
+          errorMessage(error, 'Selected Codex account failed after refresh.'),
+          upstream.status
+        )
+        return { account: retryAccount, upstream: null }
+      }
+      throw error
+    }
   }
 
   private async fetchCodexWithAccount(
@@ -1485,23 +1627,37 @@ export class CodexLocalGatewayService {
     await writeFetchResponse(response, upstream)
   }
 
-  private async bestAccount(): Promise<AccountSummary | null> {
+  private async bestAccount(excludedAccountIds = new Set<string>()): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
+    const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
+    this.evictStickyForUnhealthyAccounts(accountHealthByAccountId)
     const allowed = await this.allowedTargetSets()
     const accounts = snapshot.accounts.filter(
-      (account) => !isLocalMockAccount(account) && this.matchesAllowedTargets(account, allowed)
+      (account) =>
+        !excludedAccountIds.has(account.id) &&
+        !isLocalMockAccount(account) &&
+        !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
+        this.matchesAllowedTargets(account, allowed)
     )
-    return resolveBestAccount(accounts, snapshot.usageByAccountId, snapshot.activeAccountId)
+    return resolveBestAccount(
+      accounts,
+      snapshot.usageByAccountId,
+      snapshot.activeAccountId,
+      accountHealthByAccountId
+    )
   }
 
   private async accountById(accountId: string): Promise<AccountSummary | null> {
     const snapshot = await this.options.store.getSnapshot(false)
+    const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
+    this.evictStickyForUnhealthyAccounts(accountHealthByAccountId)
     const allowed = await this.allowedTargetSets()
     return (
       snapshot.accounts.find(
         (account) =>
           account.id === accountId &&
           !isLocalMockAccount(account) &&
+          !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
           this.matchesAllowedTargets(account, allowed)
       ) ?? null
     )
@@ -1572,6 +1728,53 @@ export class CodexLocalGatewayService {
 
   private rememberSticky(key: string, target: StickyTarget): void {
     this.stickyTargets.set(key, target)
+  }
+
+  private evictSticky(key: string): void {
+    this.stickyTargets.delete(key)
+  }
+
+  private evictStickyForAccount(accountId: string): void {
+    for (const [key, target] of this.stickyTargets.entries()) {
+      if (target.kind === 'account' && target.id === accountId) {
+        this.stickyTargets.delete(key)
+      }
+    }
+  }
+
+  private evictStickyForUnhealthyAccounts(
+    accountHealthByAccountId: Record<string, { status?: string }>
+  ): void {
+    const unhealthyAccountIds = new Set(
+      Object.entries(accountHealthByAccountId)
+        .filter(([, health]) => health.status === 'auth_error')
+        .map(([accountId]) => accountId)
+    )
+    if (!unhealthyAccountIds.size) {
+      return
+    }
+
+    for (const [key, target] of this.stickyTargets.entries()) {
+      if (target.kind === 'account' && unhealthyAccountIds.has(target.id)) {
+        this.stickyTargets.delete(key)
+      }
+    }
+  }
+
+  private async markGatewayAccountAuthError(
+    accountId: string,
+    reason: string,
+    httpStatus?: number
+  ): Promise<void> {
+    await this.options.store.markAccountAuthError(accountId, reason, 'gateway', httpStatus)
+    this.evictStickyForAccount(accountId)
+    await this.pushLog({
+      method: 'SYSTEM',
+      path: 'account-health',
+      status: httpStatus ?? 200,
+      durationMs: 0,
+      message: `Marked account ${accountId} as auth_error: ${truncateLogMessage(reason, 320)}`
+    })
   }
 
   private async ensureLogsLoaded(): Promise<void> {

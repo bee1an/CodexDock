@@ -16,6 +16,7 @@ import {
   writeProviderConfigToCodexHome
 } from './codex-launcher'
 import {
+  isAccountHealthBlocking,
   isLocalMockAccount,
   localGatewayBaseUrl,
   normalizeLocalGatewaySettings,
@@ -83,6 +84,15 @@ export function createCodexServicesInstanceRuntime(
     'prompts',
     'automations'
   ])
+
+  async function assertAccountHealthAllowsUse(accountId: string): Promise<void> {
+    const snapshot = await store.getSnapshot(loginCoordinator.isRunning())
+    if (isAccountHealthBlocking((snapshot.accountHealthByAccountId ?? {})[accountId])) {
+      throw new Error(
+        'Account is marked as auth_error. Repair it and mark it normal before using it.'
+      )
+    }
+  }
   const localGatewayInstanceName = 'Local Gateway'
   const localGatewayProviderModel = 'gpt-5.4'
 
@@ -157,6 +167,7 @@ export function createCodexServicesInstanceRuntime(
 
   async function assertDefaultCodexLaunchAllowed(explicitAccountId?: string): Promise<void> {
     if (explicitAccountId) {
+      await assertAccountHealthAllowsUse(explicitAccountId)
       if (isLocalMockAccount(await store.getAccountSummary(explicitAccountId))) {
         throw new Error(LOCAL_MOCK_OPEN_ERROR)
       }
@@ -165,6 +176,7 @@ export function createCodexServicesInstanceRuntime(
 
     const defaultInstance = await instanceStore.getDefaultInstance()
     if (defaultInstance.bindAccountId) {
+      await assertAccountHealthAllowsUse(defaultInstance.bindAccountId)
       if (isLocalMockAccount(await store.getAccountSummary(defaultInstance.bindAccountId))) {
         throw new Error(LOCAL_MOCK_OPEN_ERROR)
       }
@@ -172,6 +184,16 @@ export function createCodexServicesInstanceRuntime(
     }
 
     const snapshot = await store.getSnapshot(loginCoordinator.isRunning())
+    if (
+      snapshot.currentSession?.storedAccountId &&
+      isAccountHealthBlocking(
+        (snapshot.accountHealthByAccountId ?? {})[snapshot.currentSession.storedAccountId]
+      )
+    ) {
+      throw new Error(
+        'Account is marked as auth_error. Repair it and mark it normal before using it.'
+      )
+    }
     if (isLocalMockAccount(snapshot.currentSession)) {
       throw new Error(LOCAL_MOCK_OPEN_ERROR)
     }
@@ -179,6 +201,7 @@ export function createCodexServicesInstanceRuntime(
 
   async function assertIsolatedCodexLaunchAllowed(bindAccountId?: string): Promise<void> {
     if (bindAccountId) {
+      await assertAccountHealthAllowsUse(bindAccountId)
       if (isLocalMockAccount(await store.getAccountSummary(bindAccountId))) {
         throw new Error(LOCAL_MOCK_OPEN_ISOLATED_ERROR)
       }
@@ -192,6 +215,7 @@ export function createCodexServicesInstanceRuntime(
   }
 
   async function prepareLaunchAuthPayload(accountId: string): Promise<CodexAuthPayload> {
+    await assertAccountHealthAllowsUse(accountId)
     const storedAuth = await store.getStoredAuthPayload(accountId)
 
     return (
@@ -228,6 +252,7 @@ export function createCodexServicesInstanceRuntime(
 
   async function resolveAccountIdOrThrow(explicitAccountId?: string): Promise<string> {
     if (explicitAccountId) {
+      await assertAccountHealthAllowsUse(explicitAccountId)
       return explicitAccountId
     }
 
@@ -237,6 +262,7 @@ export function createCodexServicesInstanceRuntime(
       throw new Error('Account not found.')
     }
 
+    await assertAccountHealthAllowsUse(resolved)
     return resolved
   }
 

@@ -51,6 +51,7 @@ import {
   type ReadCodexSessionDetailInput,
   type TokenCostDetail,
   type TokenCostReadOptions,
+  type UpdateAccountHealthInput,
   type UpdateAccountWakeScheduleInput,
   type UpdateAccountTokensInput,
   type UpdateCodexInstanceInput,
@@ -67,6 +68,7 @@ import {
   type PromptSummary,
   type UpdatePromptInput
 } from '../shared/codex'
+import { isAccountHealthBlocking } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
 import { decodeJwtPayload } from '../shared/openai-auth'
 
@@ -179,7 +181,19 @@ function customProviderLabel(provider: Pick<CustomProviderSummary, 'name' | 'bas
 }
 
 function resolveOptionalAccountId(snapshot: AppSnapshot): string | null {
-  return snapshot.activeAccountId ?? snapshot.accounts[0]?.id ?? null
+  if (
+    snapshot.activeAccountId &&
+    !isAccountHealthBlocking((snapshot.accountHealthByAccountId ?? {})[snapshot.activeAccountId])
+  ) {
+    return snapshot.activeAccountId
+  }
+
+  const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
+  return (
+    snapshot.accounts.find(
+      (account) => !isAccountHealthBlocking(accountHealthByAccountId[account.id])
+    )?.id ?? null
+  )
 }
 
 function shouldRefreshStoredAuth(error: unknown, refreshToken?: string): boolean {
@@ -233,6 +247,23 @@ function shouldClearStoredUsage(error: unknown): boolean {
     message.includes('revoked') ||
     message.includes('already used') ||
     message.includes('invalid token')
+  )
+}
+
+function shouldMarkAccountAuthError(error: unknown): boolean {
+  if (shouldClearStoredUsage(error)) {
+    return true
+  }
+
+  if (!(error instanceof Error)) {
+    return false
+  }
+
+  const message = error.message.toLowerCase()
+  return (
+    message.includes('selected codex account is missing access token') ||
+    message.includes('missing access token') ||
+    message.includes('missing refresh token')
   )
 }
 
@@ -351,6 +382,7 @@ export interface CodexServices {
     removeMany(accountIds: string[]): Promise<AppSnapshot>
     updateGroups(accountId: string, groupIds: string[]): Promise<AppSnapshot>
     updateTokens(accountId: string, input: UpdateAccountTokensInput): Promise<AppSnapshot>
+    updateHealth(accountId: string, input: UpdateAccountHealthInput): Promise<AppSnapshot>
     getTokens(accountId: string): Promise<AccountTokensDetail>
     getWakeSchedule(accountId: string): Promise<AccountWakeSchedule | null>
     updateWakeSchedule(
@@ -529,6 +561,7 @@ export {
   resolveOptionalAccountId,
   shouldRefreshStoredAuth,
   shouldClearStoredUsage,
+  shouldMarkAccountAuthError,
   isPermanentAuthRefreshFailure,
   localMockUsageError,
   makeHealthCheck,

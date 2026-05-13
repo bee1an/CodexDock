@@ -5,6 +5,7 @@ import type {
   CliAccountListPayload,
   CliResult,
   LoginEvent,
+  UpdateAccountHealthInput,
   UpdateAccountTokensInput,
   UpdateCustomProviderInput
 } from '../shared/codex'
@@ -77,7 +78,8 @@ async function execute(
           const payload: CliAccountListPayload = {
             accounts: snapshot.accounts,
             activeAccountId: snapshot.activeAccountId,
-            currentSession: snapshot.currentSession
+            currentSession: snapshot.currentSession,
+            accountHealthByAccountId: snapshot.accountHealthByAccountId
           }
           printAccountList(payload, silent)
           return { code: EXIT_OK, payload: toCliResult(payload) }
@@ -157,6 +159,53 @@ async function execute(
           }
           const snapshot = await runtime.services.accounts.remove(accountId)
           printIfNeeded(`Removed account: ${accountId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
+        }
+        case 'status': {
+          const accountId = rest[0]
+          const rawStatus = rest[1]
+          if (!accountId || !rawStatus) {
+            throw new CliError(
+              'Usage: cdock account status <account-id> <normal|auth-error> [--reason <text>]',
+              EXIT_USAGE
+            )
+          }
+
+          let reason: string | undefined
+          const extra = rest.slice(2)
+          for (let index = 0; index < extra.length; index += 1) {
+            const arg = extra[index]
+            if (arg === '--reason') {
+              const value = extra[index + 1]
+              if (!value) {
+                throw new CliError('Missing value for --reason', EXIT_USAGE)
+              }
+              reason = value
+              index += 1
+              continue
+            }
+            if (arg.startsWith('--reason=')) {
+              reason = arg.slice('--reason='.length)
+              if (!reason) {
+                throw new CliError('Missing value for --reason', EXIT_USAGE)
+              }
+              continue
+            }
+            throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+          }
+
+          const status = (rawStatus === 'auth-error'
+            ? 'auth_error'
+            : rawStatus) as UpdateAccountHealthInput['status']
+          if (status !== 'normal' && status !== 'auth_error') {
+            throw new CliError('Account status must be normal or auth-error', EXIT_USAGE)
+          }
+
+          const snapshot = await runtime.services.accounts.updateHealth(accountId, {
+            status,
+            reason
+          })
+          printIfNeeded(`Updated account status: ${accountId} -> ${rawStatus}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         case 'update-tokens': {

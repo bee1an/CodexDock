@@ -18,6 +18,7 @@ import {
   isPermanentAuthRefreshFailure,
   localMockUsageError,
   shouldClearStoredUsage,
+  shouldMarkAccountAuthError,
   shouldRefreshStoredAuth,
   type CodexServicesRuntimeContext,
   type StoredAuthRefreshResult,
@@ -129,10 +130,13 @@ export function createCodexServicesAuthRuntime(
         }
       } catch (error) {
         if (isPermanentAuthRefreshFailure(error)) {
+          const normalizedError =
+            error instanceof Error ? error : new Error('OpenAI token refresh failed')
           authRefreshFailuresByAccountId.set(accountId, {
             auth: latestAuth,
-            error: error instanceof Error ? error : new Error('OpenAI token refresh failed')
+            error: normalizedError
           })
+          await store.markAccountAuthError(accountId, normalizedError.message, 'refresh')
         }
         throw error
       }
@@ -224,6 +228,10 @@ export function createCodexServicesAuthRuntime(
       if (shouldClearStoredUsage(error)) {
         await store.clearAccountRateLimits(targetAccountId)
       }
+      if (shouldMarkAccountAuthError(error)) {
+        const detail = error instanceof Error ? error.message : 'Failed to read account limits.'
+        await store.markAccountAuthError(targetAccountId, detail, 'usage')
+      }
 
       const detail = error instanceof Error ? error.message : 'Failed to read account limits.'
       await store.saveAccountUsageError(targetAccountId, detail)
@@ -280,6 +288,10 @@ export function createCodexServicesAuthRuntime(
     } catch (error) {
       if (shouldClearStoredUsage(error)) {
         await store.clearAccountRateLimits(targetAccountId)
+      }
+      if (shouldMarkAccountAuthError(error)) {
+        const detail = error instanceof Error ? error.message : 'Failed to wake account limits.'
+        await store.markAccountAuthError(targetAccountId, detail, 'usage')
       }
 
       const detail = error instanceof Error ? error.message : 'Failed to wake account limits.'

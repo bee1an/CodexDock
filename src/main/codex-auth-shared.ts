@@ -5,6 +5,8 @@ import { promisify } from 'node:util'
 
 import type {
   AccountGroup,
+  AccountHealth,
+  AccountHealthSource,
   AccountRateLimits,
   AccountWakeSchedule,
   AccountSummary,
@@ -42,18 +44,19 @@ interface PersistedAccount extends AccountSummary {
 }
 
 interface PersistedState {
-  version: 3
+  version: 4
   activeAccountId?: string
   accounts: PersistedAccount[]
   groups: AccountGroup[]
   settings: AppSettings
   usageByAccountId: Record<string, AccountRateLimits>
   usageErrorByAccountId: Record<string, string>
+  accountHealthByAccountId: Record<string, AccountHealth>
   wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
 }
 
 interface LegacyPersistedState {
-  version?: 1 | 2
+  version?: 1 | 2 | 3
   activeAccountId?: string
   accounts?: PersistedAccount[]
   groups?: AccountGroup[]
@@ -61,6 +64,7 @@ interface LegacyPersistedState {
   settings?: AppSettings
   usageByAccountId?: Record<string, AccountRateLimits>
   usageErrorByAccountId?: Record<string, string>
+  accountHealthByAccountId?: Record<string, AccountHealth>
   wakeSchedulesByAccountId?: Record<string, AccountWakeSchedule>
 }
 
@@ -109,12 +113,13 @@ const execFile = promisify(execFileCallback)
 
 function defaultState(): PersistedState {
   return {
-    version: 3,
+    version: 4,
     accounts: [],
     groups: [],
     settings: defaultSettings(),
     usageByAccountId: {},
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {}
   }
 }
@@ -146,15 +151,17 @@ function normalizePersistedState(parsed: PersistedState | LegacyPersistedState):
   const raw = parsed as Record<string, unknown>
   const rawAccounts = (raw.accounts ?? []) as Array<PersistedAccount & { tagIds?: string[] }>
   const rawGroups = (raw.groups ?? raw.tags ?? []) as AccountGroup[]
+  const accounts = rawAccounts.map((account) => ({
+    ...account,
+    groupIds: dedupeAccountGroupIds(account.groupIds ?? account.tagIds ?? [])
+  }))
+  const accountIds = new Set(accounts.map((account) => account.id))
 
   return {
     ...defaultState(),
     ...parsed,
-    version: 3,
-    accounts: rawAccounts.map((account) => ({
-      ...account,
-      groupIds: dedupeAccountGroupIds(account.groupIds ?? account.tagIds ?? [])
-    })),
+    version: 4,
+    accounts,
     groups: rawGroups,
     settings: {
       ...defaultSettings(),
@@ -164,12 +171,67 @@ function normalizePersistedState(parsed: PersistedState | LegacyPersistedState):
     },
     usageByAccountId: parsed.usageByAccountId ?? {},
     usageErrorByAccountId: parsed.usageErrorByAccountId ?? {},
+    accountHealthByAccountId: Object.fromEntries(
+      Object.entries(normalizeAccountHealthByAccountId(parsed.accountHealthByAccountId ?? {})).filter(
+        ([accountId]) => accountIds.has(accountId)
+      )
+    ),
     wakeSchedulesByAccountId: Object.fromEntries(
       Object.entries(parsed.wakeSchedulesByAccountId ?? {})
         .map(([accountId, schedule]) => [accountId, normalizeWakeSchedule(schedule)])
         .filter((entry): entry is [string, AccountWakeSchedule] => Boolean(entry[1]))
     )
   }
+}
+
+function normalizeAccountHealthSource(value: unknown): AccountHealthSource {
+  switch (value) {
+    case 'gateway':
+    case 'refresh':
+    case 'usage':
+    case 'manual':
+      return value
+    default:
+      return 'manual'
+  }
+}
+
+function normalizeAccountHealthByAccountId(
+  raw: Record<string, AccountHealth>
+): Record<string, AccountHealth> {
+  return Object.fromEntries(
+    Object.entries(raw)
+      .map(([accountId, health]): [string, AccountHealth] | null => {
+        if (!health || typeof health !== 'object' || health.status !== 'auth_error') {
+          return null
+        }
+
+        const reason =
+          typeof health.reason === 'string' && health.reason.trim()
+            ? health.reason.trim()
+            : 'Account authentication failed.'
+        const markedAt =
+          typeof health.markedAt === 'string' && !Number.isNaN(Date.parse(health.markedAt))
+            ? health.markedAt
+            : new Date().toISOString()
+        const httpStatus =
+          typeof health.httpStatus === 'number' && Number.isFinite(health.httpStatus)
+            ? health.httpStatus
+            : undefined
+
+        return [
+          accountId,
+          {
+            status: 'auth_error',
+            reason,
+            markedAt,
+            source: normalizeAccountHealthSource(health.source),
+            ...(httpStatus ? { httpStatus } : {})
+          }
+        ]
+      })
+      .filter((entry): entry is [string, AccountHealth] => Boolean(entry))
+  )
 }
 
 function describeError(error: unknown): string {

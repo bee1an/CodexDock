@@ -1198,6 +1198,185 @@ describe('createCodexServices', () => {
     }
   })
 
+  it('marks local gateway auth failures unhealthy and retries with the next allowed account', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlText = String(url)
+      if (urlText.includes('/oauth/token')) {
+        return createJsonResponse({ error: 'invalid_grant' }, 401)
+      }
+      if (urlText.includes('/codex/responses')) {
+        const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+        if (chatgptAccountId === 'acct-a') {
+          return createJsonResponse(
+            { error: { message: 'invalid token', code: 'invalid_token' } },
+            401
+          )
+        }
+        return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+      }
+
+      throw new Error(`Unexpected fetch: ${urlText}`)
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-a',
+        email: 'a@example.com',
+        primaryUsedPercent: 10,
+        secondaryUsedPercent: 10
+      })
+    )
+    let snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-b',
+        email: 'b@example.com',
+        primaryUsedPercent: 60,
+        secondaryUsedPercent: 60
+      })
+    )
+    const accountA = snapshot.accounts.find((account) => account.email === 'a@example.com')
+    const accountB = snapshot.accounts.find((account) => account.email === 'b@example.com')
+    expect(accountA).toBeTruthy()
+    expect(accountB).toBeTruthy()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [accountA!.id, accountB!.id]
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as { accountId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.accountId).toBe('acct-b')
+
+      const codexAccountIds = vi
+        .mocked(platform.fetch)
+        .mock.calls.filter(([url]) => String(url).includes('/codex/responses'))
+        .map(([, init]) => new Headers(init?.headers as HeadersInit).get('chatgpt-account-id'))
+      expect(codexAccountIds).toEqual(['acct-a', 'acct-b'])
+
+      snapshot = await services.getSnapshot()
+      expect(snapshot.accountHealthByAccountId[accountA!.id]).toMatchObject({
+        status: 'auth_error',
+        httpStatus: 401
+      })
+      expect(snapshot.accountHealthByAccountId[accountB!.id]).toBeUndefined()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('evicts unhealthy sticky local gateway accounts until they are manually marked normal', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlText = String(url)
+      if (!urlText.includes('/codex/responses')) {
+        throw new Error(`Unexpected fetch: ${urlText}`)
+      }
+
+      const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+      return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-a',
+        email: 'a@example.com',
+        primaryUsedPercent: 10,
+        secondaryUsedPercent: 10
+      })
+    )
+    const snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-b',
+        email: 'b@example.com',
+        primaryUsedPercent: 60,
+        secondaryUsedPercent: 60
+      })
+    )
+    const accountA = snapshot.accounts.find((account) => account.email === 'a@example.com')
+    const accountB = snapshot.accounts.find((account) => account.email === 'b@example.com')
+    expect(accountA).toBeTruthy()
+    expect(accountB).toBeTruthy()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [accountA!.id, accountB!.id]
+      }
+    })
+
+    const requestWithSticky = async (stickySession: string): Promise<string | undefined> => {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json',
+          'x-sticky-session': stickySession
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as { accountId?: string }
+      expect(response.status).toBe(200)
+      return payload.accountId
+    }
+
+    await services.gateway.start()
+    try {
+      await expect(requestWithSticky('sticky-session')).resolves.toBe('acct-a')
+
+      await services.accounts.updateHealth(accountA!.id, {
+        status: 'auth_error',
+        reason: 'manual repair required'
+      })
+      await expect(requestWithSticky('sticky-session')).resolves.toBe('acct-b')
+
+      await services.accounts.updateHealth(accountA!.id, { status: 'normal' })
+      await expect(requestWithSticky('fresh-session')).resolves.toBe('acct-a')
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
   it('lists default and named instances in service results and snapshots', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({

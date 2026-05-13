@@ -1,6 +1,7 @@
 import {
   usagePollDueInMs,
   usagePollingIntervalMs,
+  isAccountHealthBlocking,
   type AccountSummary,
   type AppSnapshot
 } from '../shared/codex'
@@ -70,11 +71,15 @@ export function createUsagePollingController(
 
     cleanupRetryState(snapshot)
     clearTimer()
+    const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
+    const pollableAccounts = snapshot.accounts.filter(
+      (account) => !isAccountHealthBlocking(accountHealthByAccountId[account.id])
+    )
 
     const defaultDelay = usagePollingIntervalMs(snapshot.settings.usagePollingMinutes)
-    const nextDelay = snapshot.accounts.length
+    const nextDelay = pollableAccounts.length
       ? Math.min(
-          ...snapshot.accounts.map((account) => accountDueInMs(snapshot, account, Date.now()))
+          ...pollableAccounts.map((account) => accountDueInMs(snapshot, account, Date.now()))
         )
       : defaultDelay
 
@@ -98,8 +103,11 @@ export function createUsagePollingController(
       try {
         const snapshot = await options.getSnapshot()
         cleanupRetryState(snapshot)
+        const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
         const dueAccounts = snapshot.accounts.filter(
-          (account) => accountDueInMs(snapshot, account, Date.now()) === 0
+          (account) =>
+            !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
+            accountDueInMs(snapshot, account, Date.now()) === 0
         )
 
         if (!dueAccounts.length) {

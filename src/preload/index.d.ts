@@ -40,6 +40,7 @@ import type {
   TokenCostDetail,
   TokenCostReadOptions,
   LocalGatewayStatus,
+  UpdateAccountHealthInput,
   UpdateAccountWakeScheduleInput,
   UpdateAccountTokensInput,
   UpdatePromptInput,
@@ -70,6 +71,7 @@ interface CodexDesktopApi {
   removeAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   updateAccountGroups: (accountId: string, groupIds: string[]) => Promise<AppSnapshot>
   updateAccountTokens: (accountId: string, input: UpdateAccountTokensInput) => Promise<AppSnapshot>
+  updateAccountHealth: (accountId: string, input: UpdateAccountHealthInput) => Promise<AppSnapshot>
   getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   refreshAccountTokens: (accountId: string) => Promise<AccountTokenRefreshResult>
   getAccountWakeSchedule: (accountId: string) => Promise<AccountWakeSchedule | null>

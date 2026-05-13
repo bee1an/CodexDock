@@ -47,6 +47,7 @@ import {
   type ProbeProviderModelsInput,
   type ReadCodexSessionDetailInput,
   type TokenCostReadOptions,
+  type UpdateAccountHealthInput,
   type UpdateAccountWakeScheduleInput,
   type UpdateAccountTokensInput,
   type WakeAccountRateLimitsInput
@@ -162,7 +163,8 @@ function bestAccountMenuLabel(snapshot: AppSnapshot): string {
   const bestAccount = resolveBestAccount(
     snapshot.accounts,
     snapshot.usageByAccountId,
-    snapshot.activeAccountId
+    snapshot.activeAccountId,
+    snapshot.accountHealthByAccountId
   )
 
   if (!bestAccount) {
@@ -210,7 +212,8 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
   const bestAccount = resolveBestAccount(
     snapshot.accounts,
     snapshot.usageByAccountId,
-    snapshot.activeAccountId
+    snapshot.activeAccountId,
+    snapshot.accountHealthByAccountId
   )
   const text = localeText(snapshot.settings.language)
   const trayUpdateItem = buildTrayUpdateMenuItem(resolveUpdateState(), {
@@ -463,6 +466,7 @@ function createTray(): void {
           },
           usageByAccountId: {},
           usageErrorByAccountId: {},
+          accountHealthByAccountId: {},
           wakeSchedulesByAccountId: {},
           tokenCostByInstanceId: {},
           tokenCostErrorByInstanceId: {},
@@ -756,6 +760,13 @@ app.whenReady().then(async () => {
     'codex:update-account-tokens',
     async (_, accountId: string, input: UpdateAccountTokensInput) => {
       await codexServices.accounts.updateTokens(accountId, input)
+      return refreshTrayTitle()
+    }
+  )
+  ipcMain.handle(
+    'codex:update-account-health',
+    async (_, accountId: string, input: UpdateAccountHealthInput) => {
+      await codexServices.accounts.updateHealth(accountId, input)
       return refreshTrayTitle()
     }
   )

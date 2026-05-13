@@ -361,4 +361,53 @@ describe('CodexAccountStore', () => {
       }
     })
   })
+
+  it('persists account auth errors and clears them only through explicit repair paths', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'codexdock-store-'))
+    createdDirectories.push(directory)
+
+    const store = new CodexAccountStore(directory, createPlatform())
+    const account = await store.importAuthPayload(
+      createAuthPayload('acct-a', { email: 'a@example.com' })
+    )
+
+    await store.markAccountAuthError(account.id, 'HTTP 401 from gateway', 'gateway', 401)
+
+    let snapshot = await store.getSnapshot(false)
+    expect(snapshot.accountHealthByAccountId[account.id]).toMatchObject({
+      status: 'auth_error',
+      reason: 'HTTP 401 from gateway',
+      source: 'gateway',
+      httpStatus: 401
+    })
+
+    const persisted = JSON.parse(await readFile(join(directory, 'codex-accounts.json'), 'utf8'))
+    expect(persisted.version).toBe(4)
+    expect(persisted.accountHealthByAccountId[account.id]).toMatchObject({
+      status: 'auth_error',
+      reason: 'HTTP 401 from gateway'
+    })
+
+    await store.updateAccountHealth(account.id, { status: 'normal' })
+    snapshot = await store.getSnapshot(false)
+    expect(snapshot.accountHealthByAccountId[account.id]).toBeUndefined()
+  })
+
+  it('clears account auth errors when tokens are updated manually', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'codexdock-store-'))
+    createdDirectories.push(directory)
+
+    const store = new CodexAccountStore(directory, createPlatform())
+    const account = await store.importAuthPayload(
+      createAuthPayload('acct-a', { email: 'a@example.com' })
+    )
+
+    await store.markAccountAuthError(account.id, 'expired refresh token', 'refresh')
+    await store.updateAccountTokens(account.id, {
+      accessToken: 'access-token-next'
+    })
+
+    const snapshot = await store.getSnapshot(false)
+    expect(snapshot.accountHealthByAccountId[account.id]).toBeUndefined()
+  })
 })

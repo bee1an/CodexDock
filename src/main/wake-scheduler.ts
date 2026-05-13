@@ -1,5 +1,6 @@
 import {
   canRunWakeRequest,
+  isAccountHealthBlocking,
   type AccountSummary,
   type AccountWakeSchedule,
   type AppSnapshot,
@@ -94,6 +95,10 @@ function nextOccurrence(schedule: AccountWakeSchedule, nowMs: number): number | 
 }
 
 function supportsScheduledWake(snapshot: AppSnapshot, accountId: string): boolean {
+  if (isAccountHealthBlocking((snapshot.accountHealthByAccountId ?? {})[accountId])) {
+    return false
+  }
+
   const rateLimits = snapshot.usageByAccountId[accountId]
   return Boolean(rateLimits && canRunWakeRequest(rateLimits))
 }

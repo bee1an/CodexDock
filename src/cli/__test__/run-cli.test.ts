@@ -35,6 +35,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
@@ -61,6 +62,7 @@ interface CliTestRuntime {
       reorder: ReturnType<typeof vi.fn>
       remove: ReturnType<typeof vi.fn>
       updateGroups: ReturnType<typeof vi.fn>
+      updateHealth: ReturnType<typeof vi.fn>
       get: ReturnType<typeof vi.fn>
     }
     groups: {
@@ -295,6 +297,7 @@ function createRuntime(): {
         reorder: vi.fn(async () => snapshot),
         remove: vi.fn(async () => snapshot),
         updateGroups: vi.fn(async () => snapshot),
+        updateHealth: vi.fn(async () => snapshot),
         get: vi.fn()
       },
       groups: {
@@ -491,11 +494,12 @@ describe('runCli', () => {
     expect(runtime.services.accounts.list).toHaveBeenCalledOnce()
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
-      data: {
-        accounts: snapshot.accounts,
-        activeAccountId: snapshot.activeAccountId,
-        currentSession: snapshot.currentSession
-      },
+        data: {
+          accounts: snapshot.accounts,
+          activeAccountId: snapshot.activeAccountId,
+          currentSession: snapshot.currentSession,
+          accountHealthByAccountId: snapshot.accountHealthByAccountId
+        },
       error: null
     })
 
@@ -518,6 +522,32 @@ describe('runCli', () => {
       0
     )
     expect(runtime.services.accounts.remove).toHaveBeenCalledWith('acct_1')
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'account',
+        'status',
+        'acct_1',
+        'auth-error',
+        '--reason',
+        '401',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.accounts.updateHealth).toHaveBeenCalledWith('acct_1', {
+      status: 'auth_error',
+      reason: '401'
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['account', 'status', 'acct_1', 'normal', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.accounts.updateHealth).toHaveBeenCalledWith('acct_1', {
+      status: 'normal',
+      reason: undefined
+    })
 
     logSpy.mockClear()
     await expect(runCli(runtime as never, ['account', 'export', '--json'])).resolves.toBe(0)

@@ -92,6 +92,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
       a: createUsage()
     },
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},

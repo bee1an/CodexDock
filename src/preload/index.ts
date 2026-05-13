@@ -40,6 +40,7 @@ import type {
   PortOccupant,
   TokenCostDetail,
   TokenCostReadOptions,
+  UpdateAccountHealthInput,
   UpdateAccountWakeScheduleInput,
   UpdateAccountTokensInput,
   WakeAccountRateLimitsInput
@@ -71,6 +72,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:update-account-groups', accountId, groupIds),
   updateAccountTokens: (accountId: string, input: UpdateAccountTokensInput) =>
     ipcRenderer.invoke('codex:update-account-tokens', accountId, input),
+  updateAccountHealth: (accountId: string, input: UpdateAccountHealthInput) =>
+    ipcRenderer.invoke('codex:update-account-health', accountId, input),
   getAccountTokens: (accountId: string): Promise<AccountTokensDetail> =>
     ipcRenderer.invoke('codex:get-account-tokens', accountId),
   refreshAccountTokens: (accountId: string): Promise<AccountTokenRefreshResult> =>

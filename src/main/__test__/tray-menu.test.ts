@@ -76,6 +76,7 @@ function createSnapshot(): AppSnapshot {
       c: createUsage({ primary: { usedPercent: 80, windowDurationMins: 300, resetsAt: null } })
     },
     usageErrorByAccountId: {},
+    accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
