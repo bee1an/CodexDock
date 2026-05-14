@@ -38,7 +38,6 @@ function renderGateway(props = {}): void {
       accounts: [],
       startLocalGateway: vi.fn().mockResolvedValue(undefined),
       stopLocalGateway: vi.fn().mockResolvedValue(undefined),
-      rotateLocalGatewayKey: vi.fn().mockResolvedValue(undefined),
       updateModelMappings: vi.fn().mockResolvedValue(undefined),
       updateAllowedGroups: vi.fn().mockResolvedValue(undefined),
       updateAllowedAccounts: vi.fn().mockResolvedValue(undefined),
@@ -82,6 +81,15 @@ describe('LocalGatewayView', () => {
       screen.getByRole('button', { name: copy.localGatewayOpenCodexIsolated })
     )
     expect(openLocalGatewayIsolatedInCodex).toHaveBeenCalledOnce()
+  })
+
+  it('rotates api key from the api key config row', async () => {
+    const rotateLocalGatewayKey = vi.fn().mockResolvedValue(undefined)
+    renderGateway({ rotateLocalGatewayKey })
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.rotateLocalGatewayKey }))
+
+    expect(rotateLocalGatewayKey).toHaveBeenCalledOnce()
   })
 
   it('hides duplicated port conflict error when occupant details are shown', () => {

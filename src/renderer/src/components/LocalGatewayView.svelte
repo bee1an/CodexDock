@@ -34,7 +34,7 @@
   export let providers: CustomProviderSummary[] = []
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
-  export let rotateLocalGatewayKey: () => Promise<void>
+  export let rotateLocalGatewayKey: () => Promise<void> = async () => {}
   export let openLocalGatewayInCodex: () => Promise<void> = async () => {}
   export let openLocalGatewayIsolatedInCodex: () => Promise<void> = async () => {}
   export let updateModelMappings: (
@@ -500,29 +500,6 @@
       <AppButton
         variant="secondary"
         size="xs"
-        class="hidden max-w-[18rem] gap-1.5 text-muted-strong lg:inline-flex"
-        onclick={() => void copyText(endpointUrl)}
-        ariaLabel={copy.copyLocalGatewayBaseUrl}
-        title={endpointUrl}
-      >
-        <span class="i-lucide-link h-3.5 w-3.5 flex-none" aria-hidden="true"></span>
-        <span class="truncate font-mono tabular-nums" translate="no">{endpointUrl}</span>
-      </AppButton>
-
-      <AppButton
-        variant="secondary"
-        size="xs"
-        onclick={() => void rotateLocalGatewayKey()}
-        disabled={localGatewayBusy}
-        ariaLabel={copy.rotateLocalGatewayKey}
-      >
-        <span class="i-lucide-rotate-cw h-3.5 w-3.5" aria-hidden="true"></span>
-        <span>{copy.rotateLocalGatewayKey}</span>
-      </AppButton>
-
-      <AppButton
-        variant="secondary"
-        size="xs"
         onclick={() => void openLocalGatewayInCodex()}
         disabled={localGatewayBusy || !displayedStatus.running}
         ariaLabel={copy.localGatewayOpenCodex}
@@ -812,6 +789,24 @@
                 title={copy.copyLocalGatewayApiKey}
               >
                 <CopyIcon copied={copiedKey === 'apikey'} />
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
+                class="flex-none"
+                onclick={() => void rotateLocalGatewayKey()}
+                disabled={localGatewayBusy}
+                ariaLabel={copy.rotateLocalGatewayKey}
+                title={copy.rotateLocalGatewayKey}
+              >
+                {#if localGatewayBusy}
+                  <span
+                    class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"
+                    aria-hidden="true"
+                  ></span>
+                {:else}
+                  <span class="i-lucide-rotate-cw h-3.5 w-3.5" aria-hidden="true"></span>
+                {/if}
               </AppButton>
             </div>
           </div>
