@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.7 - 2026-05-14
+
+This release hardens account recovery and local gateway routing while polishing imports, metrics, and themed desktop surfaces.
+
+- Added persistent account health tracking so auth failures can exclude broken accounts from best-account selection, Codex launches, automatic refreshes, and local gateway routing until they are marked normal again.
+- Added desktop and CLI controls for account health and token repair, including account status tagging, manual normal marking, token refresh flows, and earlier 3-day token-expiry warnings.
+- Added a unified import flow that can import from files or pasted ChatGPT web session JSON, with copied sessions receiving fresh local IDs.
+- Improved local gateway reliability with port controls, preserved gateway-backed instance configuration, copy feedback, sticky-target cleanup, and retry routing around unhealthy accounts.
+- Improved desktop usability with connected button groups, trend metric switching, dismissible page errors, animated number updates, and clearer provider drag feedback.
+- Refined dark-theme and renderer surfaces around shared theme tokens so cards, dialogs, popovers, badges, and controls stay consistent across views.
+
 ## 0.4.6 - 2026-05-12
 
 This release expands account management and makes the local gateway safer to use with grouped accounts and provider-backed Codex launches.
