@@ -5,11 +5,13 @@ import { dirname, join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 
 import type { CodexInstanceSummary } from '../../shared/codex'
+import type { CodexPlatformAdapter } from '../../shared/codex-platform'
 import {
   copyCodexSessionToProvider,
   listCodexSessionProjects,
   listCodexSessions,
-  readCodexSessionDetail
+  readCodexSessionDetail,
+  trashCodexSession
 } from '../codex-sessions'
 
 const createdDirectories: string[] = []
@@ -456,5 +458,139 @@ describe('Codex session scanner', () => {
       model_provider: 'custom',
       model: 'gpt-5.4-mini'
     })
+  })
+})
+
+describe('trashCodexSession', () => {
+  function mockPlatform(trashImpl?: (path: string) => Promise<void>): CodexPlatformAdapter {
+    return {
+      fetch: () => Promise.reject(new Error('not implemented')),
+      protect: (value) => ({ mode: 'plain', value }),
+      unprotect: (payload) => payload.value,
+      openExternal: () => Promise.resolve(),
+      trashItem: trashImpl ?? (() => Promise.resolve())
+    }
+  }
+
+  it('active 会话可移动到回收站', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'sessions/2026/04/22/test.jsonl')
+
+    await writeJsonl(filePath, [
+      sessionMeta({ id: 'trash-test', cwd: '/repo', model_provider: 'openai' }),
+      userMessage('hello')
+    ])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    const result = await trashCodexSession(instances, {
+      instanceId: '__default__',
+      filePath
+    }, platform)
+
+    expect(result.session.id).toBe('trash-test')
+    expect(result.session.status).toBe('active')
+    expect(result.trashedAt).toBeTruthy()
+  })
+
+  it('archived 会话可移动到回收站', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'archived_sessions/archived.jsonl')
+
+    await writeJsonl(filePath, [
+      sessionMeta({ id: 'archived-trash', cwd: '/repo', model_provider: 'openai' }),
+      userMessage('archived msg')
+    ])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    const result = await trashCodexSession(instances, {
+      instanceId: '__default__',
+      filePath
+    }, platform)
+
+    expect(result.session.id).toBe('archived-trash')
+    expect(result.session.status).toBe('archived')
+  })
+
+  it('非会话目录的文件会报错', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'config/something.jsonl')
+
+    await writeJsonl(filePath, [sessionMeta({ id: 'bad' })])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    await expect(
+      trashCodexSession(instances, { instanceId: '__default__', filePath }, platform)
+    ).rejects.toThrow('Session file is not inside sessions or archived_sessions directory.')
+  })
+
+  it('实例外路径会报错', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const otherHome = join(root, 'other')
+    const filePath = join(otherHome, 'sessions/2026/04/22/test.jsonl')
+
+    await writeJsonl(filePath, [sessionMeta({ id: 'outside' })])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    await expect(
+      trashCodexSession(instances, { instanceId: '__default__', filePath }, platform)
+    ).rejects.toThrow('Session file does not belong to the selected instance.')
+  })
+
+  it('缺失文件会报错', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'sessions/2026/04/22/missing.jsonl')
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    await expect(
+      trashCodexSession(instances, { instanceId: '__default__', filePath }, platform)
+    ).rejects.toThrow()
+  })
+
+  it('trashItem 失败时错误透传', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'sessions/2026/04/22/fail.jsonl')
+
+    await writeJsonl(filePath, [
+      sessionMeta({ id: 'fail-test', cwd: '/repo', model_provider: 'openai' }),
+      userMessage('will fail')
+    ])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform(() => Promise.reject(new Error('Permission denied')))
+
+    await expect(
+      trashCodexSession(instances, { instanceId: '__default__', filePath }, platform)
+    ).rejects.toThrow('Permission denied')
+  })
+
+  it('非 .jsonl 文件会报错', async () => {
+    const root = await createTempDir()
+    const codexHome = join(root, 'codex')
+    const filePath = join(codexHome, 'sessions/2026/04/22/test.json')
+
+    await writeJsonl(filePath, [sessionMeta({ id: 'bad-ext' })])
+
+    const instances = [instance('__default__', '', codexHome, true)]
+    const platform = mockPlatform()
+
+    await expect(
+      trashCodexSession(instances, { instanceId: '__default__', filePath }, platform)
+    ).rejects.toThrow('Only .jsonl session files can be trashed.')
   })
 })

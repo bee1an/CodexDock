@@ -1,9 +1,11 @@
 import type {
   AppSettings,
   CliSettingsKey,
+  CodexSessionStatus,
   CreateCodexInstanceInput,
   CreateCustomProviderInput,
   CustomProviderProtocol,
+  ListCodexSessionsInput,
   StatsDisplaySettings,
   UpdateCodexInstanceInput,
   UpdateCustomProviderInput
@@ -618,4 +620,84 @@ export function parsePromptOptions(argv: string[]): PromptCliOptions {
   }
 
   return options
+}
+
+export function parseSessionListOptions(argv: string[]): ListCodexSessionsInput {
+  const input: ListCodexSessionsInput = {}
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+
+    if (arg === '--instance') {
+      if (!value) {
+        throw new CliError('Missing value for --instance', EXIT_USAGE)
+      }
+      input.instanceId = value === 'default' ? '__default__' : value
+      index += 1
+      continue
+    }
+
+    if (arg === '--status') {
+      if (!value || (value !== 'active' && value !== 'archived')) {
+        throw new CliError('--status must be "active" or "archived"', EXIT_USAGE)
+      }
+      input.status = value as CodexSessionStatus
+      index += 1
+      continue
+    }
+
+    if (arg === '--project') {
+      if (!value) {
+        throw new CliError('Missing value for --project', EXIT_USAGE)
+      }
+      input.projectPath = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--query') {
+      if (!value) {
+        throw new CliError('Missing value for --query', EXIT_USAGE)
+      }
+      input.projectQuery = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--limit') {
+      if (!value) {
+        throw new CliError('Missing value for --limit', EXIT_USAGE)
+      }
+      const parsed = Number(value)
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        throw new CliError('Invalid --limit value', EXIT_USAGE)
+      }
+      input.limit = parsed
+      index += 1
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+  }
+
+  return input
+}
+
+export function parseSessionInstanceOption(argv: string[]): string | undefined {
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+
+    if (arg === '--instance') {
+      if (!value) {
+        throw new CliError('Missing value for --instance', EXIT_USAGE)
+      }
+      return value === 'default' ? '__default__' : value
+    }
+  }
+
+  return undefined
 }

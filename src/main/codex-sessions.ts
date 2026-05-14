@@ -17,8 +17,11 @@ import type {
   CustomProviderSummary,
   ListCodexSessionProjectsInput,
   ListCodexSessionsInput,
-  ReadCodexSessionDetailInput
+  ReadCodexSessionDetailInput,
+  TrashCodexSessionInput,
+  TrashCodexSessionResult
 } from '../shared/codex'
+import type { CodexPlatformAdapter } from '../shared/codex-platform'
 
 type DirectoryEntry = {
   name: string
@@ -875,5 +878,49 @@ export async function readCodexSessionDetail(
       statusForFile(instance, input.filePath)
     ),
     messages: parseSessionMessages(objects)
+  }
+}
+
+export async function trashCodexSession(
+  instances: CodexInstanceSummary[],
+  input: TrashCodexSessionInput,
+  platform: CodexPlatformAdapter
+): Promise<TrashCodexSessionResult> {
+  const instance = instances.find((item) => item.id === input.instanceId)
+  if (!instance) {
+    throw new Error('Instance not found.')
+  }
+
+  if (!isPathInside(instance.codexHome, input.filePath)) {
+    throw new Error('Session file does not belong to the selected instance.')
+  }
+
+  const sessionsDir = join(instance.codexHome, 'sessions')
+  const archivedDir = join(instance.codexHome, 'archived_sessions')
+  if (!isPathInside(sessionsDir, input.filePath) && !isPathInside(archivedDir, input.filePath)) {
+    throw new Error('Session file is not inside sessions or archived_sessions directory.')
+  }
+
+  if (!input.filePath.toLowerCase().endsWith('.jsonl')) {
+    throw new Error('Only .jsonl session files can be trashed.')
+  }
+
+  await fs.access(input.filePath)
+
+  const session = await readSessionFile(
+    instance,
+    input.filePath,
+    statusForFile(instance, input.filePath)
+  )
+
+  if (!platform.trashItem) {
+    throw new Error('Trash is not supported on this platform.')
+  }
+
+  await platform.trashItem(input.filePath)
+
+  return {
+    session,
+    trashedAt: new Date().toISOString()
   }
 }

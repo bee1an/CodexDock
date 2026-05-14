@@ -501,6 +501,16 @@ export interface CodexSessionDetail {
   messages: CodexSessionMessage[]
 }
 
+export interface TrashCodexSessionInput {
+  instanceId: string
+  filePath: string
+}
+
+export interface TrashCodexSessionResult {
+  session: CodexSessionSummary
+  trashedAt: string
+}
+
 export interface TokenCostSummary {
   sessionTokens: number
   sessionCostUSD: number | null

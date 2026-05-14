@@ -14,7 +14,9 @@
     CopyCodexSessionToProviderResult,
     CustomProviderSummary,
     ListCodexSessionsInput,
-    ReadCodexSessionDetailInput
+    ReadCodexSessionDetailInput,
+    TrashCodexSessionInput,
+    TrashCodexSessionResult
   } from '../../../shared/codex'
   import type { LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
@@ -58,6 +60,7 @@
   export let copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
+  export let trashCodexSession: (input: TrashCodexSessionInput) => Promise<TrashCodexSessionResult>
 
   const visibleLimit = 10
 
@@ -94,6 +97,11 @@
     failed: Array<{ sessionTitle: string; error: string }>
   } | null = null
   let selectedSessionKeys: string[] = []
+  let trashTargetSession: CodexSessionSummary | null = null
+  let trashTargetSessions: CodexSessionSummary[] = []
+  let trashBusy = false
+  let trashError = ''
+  let trashNotice = ''
   let copiedInstancesById: Record<string, CodexInstanceSummary> = {}
   let allKnownInstances: CodexInstanceSummary[] = []
   let sessionProviderContext: SessionProviderContext = {
@@ -588,6 +596,79 @@
     }
   }
 
+  function openTrashSessionDialog(session: CodexSessionSummary): void {
+    trashTargetSession = session
+    trashTargetSessions = [session]
+    trashError = ''
+    trashNotice = ''
+  }
+
+  function openBulkTrashSessionDialog(): void {
+    const sources = collectSelectedSessions()
+    if (!sources.length) return
+    trashTargetSession = sources[0]
+    trashTargetSessions = sources
+    trashError = ''
+    trashNotice = ''
+  }
+
+  function closeTrashSessionDialog(): void {
+    if (trashBusy) return
+    trashTargetSession = null
+    trashTargetSessions = []
+    trashError = ''
+  }
+
+  async function confirmTrashSessions(): Promise<void> {
+    if (!trashTargetSessions.length || trashBusy) return
+
+    trashBusy = true
+    trashError = ''
+    trashNotice = ''
+
+    let successCount = 0
+    let failCount = 0
+
+    for (const session of trashTargetSessions) {
+      try {
+        await trashCodexSession({
+          instanceId: session.instanceId,
+          filePath: session.filePath
+        })
+        successCount += 1
+        selectedSessionKeys = selectedSessionKeys.filter((key) => key !== sessionKey(session))
+      } catch (nextError) {
+        failCount += 1
+        trashError = nextError instanceof Error ? nextError.message : copy.sessionsTrashFailed
+      }
+    }
+
+    trashBusy = false
+
+    if (successCount > 0 && failCount === 0) {
+      trashNotice =
+        successCount === 1
+          ? copy.sessionsTrashSuccess
+          : copy.sessionsBulkTrashSuccess(successCount)
+
+      const trashedPaths = new Set(trashTargetSessions.map((s) => s.filePath))
+      trashTargetSession = null
+      trashTargetSessions = []
+
+      if (selectedSummary && trashedPaths.has(selectedSummary.filePath)) {
+        closeDetail()
+      }
+    } else if (failCount > 0 && successCount > 0) {
+      trashNotice = copy.sessionsBulkTrashFailureCount(failCount)
+    }
+
+    try {
+      await loadProjects()
+    } catch {
+      /* loadProjects 内部处理错误 */
+    }
+  }
+
   $: allKnownInstances = [
     ...instances,
     ...Object.values(copiedInstancesById).filter(
@@ -767,6 +848,10 @@
           <span class="i-lucide-copy h-3.5 w-3.5"></span>
           <span>{copy.sessionsBulkCopyAction(selectedSessionKeys.length)}</span>
         </AppButton>
+        <AppButton variant="danger" size="sm" onclick={openBulkTrashSessionDialog}>
+          <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+          <span>{copy.sessionsBulkTrashAction(selectedSessionKeys.length)}</span>
+        </AppButton>
       </div>
     </section>
   {/if}
@@ -794,6 +879,13 @@
             onclick={() => openCopySessionDialog(selectedSummary)}
           >
             {copy.sessionsCopyToProvider}
+          </AppButton>
+          <AppButton
+            variant="danger"
+            size="sm"
+            onclick={() => openTrashSessionDialog(selectedSummary)}
+          >
+            {copy.sessionsTrashSession}
           </AppButton>
           <AppButton variant="secondary" size="sm" onclick={closeDetail}>
             {copy.sessionsBackToList}
@@ -1102,7 +1194,7 @@
                                 {:else}
                                   {#each displayedSessions as session (session.filePath)}
                                     <div
-                                      class={`session-card grid grid-cols-[auto_minmax(0,1fr)_auto] gap-2 rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-3 ${
+                                      class={`session-card grid grid-cols-[auto_minmax(0,1fr)_auto_auto] gap-2 rounded-[0.45rem] border border-[var(--soft-panel-border)] px-3 py-3 ${
                                         isSessionSelected(session) ? 'is-selected' : ''
                                       }`}
                                     >
@@ -1165,6 +1257,17 @@
                                         onclick={() => openCopySessionDialog(session)}
                                       >
                                         <span class="i-lucide-copy-plus h-3.5 w-3.5"></span>
+                                      </button>
+                                      <button
+                                        class="session-trash-button"
+                                        type="button"
+                                        title={copy.sessionsTrashSession}
+                                        aria-label={copy.sessionsTrashSessionLabel(
+                                          session.title || session.id
+                                        )}
+                                        onclick={() => openTrashSessionDialog(session)}
+                                      >
+                                        <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
                                       </button>
                                     </div>
                                   {/each}
@@ -1429,6 +1532,59 @@
       </div>
     </AppDialog>
   {/if}
+
+  {#if trashTargetSession}
+    <AppDialog open onclose={closeTrashSessionDialog}>
+      <div class="grid gap-4 p-5">
+        <h2 class="text-base font-semibold text-carbon">{copy.sessionsTrashConfirmTitle}</h2>
+        <p class="text-sm text-muted-strong">
+          {trashTargetSessions.length > 1
+            ? copy.sessionsBulkTrashConfirmMessage(trashTargetSessions.length)
+            : copy.sessionsTrashConfirmMessage}
+        </p>
+
+        {#if trashTargetSessions.length === 1}
+          <p class="truncate text-sm text-carbon">
+            {trashTargetSession.title || trashTargetSession.id}
+          </p>
+        {:else}
+          <ul class="max-h-40 overflow-y-auto text-sm text-carbon">
+            {#each trashTargetSessions as session (session.filePath)}
+              <li class="truncate py-0.5">{session.title || session.id}</li>
+            {/each}
+          </ul>
+        {/if}
+
+        {#if trashError}
+          <p class="text-sm text-red-600">{trashError}</p>
+        {/if}
+
+        <div class="flex justify-end gap-2">
+          <AppButton variant="secondary" size="sm" onclick={closeTrashSessionDialog} disabled={trashBusy}>
+            {copy.sessionsBackToList}
+          </AppButton>
+          <AppButton variant="danger" size="sm" onclick={() => void confirmTrashSessions()} disabled={trashBusy}>
+            {trashBusy
+              ? copy.sessionsBulkTrashProgress(0, trashTargetSessions.length)
+              : copy.sessionsTrashConfirmAction}
+          </AppButton>
+        </div>
+      </div>
+    </AppDialog>
+  {/if}
+
+  {#if trashNotice}
+    <div
+      class="fixed bottom-4 right-4 z-50 rounded-lg border border-[var(--card-border)] bg-[var(--panel-strong)] px-4 py-3 text-sm text-carbon shadow-lg"
+    >
+      {trashNotice}
+      <button
+        class="ml-3 text-xs text-muted-strong hover:text-carbon"
+        type="button"
+        onclick={() => { trashNotice = '' }}
+      >✕</button>
+    </div>
+  {/if}
 </div>
 
 <style>
@@ -1528,6 +1684,31 @@
     border-color: var(--line-strong);
     background: var(--surface-hover);
     color: var(--color-carbon);
+  }
+
+  .session-trash-button {
+    appearance: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 86%, transparent);
+    border-radius: 0.4rem;
+    background: transparent;
+    color: var(--muted-strong);
+    padding: 0;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      color 140ms ease;
+  }
+
+  .session-trash-button:hover,
+  .session-trash-button:focus-visible {
+    border-color: var(--color-red-400, #f87171);
+    background: color-mix(in srgb, var(--color-red-400, #f87171) 10%, transparent);
+    color: var(--color-red-600, #dc2626);
   }
 
   :global(.session-copy-dialog-panel) {

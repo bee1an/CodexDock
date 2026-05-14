@@ -47,6 +47,7 @@ import {
   type ProbeProviderModelsInput,
   type ReadCodexSessionDetailInput,
   type TokenCostReadOptions,
+  type TrashCodexSessionInput,
   type UpdateAccountHealthInput,
   type UpdateAccountWakeScheduleInput,
   type UpdateAccountTokensInput,
@@ -956,6 +957,9 @@ app.whenReady().then(async () => {
   )
   ipcMain.handle('codex:copy-session-to-provider', (_, input: CopyCodexSessionToProviderInput) =>
     codexServices.session.copyToProvider(input)
+  )
+  ipcMain.handle('codex:trash-session', (_, input: TrashCodexSessionInput) =>
+    codexServices.session.trash(input)
   )
   ipcMain.handle('codex:list-skills', () => codexServices.skill.list())
   ipcMain.handle('codex:read-skill-detail', (_, instanceId: string, skillDirName: string) =>

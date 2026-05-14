@@ -18,6 +18,7 @@ export function createElectronCodexPlatformAdapter(): CodexPlatformAdapter {
 
       return Buffer.from(payload.value, 'base64').toString('utf8')
     },
-    openExternal: (url) => shell.openExternal(url)
+    openExternal: (url) => shell.openExternal(url),
+    trashItem: (path) => shell.trashItem(path)
   }
 }

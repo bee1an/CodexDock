@@ -39,6 +39,8 @@
     TokenCostReadOptions,
     TokenCostSummary,
     ReadCodexSessionDetailInput,
+    TrashCodexSessionInput,
+    TrashCodexSessionResult,
     UpdateAccountHealthInput,
     UpdateCustomProviderInput
   } from '../../../shared/codex'
@@ -168,6 +170,9 @@
   export let copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
+  export let trashCodexSession: (
+    input: TrashCodexSessionInput
+  ) => Promise<TrashCodexSessionResult>
   export let listCodexSkills: () => Promise<CodexSkillsResult>
   export let readCodexSkillDetail: (
     instanceId: string,
@@ -553,6 +558,7 @@
       {listCodexSessions}
       {readCodexSessionDetail}
       {copyCodexSessionToProvider}
+      {trashCodexSession}
     />
   {:else if currentView === 'skills'}
     <SkillsView
