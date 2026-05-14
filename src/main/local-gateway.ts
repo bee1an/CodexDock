@@ -233,7 +233,10 @@ async function writeFetchResponse(response: ServerResponse, upstream: Response):
       if (done) {
         break
       }
-      response.write(Buffer.from(value))
+      const ok = response.write(Buffer.from(value))
+      if (!ok) {
+        await new Promise<void>((resolve) => response.once('drain', resolve))
+      }
     }
   } finally {
     response.end()
@@ -261,6 +264,16 @@ function requiresAllowedGatewayTargets(pathname: string): boolean {
     pathname === '/v1/messages/count_tokens' ||
     pathname.startsWith('/v1beta/')
   )
+}
+
+function protocolForPath(pathname: string): CustomProviderProtocol {
+  if (pathname === '/v1/messages' || pathname === '/v1/messages/count_tokens') {
+    return 'anthropic'
+  }
+  if (pathname.startsWith('/v1beta/')) {
+    return 'gemini'
+  }
+  return 'openai'
 }
 
 function safeStringifyForLog(value: unknown): string {
@@ -587,11 +600,19 @@ async function collectResponsesText(upstream: Response): Promise<string> {
   return chunks.join('')
 }
 
-function writeSse(response: ServerResponse, payload: unknown, event?: string): void {
+async function writeSse(response: ServerResponse, payload: unknown, event?: string): Promise<void> {
   if (event) {
-    response.write(`event: ${event}\n`)
+    const ok1 = response.write(`event: ${event}\n`)
+    if (!ok1) {
+      await new Promise<void>((resolve) => response.once('drain', resolve))
+    }
   }
-  response.write(`data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`)
+  const ok2 = response.write(
+    `data: ${typeof payload === 'string' ? payload : JSON.stringify(payload)}\n\n`
+  )
+  if (!ok2) {
+    await new Promise<void>((resolve) => response.once('drain', resolve))
+  }
 }
 
 function textDeltaFromResponsesSseBlock(block: string): string {
@@ -734,9 +755,14 @@ export class CodexLocalGatewayService {
   async start(): Promise<LocalGatewayStatus> {
     await this.ensureLogsLoaded()
     const settings = await this.ensureApiKey()
-    if (!hasAllowedGatewayTargets(settings)) {
+    if (settings.routingMode !== 'provider' && !hasAllowedGatewayTargets(settings)) {
       throw new Error(
         'Local gateway requires at least one allowed group or account before it can start.'
+      )
+    }
+    if (settings.routingMode === 'provider' && !settings.providerId) {
+      throw new Error(
+        'Provider routing mode requires an explicit providerId in gateway settings.'
       )
     }
     if (this.server?.listening) {
@@ -919,20 +945,41 @@ export class CodexLocalGatewayService {
 
     const body = await readRequestBody(request)
     const jsonBody = parseJsonBody(body)
-    logMeta.provider = 'Codex'
     logMeta.model = logModelFromRequest(url.pathname, jsonBody)
 
-    if (requiresAllowedGatewayTargets(url.pathname) && !hasAllowedGatewayTargets(settings)) {
-      writeJson(
-        response,
-        403,
-        openAiError(
-          'Local gateway requires at least one allowed group or account before routing requests.',
+    if (settings.routingMode === 'provider') {
+      logMeta.provider = 'Provider'
+      if (requiresAllowedGatewayTargets(url.pathname)) {
+        if (!settings.providerId) {
+          writeJson(
+            response,
+            503,
+            openAiError(
+              'Provider routing mode requires an explicit providerId in gateway settings.',
+              503,
+              'no_provider_configured'
+            ).body
+          )
+          return
+        }
+        const protocol = protocolForPath(url.pathname)
+        await this.proxyProviderById(settings.providerId, protocol, request, response, body)
+        return
+      }
+    } else {
+      logMeta.provider = 'Codex'
+      if (requiresAllowedGatewayTargets(url.pathname) && !hasAllowedGatewayTargets(settings)) {
+        writeJson(
+          response,
           403,
-          'no_allowed_target'
-        ).body
-      )
-      return
+          openAiError(
+            'Local gateway requires at least one allowed group or account before routing requests.',
+            403,
+            'no_allowed_target'
+          ).body
+        )
+        return
+      }
     }
 
     if (request.method === 'GET' && url.pathname === '/v1/models') {
@@ -1058,13 +1105,17 @@ export class CodexLocalGatewayService {
     const effectiveBody = mappings.length ? Buffer.from(JSON.stringify(jsonBody)) : body
     try {
       const upstream = await this.fetchCodexResponses(request, effectiveBody, jsonBody)
-      if (upstream.status === 429) {
-        await this.proxyProviderProtocol('openai', request, response, effectiveBody)
-        return
-      }
       await writeFetchResponse(response, upstream)
-    } catch {
-      await this.proxyProviderProtocol('openai', request, response, effectiveBody)
+    } catch (error) {
+      writeJson(
+        response,
+        503,
+        openAiError(
+          errorMessage(error, 'No available Codex account for local gateway.'),
+          503,
+          'no_account'
+        ).body
+      )
     }
   }
 
@@ -1082,16 +1133,14 @@ export class CodexLocalGatewayService {
     }
 
     const upstream = await this.fetchCodexResponses(request, responsesBody, jsonBody).catch(
-      async () => {
-        await this.proxyProviderProtocol('openai', request, response, body)
-        return null
-      }
+      () => null
     )
     if (!upstream) {
-      return
-    }
-    if (upstream.status === 429) {
-      await this.proxyProviderProtocol('openai', request, response, body)
+      writeJson(
+        response,
+        503,
+        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+      )
       return
     }
     if (!upstream.ok) {
@@ -1125,7 +1174,7 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer,
-    originalBody: Buffer,
+    _originalBody: Buffer,
     jsonBody: Record<string, unknown>
   ): Promise<void> {
     const upstream = await this.fetchCodexResponses(request, body, jsonBody).catch(async () => null)
@@ -1135,10 +1184,6 @@ export class CodexLocalGatewayService {
         503,
         openAiError('No available Codex account for local gateway.', 503, 'no_account').body
       )
-      return
-    }
-    if (upstream.status === 429) {
-      await this.proxyProviderProtocol('openai', request, response, originalBody)
       return
     }
     if (!upstream.ok) {
@@ -1157,15 +1202,15 @@ export class CodexLocalGatewayService {
     response.statusCode = 200
     response.setHeader('content-type', 'text/event-stream; charset=utf-8')
     response.setHeader('cache-control', 'no-cache')
-    writeSse(response, {
+    await writeSse(response, {
       id,
       object: 'chat.completion.chunk',
       created,
       model,
       choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]
     })
-    await streamResponsesTextDeltas(upstream, (delta) => {
-      writeSse(response, {
+    await streamResponsesTextDeltas(upstream, async (delta) => {
+      await writeSse(response, {
         id,
         object: 'chat.completion.chunk',
         created,
@@ -1173,14 +1218,14 @@ export class CodexLocalGatewayService {
         choices: [{ index: 0, delta: { content: delta }, finish_reason: null }]
       })
     })
-    writeSse(response, {
+    await writeSse(response, {
       id,
       object: 'chat.completion.chunk',
       created,
       model,
       choices: [{ index: 0, delta: {}, finish_reason: 'stop' }]
     })
-    writeSse(response, '[DONE]')
+    await writeSse(response, '[DONE]')
     response.end()
   }
 
@@ -1262,7 +1307,7 @@ export class CodexLocalGatewayService {
     response.statusCode = 200
     response.setHeader('content-type', 'text/event-stream; charset=utf-8')
     response.setHeader('cache-control', 'no-cache')
-    writeSse(
+    await writeSse(
       response,
       {
         type: 'message_start',
@@ -1279,7 +1324,7 @@ export class CodexLocalGatewayService {
       },
       'message_start'
     )
-    writeSse(
+    await writeSse(
       response,
       {
         type: 'content_block_start',
@@ -1288,8 +1333,8 @@ export class CodexLocalGatewayService {
       },
       'content_block_start'
     )
-    await streamResponsesTextDeltas(upstream, (delta) => {
-      writeSse(
+    await streamResponsesTextDeltas(upstream, async (delta) => {
+      await writeSse(
         response,
         {
           type: 'content_block_delta',
@@ -1299,8 +1344,8 @@ export class CodexLocalGatewayService {
         'content_block_delta'
       )
     })
-    writeSse(response, { type: 'content_block_stop', index: 0 }, 'content_block_stop')
-    writeSse(
+    await writeSse(response, { type: 'content_block_stop', index: 0 }, 'content_block_stop')
+    await writeSse(
       response,
       {
         type: 'message_delta',
@@ -1309,7 +1354,7 @@ export class CodexLocalGatewayService {
       },
       'message_delta'
     )
-    writeSse(response, { type: 'message_stop' }, 'message_stop')
+    await writeSse(response, { type: 'message_stop' }, 'message_stop')
     response.end()
   }
 
@@ -1399,8 +1444,8 @@ export class CodexLocalGatewayService {
     response.statusCode = 200
     response.setHeader('content-type', 'text/event-stream; charset=utf-8')
     response.setHeader('cache-control', 'no-cache')
-    await streamResponsesTextDeltas(upstream, (delta) => {
-      writeSse(response, {
+    await streamResponsesTextDeltas(upstream, async (delta) => {
+      await writeSse(response, {
         candidates: [
           {
             content: {
@@ -1581,26 +1626,23 @@ export class CodexLocalGatewayService {
     return this.options.refreshAuthForUse(accountId, auth, { allowStaleFallback: true })
   }
 
-  private async proxyProviderProtocol(
+  private async proxyProviderById(
+    providerId: string,
     protocol: CustomProviderProtocol,
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer
   ): Promise<void> {
-    const bodyJson = parseJsonBody(body)
-    const stickyKey = stickyKeyFromRequest(request.headers, bodyJson)
-    const sticky = stickyKey ? this.resolveSticky(stickyKey, protocol) : null
-    const provider =
-      sticky?.kind === 'provider'
-        ? await this.providerById(sticky.id, protocol)
-        : await this.firstProvider(protocol)
-
+    const provider = await this.providerById(providerId, protocol)
     if (!provider) {
       writeJson(
         response,
         503,
-        openAiError(`No ${protocol} provider configured for local gateway.`, 503, 'no_provider')
-          .body
+        openAiError(
+          `Selected provider "${providerId}" not found or does not match protocol "${protocol}".`,
+          503,
+          'provider_not_found'
+        ).body
       )
       return
     }
@@ -1616,14 +1658,6 @@ export class CodexLocalGatewayService {
         signal: AbortSignal.timeout((await this.settings()).requestTimeoutMs)
       }
     )
-    if (stickyKey && upstream.ok) {
-      this.rememberSticky(stickyKey, {
-        kind: 'provider',
-        id: provider.id,
-        protocol,
-        expiresAt: this.stickyExpiresAt()
-      })
-    }
     await writeFetchResponse(response, upstream)
   }
 
@@ -1687,16 +1721,6 @@ export class CodexLocalGatewayService {
     return (
       (account.groupIds.length === 0 && allowed.accountIds.has(account.id)) ||
       account.groupIds.some((groupId) => allowed.groupIds.has(groupId))
-    )
-  }
-
-  private async firstProvider(
-    protocol: CustomProviderProtocol
-  ): Promise<CustomProviderSummary | null> {
-    return (
-      (await this.options.providerStore.list()).find(
-        (provider) => (provider.protocol ?? 'openai') === protocol
-      ) ?? null
     )
   }
 

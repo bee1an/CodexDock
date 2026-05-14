@@ -6,6 +6,7 @@ import {
   formatRelativeReset,
   isLocalMockAccount,
   isLocalMockProvider,
+  normalizeLocalGatewaySettings,
   normalizeStatsDisplaySettings,
   remainingPercent,
   resolveBestAccount,
@@ -509,5 +510,61 @@ describe('codex shared helpers', () => {
         'a'
       ).map((account) => account.id)
     ).toEqual(['c', 'b'])
+  })
+})
+
+describe('normalizeLocalGatewaySettings', () => {
+  it('defaults routingMode to codex when not provided', () => {
+    const result = normalizeLocalGatewaySettings({})
+    expect(result.routingMode).toBe('codex')
+    expect(result.providerId).toBeUndefined()
+  })
+
+  it('defaults routingMode to codex for legacy settings without routingMode', () => {
+    const result = normalizeLocalGatewaySettings({
+      host: '127.0.0.1',
+      port: 11456,
+      stickyTtlMinutes: 360,
+      requestTimeoutMs: 120_000,
+      modelMappings: [],
+      allowedGroupIds: ['group-1'],
+      allowedAccountIds: []
+    } as any)
+    expect(result.routingMode).toBe('codex')
+    expect(result.providerId).toBeUndefined()
+  })
+
+  it('preserves provider mode with explicit providerId', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'provider',
+      providerId: 'prov-123'
+    })
+    expect(result.routingMode).toBe('provider')
+    expect(result.providerId).toBe('prov-123')
+  })
+
+  it('clears providerId when routingMode is codex', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'codex',
+      providerId: 'prov-123'
+    })
+    expect(result.routingMode).toBe('codex')
+    expect(result.providerId).toBeUndefined()
+  })
+
+  it('clears providerId when provider mode has empty string providerId', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'provider',
+      providerId: '  '
+    })
+    expect(result.routingMode).toBe('provider')
+    expect(result.providerId).toBeUndefined()
+  })
+
+  it('treats invalid routingMode as codex', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'invalid' as any
+    })
+    expect(result.routingMode).toBe('codex')
   })
 })

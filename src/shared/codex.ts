@@ -4,6 +4,7 @@ export type LoginMethod = 'browser' | 'device'
 export type AppLanguage = 'zh-CN' | 'en'
 export type AppTheme = 'light' | 'dark' | 'system'
 export type CustomProviderProtocol = 'openai' | 'anthropic' | 'gemini'
+export type LocalGatewayRoutingMode = 'codex' | 'provider'
 export const statsDisplayKeys = ['dailyTrend', 'modelBreakdown', 'instanceUsage'] as const
 export type StatsDisplayKey = (typeof statsDisplayKeys)[number]
 export interface StatsDisplaySettings {
@@ -26,6 +27,8 @@ export interface LocalGatewaySettings {
   modelMappings: LocalGatewayModelMapping[]
   allowedGroupIds: string[]
   allowedAccountIds: string[]
+  routingMode: LocalGatewayRoutingMode
+  providerId?: string
 }
 
 export interface LocalGatewayStatus {
@@ -770,7 +773,8 @@ export function defaultLocalGatewaySettings(): LocalGatewaySettings {
     requestTimeoutMs: 120_000,
     modelMappings: [],
     allowedGroupIds: [],
-    allowedAccountIds: []
+    allowedAccountIds: [],
+    routingMode: 'codex'
   }
 }
 
@@ -836,6 +840,7 @@ export function normalizeLocalGatewaySettings(
   const port = Number(settings?.port)
   const stickyTtlMinutes = Number(settings?.stickyTtlMinutes)
   const requestTimeoutMs = Number(settings?.requestTimeoutMs)
+  const routingMode = settings?.routingMode === 'provider' ? 'provider' : 'codex'
   return {
     host: settings?.host?.trim() || defaults.host,
     port:
@@ -856,7 +861,12 @@ export function normalizeLocalGatewaySettings(
         : defaults.requestTimeoutMs,
     modelMappings: normalizeModelMappings(settings?.modelMappings),
     allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds),
-    allowedAccountIds: normalizeAllowedAccountIds(settings?.allowedAccountIds)
+    allowedAccountIds: normalizeAllowedAccountIds(settings?.allowedAccountIds),
+    routingMode,
+    providerId:
+      routingMode === 'provider' && typeof settings?.providerId === 'string'
+        ? settings.providerId.trim() || undefined
+        : undefined
   }
 }
 

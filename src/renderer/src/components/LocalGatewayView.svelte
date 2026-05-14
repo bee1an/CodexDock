@@ -3,8 +3,10 @@
   import type {
     AccountGroup,
     AccountSummary,
+    CustomProviderSummary,
     LocalGatewayLogEntry,
     LocalGatewayModelMapping,
+    LocalGatewayRoutingMode,
     LocalGatewayStatus,
     PortOccupant
   } from '../../../shared/codex'
@@ -25,6 +27,9 @@
   export let allowedAccountIds: string[] = []
   export let groups: AccountGroup[] = []
   export let accounts: AccountSummary[] = []
+  export let providers: CustomProviderSummary[] = []
+  export let routingMode: LocalGatewayRoutingMode = 'codex'
+  export let routingProviderId: string | undefined = undefined
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
@@ -34,6 +39,10 @@
   ) => Promise<void> = async () => {}
   export let updateAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
+  export let updateRoutingMode: (
+    mode: LocalGatewayRoutingMode,
+    providerId?: string
+  ) => Promise<void> = async () => {}
   export let portOccupant: PortOccupant | null = null
   export let killingPortOccupant = false
   export let killPortOccupant: () => Promise<void> = async () => {}
@@ -41,6 +50,32 @@
   let allowedGroupsBusy = false
   let allowedAccountsBusy = false
   let showAccountPicker = false
+  let routingModeBusy = false
+
+  const setRoutingMode = async (mode: LocalGatewayRoutingMode, providerId?: string): Promise<void> => {
+    if (routingModeBusy) return
+    routingModeBusy = true
+    try {
+      await updateRoutingMode(mode, providerId)
+    } finally {
+      routingModeBusy = false
+    }
+  }
+
+  const onRoutingModeChange = (event: Event): void => {
+    const target = event.target as HTMLSelectElement
+    const mode = target.value as LocalGatewayRoutingMode
+    if (mode === 'codex') {
+      void setRoutingMode('codex')
+    } else {
+      void setRoutingMode('provider', routingProviderId || providers[0]?.id)
+    }
+  }
+
+  const onProviderSelect = (event: Event): void => {
+    const target = event.target as HTMLSelectElement
+    void setRoutingMode('provider', target.value)
+  }
 
   const toggleAllowedGroup = async (groupId: string): Promise<void> => {
     if (allowedGroupsBusy) return
@@ -302,7 +337,9 @@
   )
   $: allowedTargetCount = allowedGroupIds.length + selectedStandaloneAccounts.length
   $: hasAllowedEntities = allowedTargetCount > 0
-  $: startDisabled = localGatewayBusy || !hasAllowedEntities
+  $: isProviderMode = routingMode === 'provider'
+  $: providerReady = isProviderMode && Boolean(routingProviderId)
+  $: startDisabled = localGatewayBusy || (isProviderMode ? !providerReady : !hasAllowedEntities)
 
   onMount(() => {
     void refreshGatewayStatus()
@@ -412,7 +449,9 @@
           onclick={() => void startLocalGateway()}
           disabled={startDisabled}
           ariaLabel={copy.startLocalGateway}
-          title={hasAllowedEntities ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired}
+          title={isProviderMode
+            ? (providerReady ? copy.startLocalGateway : copy.localGatewayRoutingNoProviders)
+            : (hasAllowedEntities ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired)}
         >
           {#if localGatewayBusy}
             <span
@@ -655,7 +694,74 @@
     </section>
 
     <section
+      class="gateway-panel gateway-routing-panel rounded-[0.45rem] border"
+      aria-labelledby="local-gateway-routing-heading"
+    >
+      <div class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5">
+        <div class="flex min-w-0 items-start gap-2">
+          <span
+            class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
+            aria-hidden="true"
+          >
+            <span class="i-lucide-route h-3.5 w-3.5"></span>
+          </span>
+          <div class="min-w-0">
+            <h3 id="local-gateway-routing-heading" class="text-[12px] font-semibold text-carbon">
+              {copy.localGatewayRoutingTitle}
+            </h3>
+            <p class="mt-0.5 text-[10px] leading-4 text-faint">
+              {copy.localGatewayRoutingHint}
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex flex-col gap-3 p-3">
+        <div class="flex items-center gap-3">
+          <label for="gateway-routing-mode" class="text-[11px] font-medium text-muted-strong whitespace-nowrap">
+            {copy.localGatewayRoutingModeLabel}
+          </label>
+          <select
+            id="gateway-routing-mode"
+            class="gateway-select min-w-0 flex-1 rounded-[0.3rem] border bg-transparent px-2 py-1 text-[11px] text-carbon"
+            value={routingMode}
+            disabled={routingModeBusy || localGatewayBusy}
+            on:change={onRoutingModeChange}
+          >
+            <option value="codex">{copy.localGatewayRoutingCodex}</option>
+            <option value="provider">{copy.localGatewayRoutingProvider}</option>
+          </select>
+        </div>
+
+        {#if isProviderMode}
+          <div class="flex items-center gap-3">
+            <label for="gateway-routing-provider" class="text-[11px] font-medium text-muted-strong whitespace-nowrap">
+              {copy.localGatewayRoutingProviderLabel}
+            </label>
+            {#if providers.length > 0}
+              <select
+                id="gateway-routing-provider"
+                class="gateway-select min-w-0 flex-1 rounded-[0.3rem] border bg-transparent px-2 py-1 text-[11px] text-carbon"
+                value={routingProviderId ?? ''}
+                disabled={routingModeBusy || localGatewayBusy}
+                on:change={onProviderSelect}
+              >
+                <option value="" disabled>{copy.localGatewayRoutingProviderPlaceholder}</option>
+                {#each providers as provider (provider.id)}
+                  <option value={provider.id}>{provider.name || provider.baseUrl}</option>
+                {/each}
+              </select>
+            {:else}
+              <p class="text-[11px] text-danger">{copy.localGatewayRoutingNoProviders}</p>
+            {/if}
+          </div>
+        {/if}
+      </div>
+    </section>
+
+    <section
       class="gateway-panel gateway-groups-panel rounded-[0.45rem] border"
+      class:hidden={isProviderMode}
       aria-labelledby="local-gateway-groups-heading"
     >
       <div
@@ -754,7 +860,7 @@
             {/each}
           </div>
         {/if}
-        {#if !hasAllowedEntities && !showAccountPicker}
+        {#if !hasAllowedEntities && !showAccountPicker && !isProviderMode}
           <p class="text-[11px] leading-4 text-danger" role="alert">
             {copy.localGatewayAllowedGroupsRequired}
           </p>

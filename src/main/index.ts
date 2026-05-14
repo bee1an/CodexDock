@@ -461,7 +461,8 @@ function createTray(): void {
               requestTimeoutMs: 120_000,
               modelMappings: [],
               allowedGroupIds: [],
-              allowedAccountIds: []
+              allowedAccountIds: [],
+              routingMode: 'codex'
             }
           },
           usageByAccountId: {},
