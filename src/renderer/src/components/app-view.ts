@@ -885,7 +885,8 @@ export const messages = {
     skillsPath: 'Path',
     skillLibrary: 'Skill Library',
     skillLibraryTitle: 'Skill Library',
-    skillLibraryDescription: 'Manage your local skill library. Supports categories, search, import/export, and installation to instances.',
+    skillLibraryDescription:
+      'Manage your local skill library. Supports categories, search, import/export, and installation to instances.',
     skillLibraryEmpty: 'Skill library is empty',
     skillLibraryCount: (count: number) => `${count} skill${count === 1 ? '' : 's'}`,
     skillLibraryLoading: 'Loading skill library',
@@ -913,9 +914,12 @@ export const messages = {
     skillLibraryInstallDescription: (name: string) => `Install "${name}" to selected instances`,
     skillLibraryInstallConfirm: 'Confirm install',
     skillLibraryInstallNoTarget: 'Please select at least one target instance',
-    skillLibraryInstallSuccess: (count: number) => `Successfully installed to ${count} instance${count === 1 ? '' : 's'}`,
-    skillLibraryInstallSkipped: (count: number) => `${count} instance${count === 1 ? '' : 's'} already had this skill, skipped`,
-    skillLibraryInstallFailed: (count: number) => `${count} instance${count === 1 ? '' : 's'} failed`,
+    skillLibraryInstallSuccess: (count: number) =>
+      `Successfully installed to ${count} instance${count === 1 ? '' : 's'}`,
+    skillLibraryInstallSkipped: (count: number) =>
+      `${count} instance${count === 1 ? '' : 's'} already had this skill, skipped`,
+    skillLibraryInstallFailed: (count: number) =>
+      `${count} instance${count === 1 ? '' : 's'} failed`,
     skillLibraryCollect: 'Collect from instance',
     skillLibraryImport: 'Import',
     skillLibraryExport: 'Export',
