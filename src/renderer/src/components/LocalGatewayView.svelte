@@ -162,6 +162,78 @@
 
   const statusFilters: StatusFilter[] = ['all', 'ok', 'warn', 'error']
 
+  type LogColumn =
+    | 'time'
+    | 'method'
+    | 'path'
+    | 'target'
+    | 'provider'
+    | 'model'
+    | 'client'
+    | 'requestBytes'
+    | 'responseBytes'
+    | 'contentType'
+    | 'tokens'
+    | 'latency'
+    | 'status'
+
+  const allColumns: LogColumn[] = [
+    'time',
+    'method',
+    'path',
+    'target',
+    'provider',
+    'model',
+    'client',
+    'requestBytes',
+    'responseBytes',
+    'contentType',
+    'tokens',
+    'latency',
+    'status'
+  ]
+
+  const columnLabel = (col: LogColumn): string => {
+    const labels: Record<LogColumn, string> = {
+      time: copy.localGatewayLogTime,
+      method: copy.localGatewayLogMethod,
+      path: copy.localGatewayLogPath,
+      target: copy.localGatewayLogTarget,
+      provider: copy.localGatewayLogProvider,
+      model: copy.localGatewayLogModel,
+      client: copy.localGatewayLogClient,
+      requestBytes: copy.localGatewayLogRequestBytes,
+      responseBytes: copy.localGatewayLogResponseBytes,
+      contentType: copy.localGatewayLogContentType,
+      tokens: copy.localGatewayLogTokens,
+      latency: copy.localGatewayLogLatency,
+      status: copy.localGatewayLogStatus
+    }
+    return labels[col]
+  }
+
+  let visibleColumns: Set<LogColumn> = new Set(allColumns)
+  let showColumnMenu = false
+
+  const toggleColumn = (col: LogColumn): void => {
+    if (visibleColumns.has(col)) {
+      if (visibleColumns.size <= 1) return
+      visibleColumns.delete(col)
+    } else {
+      visibleColumns.add(col)
+    }
+    visibleColumns = visibleColumns
+  }
+
+  const formatBytes = (bytes: number | undefined): string => {
+    if (bytes === undefined) return '—'
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  let expandedLogIds: Record<string, boolean> = {}
+
   let copiedKey = ''
   let copiedTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -277,7 +349,18 @@
 
   const matchesSearch = (log: LocalGatewayLogEntry, query: string): boolean => {
     if (!query) return true
-    return [log.method, log.path, log.provider, log.model, String(log.status), log.message]
+    return [
+      log.method,
+      log.path,
+      log.provider,
+      log.model,
+      String(log.status),
+      log.message,
+      log.target,
+      log.client,
+      log.requestContentType,
+      log.responseContentType
+    ]
       .filter(Boolean)
       .some((value) => value?.toLowerCase().includes(query))
   }
@@ -963,7 +1046,7 @@
         </div>
       </div>
 
-      <div class="gateway-log-filters flex flex-wrap gap-1.5 border-b px-3 py-2">
+      <div class="gateway-log-filters flex flex-wrap items-center gap-1.5 border-b px-3 py-2">
         {#each statusFilters as option (option)}
           <AppButton
             variant="filter"
@@ -976,6 +1059,36 @@
             {statusFilterLabel(option)}
           </AppButton>
         {/each}
+        <div class="relative ml-auto">
+          <AppButton
+            variant="filter"
+            size="xs"
+            onclick={() => (showColumnMenu = !showColumnMenu)}
+            ariaLabel={copy.localGatewayColumnSettings}
+          >
+            <span class="i-lucide-columns-3 mr-1 h-3 w-3" aria-hidden="true"></span>
+            {copy.localGatewayColumnSettings}
+          </AppButton>
+          {#if showColumnMenu}
+            <div
+              class="gateway-column-menu absolute right-0 top-full z-20 mt-1 w-44 rounded-md border bg-surface p-1.5 shadow-lg"
+            >
+              {#each allColumns as col (col)}
+                <label
+                  class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[11px] text-carbon hover:bg-surface-hover"
+                >
+                  <input
+                    type="checkbox"
+                    checked={visibleColumns.has(col)}
+                    onchange={() => toggleColumn(col)}
+                    class="h-3 w-3"
+                  />
+                  {columnLabel(col)}
+                </label>
+              {/each}
+            </div>
+          {/if}
+        </div>
       </div>
 
       <div class="gateway-table-container">
@@ -986,93 +1099,173 @@
                 class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
               >
                 <tr>
-                  <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTime}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap"
-                    >{copy.localGatewayLogMethod}</th
-                  >
-                  <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]"
-                    >{copy.localGatewayLogPath}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap"
-                    >{copy.localGatewayLogProvider}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap"
-                    >{copy.localGatewayLogModel}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                    >{copy.localGatewayLogTokens}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                    >{copy.localGatewayLogLatency}</th
-                  >
-                  <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
-                    >{copy.localGatewayLogStatus}</th
-                  >
+                  {#if visibleColumns.has('time')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTime}</th>
+                  {/if}
+                  {#if visibleColumns.has('method')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogMethod}</th>
+                  {/if}
+                  {#if visibleColumns.has('path')}
+                    <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]">{copy.localGatewayLogPath}</th>
+                  {/if}
+                  {#if visibleColumns.has('target')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTarget}</th>
+                  {/if}
+                  {#if visibleColumns.has('provider')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogProvider}</th>
+                  {/if}
+                  {#if visibleColumns.has('model')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogModel}</th>
+                  {/if}
+                  {#if visibleColumns.has('client')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogClient}</th>
+                  {/if}
+                  {#if visibleColumns.has('requestBytes')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogRequestBytes}</th>
+                  {/if}
+                  {#if visibleColumns.has('responseBytes')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogResponseBytes}</th>
+                  {/if}
+                  {#if visibleColumns.has('contentType')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogContentType}</th>
+                  {/if}
+                  {#if visibleColumns.has('tokens')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogTokens}</th>
+                  {/if}
+                  {#if visibleColumns.has('latency')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogLatency}</th>
+                  {/if}
+                  {#if visibleColumns.has('status')}
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogStatus}</th>
+                  {/if}
                 </tr>
               </thead>
               <tbody class="divide-y gateway-divide">
                 {#each visibleLogs as log (log.id)}
                   <tr class="gateway-table-row transition-colors duration-140">
-                    <td
-                      class="px-3 py-1.5 font-mono text-[11px] text-muted-strong whitespace-nowrap tabular-nums"
-                      >{formatLogTime(log.timestamp)}</td
-                    >
-                    <td class="px-3 py-1.5 whitespace-nowrap">
-                      <span
-                        class={`gateway-method-pill rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none ${methodClass(log.method)}`}
-                        >{log.method}</span
+                    {#if visibleColumns.has('time')}
+                      <td
+                        class="px-3 py-1.5 font-mono text-[11px] text-muted-strong whitespace-nowrap tabular-nums"
+                        >{formatLogTime(log.timestamp)}</td
                       >
-                    </td>
-                    <td
-                      class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
-                      title={log.path}
-                      translate="no">{log.path}</td
-                    >
-                    <td
-                      class="px-3 py-1.5 text-muted-strong truncate max-w-[120px]"
-                      title={log.provider ?? '—'}>{log.provider ?? '—'}</td
-                    >
-                    <td
-                      class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
-                      title={log.model ?? '—'}
-                      translate="no">{log.model ?? '—'}</td
-                    >
-                    <td
-                      class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
-                      >{formatNumber(log.tokens ?? 0)}</td
-                    >
-                    <td class="px-3 py-1.5 text-right whitespace-nowrap">
-                      <span
-                        class={`font-mono text-[11px] tabular-nums ${latencyClass(log.durationMs)}`}
-                        >{formatNumber(log.durationMs)} ms</span
+                    {/if}
+                    {#if visibleColumns.has('method')}
+                      <td class="px-3 py-1.5 whitespace-nowrap">
+                        <span
+                          class={`gateway-method-pill rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none ${methodClass(log.method)}`}
+                          >{log.method}</span
+                        >
+                      </td>
+                    {/if}
+                    {#if visibleColumns.has('path')}
+                      <td
+                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
+                        title={log.path}
+                        translate="no">{log.path}</td
                       >
-                    </td>
-                    <td class="px-3 py-1.5 text-right whitespace-nowrap">
-                      <span
-                        class={`gateway-status-code rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${statusClass(log.status)}`}
-                        >{log.status}</span
+                    {/if}
+                    {#if visibleColumns.has('target')}
+                      <td
+                        class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[160px]"
+                        title={log.target ?? '—'}>{log.target ?? '—'}</td
                       >
-                    </td>
+                    {/if}
+                    {#if visibleColumns.has('provider')}
+                      <td
+                        class="px-3 py-1.5 text-muted-strong truncate max-w-[120px]"
+                        title={log.provider ?? '—'}>{log.provider ?? '—'}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('model')}
+                      <td
+                        class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
+                        title={log.model ?? '—'}
+                        translate="no">{log.model ?? '—'}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('client')}
+                      <td
+                        class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[140px]"
+                        title={log.client ?? '—'}>{log.client ?? '—'}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('requestBytes')}
+                      <td
+                        class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
+                        >{formatBytes(log.requestBytes)}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('responseBytes')}
+                      <td
+                        class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
+                        >{formatBytes(log.responseBytes)}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('contentType')}
+                      <td
+                        class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[140px]"
+                        title={log.responseContentType ?? '—'}>{log.responseContentType ?? '—'}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('tokens')}
+                      <td
+                        class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
+                        >{formatNumber(log.tokens ?? 0)}</td
+                      >
+                    {/if}
+                    {#if visibleColumns.has('latency')}
+                      <td class="px-3 py-1.5 text-right whitespace-nowrap">
+                        <span
+                          class={`font-mono text-[11px] tabular-nums ${latencyClass(log.durationMs)}`}
+                          >{formatNumber(log.durationMs)} ms</span
+                        >
+                      </td>
+                    {/if}
+                    {#if visibleColumns.has('status')}
+                      <td class="px-3 py-1.5 text-right whitespace-nowrap">
+                        <span
+                          class={`gateway-status-code rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${statusClass(log.status)}`}
+                          >{log.status}</span
+                        >
+                      </td>
+                    {/if}
                   </tr>
                   {#if logDetail(log)}
                     <tr class="gateway-log-detail-row">
-                      <td colspan="8" class="px-3 pb-2">
-                        <div
-                          class="gateway-log-detail flex min-w-0 items-start gap-2 rounded-[0.35rem] border px-2.5 py-2"
+                      <td colspan={visibleColumns.size} class="px-3 pb-2">
+                        <button
+                          type="button"
+                          class="gateway-log-detail-toggle flex items-center gap-1 text-[10px] font-medium text-muted-strong hover:text-carbon"
+                          onclick={() => {
+                            if (expandedLogIds[log.id]) {
+                              const { [log.id]: _, ...rest } = expandedLogIds
+                              expandedLogIds = rest
+                            } else {
+                              expandedLogIds = { ...expandedLogIds, [log.id]: true }
+                            }
+                          }}
+                          aria-expanded={!!expandedLogIds[log.id]}
                         >
                           <span
-                            class="i-lucide-alert-circle mt-0.5 h-3.5 w-3.5 flex-none text-danger/70"
+                            class="i-lucide-alert-circle h-3.5 w-3.5 flex-none text-danger/70"
                             aria-hidden="true"
                           ></span>
-                          <span class="text-[10px] font-medium text-muted-strong"
-                            >{copy.localGatewayLogDetail}</span
+                          <span>{expandedLogIds[log.id] ? copy.localGatewayCollapseDetail : copy.localGatewayExpandDetail}</span>
+                          <span
+                            class={`h-3 w-3 transition-transform ${expandedLogIds[log.id] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'}`}
+                            aria-hidden="true"
+                          ></span>
+                        </button>
+                        {#if expandedLogIds[log.id]}
+                          <div
+                            class="gateway-log-detail mt-1 flex min-w-0 items-start gap-2 rounded-[0.35rem] border px-2.5 py-2"
                           >
-                          <code
-                            class="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-carbon"
-                            >{logDetail(log)}</code
-                          >
-                        </div>
+                            <code
+                              class="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-carbon"
+                              >{logDetail(log)}</code
+                            >
+                          </div>
+                        {/if}
                       </td>
                     </tr>
                   {/if}

@@ -168,6 +168,11 @@ describe('LocalGatewayView', () => {
       }
     })
 
-    expect(screen.getByText('Upstream request failed')).toBeTruthy()
+    const expandSpan = screen.getByText(copy.localGatewayExpandDetail)
+    const expandBtn = expandSpan.closest('button')!
+    expandBtn.click()
+    await waitFor(() => {
+      expect(screen.getByText('Upstream request failed')).toBeTruthy()
+    })
   })
 })
