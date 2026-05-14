@@ -139,6 +139,7 @@
   export let updateLocalGatewayAllowedProviders: (
     providerIds: string[]
   ) => Promise<void> = async () => {}
+  export let updateLocalGatewayPort: (port: number) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
@@ -670,6 +671,7 @@
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
       updateAllowedProviders={updateLocalGatewayAllowedProviders}
+      updatePort={updateLocalGatewayPort}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
