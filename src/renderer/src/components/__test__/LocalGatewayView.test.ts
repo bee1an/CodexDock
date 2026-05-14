@@ -84,6 +84,24 @@ describe('LocalGatewayView', () => {
     expect(openLocalGatewayIsolatedInCodex).toHaveBeenCalledOnce()
   })
 
+  it('hides duplicated port conflict error when occupant details are shown', () => {
+    renderGateway({
+      localGatewayStatus: {
+        ...status,
+        lastError: 'listen EADDRINUSE: address already in use 127.0.0.1:11456'
+      },
+      portOccupant: {
+        command: 'CodexDock',
+        pid: 76451
+      }
+    })
+
+    expect(
+      screen.queryByText('listen EADDRINUSE: address already in use 127.0.0.1:11456')
+    ).toBeNull()
+    expect(screen.getByText(copy.localGatewayPortOccupied(11456, 'CodexDock', 76451))).toBeTruthy()
+  })
+
   it('manages model mappings from a dialog', async () => {
     const updateModelMappings = vi.fn().mockResolvedValue(undefined)
     renderGateway({ updateModelMappings })

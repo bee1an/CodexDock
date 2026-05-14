@@ -399,6 +399,17 @@
     }
   }
 
+  const isPortConflictError = (message?: string): boolean => {
+    if (!message) return false
+    const lower = message.toLowerCase()
+    return (
+      lower.includes('eaddrinuse') ||
+      lower.includes('address already in use') ||
+      lower.includes('占用') ||
+      lower.includes('in use')
+    )
+  }
+
   $: displayedStatus = localGatewayStatus
   $: fullGatewayApiKey = localGatewayApiKey || revealedLocalGatewayApiKey
   $: gatewayKey =
@@ -412,6 +423,9 @@
     ? copy.localGatewayHealthReady
     : copy.localGatewayHealthIdle
   $: gatewayPort = resolvePort(displayedStatus.baseUrl)
+  $: shouldShowGatewayError =
+    Boolean(displayedStatus.lastError) &&
+    !(portOccupant && isPortConflictError(displayedStatus.lastError))
   $: totalRequests = logs.length
   $: errorCount = logs.filter((log) => log.status >= 400).length
   $: successRate = totalRequests
@@ -594,7 +608,7 @@
   <div
     class="gateway-scroll gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden"
   >
-    {#if displayedStatus.lastError}
+    {#if shouldShowGatewayError}
       <div
         class="gateway-error flex items-start gap-2 rounded-[0.45rem] border p-2.5 text-xs text-danger"
         role="alert"
