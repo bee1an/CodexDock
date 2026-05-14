@@ -47,6 +47,12 @@ export interface LocalGatewayLogEntry {
   model?: string
   tokens?: number
   message?: string
+  target?: string
+  client?: string
+  requestBytes?: number
+  responseBytes?: number
+  requestContentType?: string
+  responseContentType?: string
 }
 
 export type OpenCodexFromServiceTarget =

@@ -40,7 +40,24 @@ type StickyTarget =
   | { kind: 'account'; id: string; protocol: 'openai'; expiresAt: number }
   | { kind: 'provider'; id: string; protocol: CustomProviderProtocol; expiresAt: number }
 
+type GatewayLogMeta = Pick<
+  LocalGatewayLogEntry,
+  | 'provider'
+  | 'model'
+  | 'tokens'
+  | 'target'
+  | 'client'
+  | 'requestBytes'
+  | 'responseBytes'
+  | 'requestContentType'
+  | 'responseContentType'
+>
+
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
+
+function logTargetFromAccount(account: AccountSummary): string {
+  return account.email || account.name || account.id
+}
 const CHATGPT_HOSTS = ['https://chatgpt.com', 'https://chat.openai.com'] as const
 
 function generateGatewayApiKey(): string {
@@ -333,15 +350,16 @@ function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
 }
 
-function installResponseBodyCapture(response: ServerResponse): () => string {
+function installResponseBodyCapture(response: ServerResponse): { text: () => string; bytes: () => number } {
   const chunks: Buffer[] = []
   let capturedBytes = 0
+  let totalBytes = 0
   const maxBytes = 8192
   const originalWrite = response.write.bind(response)
   const originalEnd = response.end.bind(response)
 
   const capture = (chunk: unknown, encoding?: BufferEncoding): void => {
-    if (chunk === undefined || chunk === null || capturedBytes >= maxBytes) {
+    if (chunk === undefined || chunk === null) {
       return
     }
 
@@ -358,9 +376,12 @@ function installResponseBodyCapture(response: ServerResponse): () => string {
       return
     }
 
-    const available = maxBytes - capturedBytes
-    chunks.push(buffer.length > available ? buffer.subarray(0, available) : buffer)
-    capturedBytes += Math.min(buffer.length, available)
+    totalBytes += buffer.length
+    if (capturedBytes < maxBytes) {
+      const available = maxBytes - capturedBytes
+      chunks.push(buffer.length > available ? buffer.subarray(0, available) : buffer)
+      capturedBytes += Math.min(buffer.length, available)
+    }
   }
 
   response.write = ((chunk: unknown, encodingOrCallback?: unknown, callback?: unknown) => {
@@ -379,7 +400,7 @@ function installResponseBodyCapture(response: ServerResponse): () => string {
     return originalEnd(chunk as never, encodingOrCallback as never, callback as never)
   }) as typeof response.end
 
-  return () => Buffer.concat(chunks).toString('utf8')
+  return { text: () => Buffer.concat(chunks).toString('utf8'), bytes: () => totalBytes }
 }
 
 function textFromContent(content: unknown): string {
@@ -878,16 +899,21 @@ export class CodexLocalGatewayService {
   private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://localhost')
     const startedAt = Date.now()
-    const logMeta: Pick<LocalGatewayLogEntry, 'provider' | 'model' | 'tokens'> = {}
+    const logMeta: GatewayLogMeta = {}
     if (url.pathname !== '/health') {
-      const readCapturedBody = installResponseBodyCapture(response)
+      const captured = installResponseBodyCapture(response)
+      logMeta.client = request.headers['user-agent'] || undefined
+      logMeta.requestContentType = request.headers['content-type'] || undefined
       response.once('finish', () => {
         const message =
           response.statusCode === 200
             ? undefined
-            : logMessageFromResponseBody(readCapturedBody()) ||
+            : logMessageFromResponseBody(captured.text()) ||
               response.statusMessage ||
               `HTTP ${response.statusCode}`
+        logMeta.responseContentType =
+          (response.getHeader('content-type') as string | undefined) || undefined
+        logMeta.responseBytes = captured.bytes() || undefined
         void this.pushLog({
           method: request.method ?? 'GET',
           path: url.pathname,
@@ -921,6 +947,7 @@ export class CodexLocalGatewayService {
     const jsonBody = parseJsonBody(body)
     logMeta.provider = 'Codex'
     logMeta.model = logModelFromRequest(url.pathname, jsonBody)
+    logMeta.requestBytes = body.length
 
     if (requiresAllowedGatewayTargets(url.pathname) && !hasAllowedGatewayTargets(settings)) {
       writeJson(
@@ -964,17 +991,17 @@ export class CodexLocalGatewayService {
     }
 
     if (url.pathname === '/v1/responses') {
-      await this.handleOpenAiResponses(request, response, body, jsonBody)
+      await this.handleOpenAiResponses(request, response, body, jsonBody, logMeta)
       return
     }
 
     if (url.pathname === '/v1/chat/completions') {
-      await this.handleChatCompletions(request, response, body, jsonBody)
+      await this.handleChatCompletions(request, response, body, jsonBody, logMeta)
       return
     }
 
     if (url.pathname === '/v1/messages') {
-      await this.handleAnthropicMessages(request, response, jsonBody)
+      await this.handleAnthropicMessages(request, response, jsonBody, logMeta)
       return
     }
 
@@ -984,7 +1011,7 @@ export class CodexLocalGatewayService {
     }
 
     if (url.pathname.startsWith('/v1beta/')) {
-      await this.handleGeminiContent(request, response, jsonBody, url.pathname)
+      await this.handleGeminiContent(request, response, jsonBody, url.pathname, logMeta)
       return
     }
 
@@ -1051,20 +1078,24 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
     const mappings = (await this.settings()).modelMappings
     applyModelMapping(jsonBody, mappings)
     const effectiveBody = mappings.length ? Buffer.from(JSON.stringify(jsonBody)) : body
     try {
-      const upstream = await this.fetchCodexResponses(request, effectiveBody, jsonBody)
+      const { upstream, account } = await this.fetchCodexResponses(request, effectiveBody, jsonBody)
+      logMeta.target = logTargetFromAccount(account)
       if (upstream.status === 429) {
-        await this.proxyProviderProtocol('openai', request, response, effectiveBody)
+        const providerName = await this.proxyProviderProtocol('openai', request, response, effectiveBody)
+        if (providerName) logMeta.target = providerName
         return
       }
       await writeFetchResponse(response, upstream)
     } catch {
-      await this.proxyProviderProtocol('openai', request, response, effectiveBody)
+      const providerName = await this.proxyProviderProtocol('openai', request, response, effectiveBody)
+      if (providerName) logMeta.target = providerName
     }
   }
 
@@ -1072,39 +1103,43 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
     applyModelMapping(jsonBody, (await this.settings()).modelMappings)
     const responsesBody = Buffer.from(JSON.stringify(chatToResponsesPayload(jsonBody)))
     if (jsonBody.stream === true) {
-      await this.handleChatCompletionStream(request, response, responsesBody, body, jsonBody)
+      await this.handleChatCompletionStream(request, response, responsesBody, body, jsonBody, logMeta)
       return
     }
 
-    const upstream = await this.fetchCodexResponses(request, responsesBody, jsonBody).catch(
+    const result = await this.fetchCodexResponses(request, responsesBody, jsonBody).catch(
       async () => {
-        await this.proxyProviderProtocol('openai', request, response, body)
+        const providerName = await this.proxyProviderProtocol('openai', request, response, body)
+        if (providerName) logMeta.target = providerName
         return null
       }
     )
-    if (!upstream) {
+    if (!result) {
       return
     }
-    if (upstream.status === 429) {
-      await this.proxyProviderProtocol('openai', request, response, body)
+    logMeta.target = logTargetFromAccount(result.account)
+    if (result.upstream.status === 429) {
+      const providerName = await this.proxyProviderProtocol('openai', request, response, body)
+      if (providerName) logMeta.target = providerName
       return
     }
-    if (!upstream.ok) {
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
 
-    const text = await collectResponsesText(upstream)
+    const text = await collectResponsesText(result.upstream)
     const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
     writeJson(response, 200, {
       id: `chatcmpl-cdock-${Date.now()}`,
@@ -1126,10 +1161,11 @@ export class CodexLocalGatewayService {
     response: ServerResponse,
     body: Buffer,
     originalBody: Buffer,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
-    const upstream = await this.fetchCodexResponses(request, body, jsonBody).catch(async () => null)
-    if (!upstream) {
+    const result = await this.fetchCodexResponses(request, body, jsonBody).catch(async () => null)
+    if (!result) {
       writeJson(
         response,
         503,
@@ -1137,16 +1173,18 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    if (upstream.status === 429) {
-      await this.proxyProviderProtocol('openai', request, response, originalBody)
+    logMeta.target = logTargetFromAccount(result.account)
+    if (result.upstream.status === 429) {
+      const providerName = await this.proxyProviderProtocol('openai', request, response, originalBody)
+      if (providerName) logMeta.target = providerName
       return
     }
-    if (!upstream.ok) {
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
@@ -1164,7 +1202,7 @@ export class CodexLocalGatewayService {
       model,
       choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]
     })
-    await streamResponsesTextDeltas(upstream, (delta) => {
+    await streamResponsesTextDeltas(result.upstream, (delta) => {
       writeSse(response, {
         id,
         object: 'chat.completion.chunk',
@@ -1187,20 +1225,21 @@ export class CodexLocalGatewayService {
   private async handleAnthropicMessages(
     request: IncomingMessage,
     response: ServerResponse,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
     applyModelMapping(jsonBody, (await this.settings()).modelMappings)
     const responsesPayload = anthropicToResponsesPayload(jsonBody)
     const responsesBody = Buffer.from(JSON.stringify(responsesPayload))
     if (jsonBody.stream === true) {
-      await this.handleAnthropicMessageStream(request, response, responsesBody, jsonBody)
+      await this.handleAnthropicMessageStream(request, response, responsesBody, jsonBody, logMeta)
       return
     }
 
-    const upstream = await this.fetchCodexResponses(request, responsesBody, responsesPayload).catch(
+    const result = await this.fetchCodexResponses(request, responsesBody, responsesPayload).catch(
       () => null
     )
-    if (!upstream) {
+    if (!result) {
       writeJson(
         response,
         503,
@@ -1208,17 +1247,18 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    if (!upstream.ok) {
+    logMeta.target = logTargetFromAccount(result.account)
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
 
-    const text = await collectResponsesText(upstream)
+    const text = await collectResponsesText(result.upstream)
     const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
     writeJson(response, 200, {
       id: `msg_cdock_${Date.now()}`,
@@ -1236,10 +1276,11 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
-    const upstream = await this.fetchCodexResponses(request, body, jsonBody).catch(() => null)
-    if (!upstream) {
+    const result = await this.fetchCodexResponses(request, body, jsonBody).catch(() => null)
+    if (!result) {
       writeJson(
         response,
         503,
@@ -1247,12 +1288,13 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    if (!upstream.ok) {
+    logMeta.target = logTargetFromAccount(result.account)
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
@@ -1288,7 +1330,7 @@ export class CodexLocalGatewayService {
       },
       'content_block_start'
     )
-    await streamResponsesTextDeltas(upstream, (delta) => {
+    await streamResponsesTextDeltas(result.upstream, (delta) => {
       writeSse(
         response,
         {
@@ -1317,7 +1359,8 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     jsonBody: Record<string, unknown>,
-    pathname: string
+    pathname: string,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
     const mappings = (await this.settings()).modelMappings
     const modelFromPath = geminiModelFromPath(pathname)
@@ -1332,14 +1375,14 @@ export class CodexLocalGatewayService {
     const responsesPayload = geminiToResponsesPayload(jsonBody, pathname)
     const responsesBody = Buffer.from(JSON.stringify(responsesPayload))
     if (pathname.includes(':streamGenerateContent')) {
-      await this.handleGeminiContentStream(request, response, responsesBody, responsesPayload)
+      await this.handleGeminiContentStream(request, response, responsesBody, responsesPayload, logMeta)
       return
     }
 
-    const upstream = await this.fetchCodexResponses(request, responsesBody, responsesPayload).catch(
+    const result = await this.fetchCodexResponses(request, responsesBody, responsesPayload).catch(
       () => null
     )
-    if (!upstream) {
+    if (!result) {
       writeJson(
         response,
         503,
@@ -1347,17 +1390,18 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    if (!upstream.ok) {
+    logMeta.target = logTargetFromAccount(result.account)
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
 
-    const text = await collectResponsesText(upstream)
+    const text = await collectResponsesText(result.upstream)
     const model = geminiModelFromPath(pathname) ?? 'codex'
     writeJson(response, 200, {
       candidates: [
@@ -1375,10 +1419,11 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer,
-    jsonBody: Record<string, unknown>
+    jsonBody: Record<string, unknown>,
+    logMeta: GatewayLogMeta
   ): Promise<void> {
-    const upstream = await this.fetchCodexResponses(request, body, jsonBody).catch(() => null)
-    if (!upstream) {
+    const result = await this.fetchCodexResponses(request, body, jsonBody).catch(() => null)
+    if (!result) {
       writeJson(
         response,
         503,
@@ -1386,12 +1431,13 @@ export class CodexLocalGatewayService {
       )
       return
     }
-    if (!upstream.ok) {
+    logMeta.target = logTargetFromAccount(result.account)
+    if (!result.upstream.ok) {
       writeJson(
         response,
-        upstream.status,
-        (await upstream.json().catch(() => null)) ??
-          openAiError('Upstream request failed.', upstream.status).body
+        result.upstream.status,
+        (await result.upstream.json().catch(() => null)) ??
+          openAiError('Upstream request failed.', result.upstream.status).body
       )
       return
     }
@@ -1399,7 +1445,7 @@ export class CodexLocalGatewayService {
     response.statusCode = 200
     response.setHeader('content-type', 'text/event-stream; charset=utf-8')
     response.setHeader('cache-control', 'no-cache')
-    await streamResponsesTextDeltas(upstream, (delta) => {
+    await streamResponsesTextDeltas(result.upstream, (delta) => {
       writeSse(response, {
         candidates: [
           {
@@ -1419,7 +1465,7 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     body: Buffer,
     jsonBody: Record<string, unknown>
-  ): Promise<Response> {
+  ): Promise<{ upstream: Response; account: AccountSummary }> {
     const stickyKey = stickyKeyFromRequest(request.headers, jsonBody)
     const attemptedAccountIds = new Set<string>()
 
@@ -1455,7 +1501,7 @@ export class CodexLocalGatewayService {
           expiresAt: this.stickyExpiresAt()
         })
       }
-      return attempt.upstream
+      return { upstream: attempt.upstream, account: attempt.account }
     }
   }
 
@@ -1586,7 +1632,7 @@ export class CodexLocalGatewayService {
     request: IncomingMessage,
     response: ServerResponse,
     body: Buffer
-  ): Promise<void> {
+  ): Promise<string | undefined> {
     const bodyJson = parseJsonBody(body)
     const stickyKey = stickyKeyFromRequest(request.headers, bodyJson)
     const sticky = stickyKey ? this.resolveSticky(stickyKey, protocol) : null
@@ -1602,7 +1648,7 @@ export class CodexLocalGatewayService {
         openAiError(`No ${protocol} provider configured for local gateway.`, 503, 'no_provider')
           .body
       )
-      return
+      return undefined
     }
 
     const resolved = await this.options.providerStore.getResolvedProvider(provider.id)
@@ -1625,6 +1671,7 @@ export class CodexLocalGatewayService {
       })
     }
     await writeFetchResponse(response, upstream)
+    return provider.name || provider.id
   }
 
   private async bestAccount(excludedAccountIds = new Set<string>()): Promise<AccountSummary | null> {
@@ -1837,7 +1884,15 @@ export class CodexLocalGatewayService {
       provider: typeof record.provider === 'string' ? record.provider : undefined,
       model: typeof record.model === 'string' ? record.model : undefined,
       tokens: typeof record.tokens === 'number' ? record.tokens : undefined,
-      message: typeof record.message === 'string' ? record.message : undefined
+      message: typeof record.message === 'string' ? record.message : undefined,
+      target: typeof record.target === 'string' ? record.target : undefined,
+      client: typeof record.client === 'string' ? record.client : undefined,
+      requestBytes: typeof record.requestBytes === 'number' ? record.requestBytes : undefined,
+      responseBytes: typeof record.responseBytes === 'number' ? record.responseBytes : undefined,
+      requestContentType:
+        typeof record.requestContentType === 'string' ? record.requestContentType : undefined,
+      responseContentType:
+        typeof record.responseContentType === 'string' ? record.responseContentType : undefined
     }
   }
 
