@@ -131,6 +131,12 @@
   export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
+  export let localGatewayRoutingMode: import('../../../shared/codex').LocalGatewayRoutingMode = 'codex'
+  export let localGatewayRoutingProviderId: string | undefined = undefined
+  export let updateLocalGatewayRoutingMode: (
+    mode: import('../../../shared/codex').LocalGatewayRoutingMode,
+    providerId?: string
+  ) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
@@ -648,6 +654,9 @@
       allowedAccountIds={localGatewayAllowedAccountIds}
       {groups}
       {accounts}
+      {providers}
+      routingMode={localGatewayRoutingMode}
+      routingProviderId={localGatewayRoutingProviderId}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
@@ -655,6 +664,7 @@
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
+      updateRoutingMode={updateLocalGatewayRoutingMode}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}

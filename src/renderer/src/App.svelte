@@ -828,6 +828,22 @@
     )
   }
 
+  const updateLocalGatewayRoutingMode = async (
+    mode: import('../shared/codex').LocalGatewayRoutingMode,
+    providerId?: string
+  ): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-routing', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          routingMode: mode,
+          providerId: mode === 'provider' ? providerId : undefined
+        }
+      })
+    )
+  }
+
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
     window.codexApp.getProvider(providerId)
 
@@ -1812,6 +1828,9 @@
               {updateLocalGatewayModelMappings}
               {updateLocalGatewayAllowedGroups}
               {updateLocalGatewayAllowedAccounts}
+              localGatewayRoutingMode={snapshot.settings.localGateway?.routingMode ?? 'codex'}
+              localGatewayRoutingProviderId={snapshot.settings.localGateway?.providerId}
+              {updateLocalGatewayRoutingMode}
               {localGatewayPortOccupant}
               {killingLocalGatewayPortOccupant}
               {killLocalGatewayPortOccupant}

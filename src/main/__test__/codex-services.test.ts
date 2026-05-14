@@ -943,7 +943,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: ['group-1'],
-        allowedAccountIds: []
+        allowedAccountIds: [],
+        routingMode: 'codex'
       }
     })
 
@@ -997,7 +998,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: ['group-1'],
-        allowedAccountIds: []
+        allowedAccountIds: [],
+        routingMode: 'codex'
       }
     })
 
@@ -1058,7 +1060,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: [],
-        allowedAccountIds: ['account-1']
+        allowedAccountIds: ['account-1'],
+        routingMode: 'codex'
       }
     })
 
@@ -1119,7 +1122,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: [],
-        allowedAccountIds: [snapshot.accounts[0].id]
+        allowedAccountIds: [snapshot.accounts[0].id],
+        routingMode: 'codex'
       }
     })
 
@@ -1136,7 +1140,7 @@ describe('createCodexServices', () => {
       const payload = (await response.json()) as { error?: { code?: string } }
 
       expect(response.status).toBe(503)
-      expect(payload.error?.code).toBe('no_provider')
+      expect(payload.error?.code).toBe('no_account')
       expect(platform.fetch).not.toHaveBeenCalled()
     } finally {
       await services.gateway.stop()
@@ -1161,7 +1165,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: ['group-1'],
-        allowedAccountIds: []
+        allowedAccountIds: [],
+        routingMode: 'codex'
       }
     })
 
@@ -1176,7 +1181,8 @@ describe('createCodexServices', () => {
           requestTimeoutMs: 120_000,
           modelMappings: [],
           allowedGroupIds: [],
-          allowedAccountIds: []
+          allowedAccountIds: [],
+          routingMode: 'codex'
         }
       })
 
@@ -1256,7 +1262,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: [],
-        allowedAccountIds: [accountA!.id, accountB!.id]
+        allowedAccountIds: [accountA!.id, accountB!.id],
+        routingMode: 'codex'
       }
     })
 
@@ -1341,7 +1348,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: [],
-        allowedAccountIds: [accountA!.id, accountB!.id]
+        allowedAccountIds: [accountA!.id, accountB!.id],
+        routingMode: 'codex'
       }
     })
 
@@ -1566,7 +1574,8 @@ describe('createCodexServices', () => {
         requestTimeoutMs: 120_000,
         modelMappings: [],
         allowedGroupIds: ['all'],
-        allowedAccountIds: []
+        allowedAccountIds: [],
+        routingMode: 'codex'
       }
     })
 
@@ -1629,6 +1638,150 @@ describe('createCodexServices', () => {
         multi: true,
         workspacePath: env.workspacePath
       })
+    } finally {
+      await gateway.stop()
+    }
+  })
+
+  it('routes requests directly to provider in provider routing mode', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const port = await getFreePort()
+    const gateway = createLocalGatewayForTest(env, platform)
+    const writableGateway = gateway as unknown as {
+      options: { store: CodexAccountStore; providerStore: CodexProviderStore }
+    }
+
+    await writableGateway.options.providerStore.create({
+      name: 'Test Provider',
+      baseUrl: 'https://api.test-provider.local',
+      apiKey: 'provider-key-123',
+      protocol: 'openai',
+      model: 'gpt-5.4'
+    })
+    const providers = await writableGateway.options.providerStore.list()
+    const providerId = providers[0].id
+
+    await writableGateway.options.store.updateSettings({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'test-gateway-key',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [],
+        routingMode: 'provider',
+        providerId
+      }
+    })
+
+    const mockUpstream = new Response(JSON.stringify({ choices: [] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' }
+    })
+    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockUpstream)
+
+    await gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer test-gateway-key',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', messages: [{ role: 'user', content: 'hi' }] })
+      })
+
+      expect(response.status).toBe(200)
+      expect(platform.fetch).toHaveBeenCalledTimes(1)
+      const fetchCall = (platform.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
+      expect(fetchCall[0]).toContain('api.test-provider.local')
+    } finally {
+      await gateway.stop()
+    }
+  })
+
+  it('returns error when provider mode has no providerId configured', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const port = await getFreePort()
+    const gateway = createLocalGatewayForTest(env, platform)
+    const writableGateway = gateway as unknown as {
+      options: { store: CodexAccountStore }
+    }
+
+    await writableGateway.options.store.updateSettings({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'test-gateway-key',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [],
+        routingMode: 'provider'
+      }
+    })
+
+    await expect(gateway.start()).rejects.toThrow(
+      'Provider routing mode requires an explicit providerId in gateway settings.'
+    )
+  })
+
+  it('returns error when selected provider is deleted in provider mode', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const port = await getFreePort()
+    const gateway = createLocalGatewayForTest(env, platform)
+    const writableGateway = gateway as unknown as {
+      options: { store: CodexAccountStore; providerStore: CodexProviderStore }
+    }
+
+    await writableGateway.options.providerStore.create({
+      name: 'Ephemeral Provider',
+      baseUrl: 'https://api.ephemeral.local',
+      apiKey: 'eph-key',
+      protocol: 'openai',
+      model: 'gpt-5.4'
+    })
+    const providers = await writableGateway.options.providerStore.list()
+    const providerId = providers[0].id
+
+    await writableGateway.options.store.updateSettings({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'test-gateway-key',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [],
+        routingMode: 'provider',
+        providerId
+      }
+    })
+
+    await writableGateway.options.providerStore.remove(providerId)
+
+    await gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer test-gateway-key',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', messages: [] })
+      })
+      const payload = (await response.json()) as { error?: { code?: string } }
+
+      expect(response.status).toBe(503)
+      expect(payload.error?.code).toBe('provider_not_found')
+      expect(platform.fetch).not.toHaveBeenCalled()
     } finally {
       await gateway.stop()
     }
