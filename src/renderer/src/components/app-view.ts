@@ -258,6 +258,19 @@ export const messages = {
     sessionsBulkCopySuccess: (count: number) => `${count} 个会话复制成功`,
     sessionsBulkCopyFailureCount: (count: number) => `${count} 个会话复制失败`,
     sessionsBulkCopyResult: '批量复制结果',
+    sessionsTrashSession: '删除',
+    sessionsTrashSessionLabel: (title: string) => `删除会话 ${title}`,
+    sessionsTrashConfirmTitle: '确认删除',
+    sessionsTrashConfirmMessage: '该会话将被移动到系统回收站，可从回收站恢复。',
+    sessionsTrashConfirmAction: '删除',
+    sessionsTrashSuccess: '已移动到回收站',
+    sessionsTrashFailed: '删除会话失败',
+    sessionsBulkTrashAction: (count: number) => `删除选中的 ${count} 条`,
+    sessionsBulkTrashConfirmMessage: (count: number) =>
+      `${count} 个会话将被移动到系统回收站，可从回收站恢复。`,
+    sessionsBulkTrashProgress: (done: number, total: number) => `正在删除 ${done}/${total}`,
+    sessionsBulkTrashSuccess: (count: number) => `${count} 个会话已移动到回收站`,
+    sessionsBulkTrashFailureCount: (count: number) => `${count} 个会话删除失败`,
     sessionsExpandMessage: '展开消息',
     sessionsCollapseMessage: '收起消息',
     sessionsRoleUser: '用户',
@@ -895,6 +908,23 @@ export const messages = {
     sessionsBulkCopyFailureCount: (count: number) =>
       `${count} session${count === 1 ? '' : 's'} failed`,
     sessionsBulkCopyResult: 'Bulk copy result',
+    sessionsTrashSession: 'Delete',
+    sessionsTrashSessionLabel: (title: string) => `Delete session ${title}`,
+    sessionsTrashConfirmTitle: 'Confirm delete',
+    sessionsTrashConfirmMessage:
+      'This session will be moved to the system Trash. You can restore it from there.',
+    sessionsTrashConfirmAction: 'Delete',
+    sessionsTrashSuccess: 'Moved to Trash',
+    sessionsTrashFailed: 'Failed to delete session',
+    sessionsBulkTrashAction: (count: number) =>
+      `Delete ${count} selected session${count === 1 ? '' : 's'}`,
+    sessionsBulkTrashConfirmMessage: (count: number) =>
+      `${count} session${count === 1 ? '' : 's'} will be moved to the system Trash. You can restore ${count === 1 ? 'it' : 'them'} from there.`,
+    sessionsBulkTrashProgress: (done: number, total: number) => `Deleting ${done}/${total}`,
+    sessionsBulkTrashSuccess: (count: number) =>
+      `${count} session${count === 1 ? '' : 's'} moved to Trash`,
+    sessionsBulkTrashFailureCount: (count: number) =>
+      `${count} session${count === 1 ? '' : 's'} failed to delete`,
     sessionsExpandMessage: 'Expand message',
     sessionsCollapseMessage: 'Collapse message',
     sessionsRoleUser: 'User',

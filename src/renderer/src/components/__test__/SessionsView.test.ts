@@ -201,6 +201,10 @@ function renderSessionsView(
         targetModel: 'gpt-5.4-mini',
         session: sessionResult.sessions[0]!
       }),
+      trashCodexSession: vi.fn().mockResolvedValue({
+        session: sessionResult.sessions[0]!,
+        trashedAt: '2026-05-14T00:00:00.000Z'
+      }),
       ...overrides
     }
   })

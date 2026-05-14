@@ -6,6 +6,7 @@ import type {
   CliAccountListPayload,
   CliResult,
   CodexInstanceSummary,
+  CodexSessionSummary,
   CurrentSessionSummary,
   CustomProviderSummary,
   DoctorReport,
@@ -59,6 +60,8 @@ Usage:
   cdock group assign <account-id> <group-id> [--json]
   cdock group unassign <account-id> <group-id> [--json]
   cdock session current [--json]
+  cdock session list [--instance <id|default>] [--status active|archived] [--project <path>] [--query <text>] [--limit <n>] [--json]
+  cdock session remove <session-id|file-path> [--instance <id|default>] [--json]
   cdock usage read [account-id] [--json]
   cdock cost read [--refresh] [--json]
   cdock gateway start|stop|status [--json]
@@ -447,5 +450,22 @@ export function printPromptCategories(result: PromptCategoryList, quiet: boolean
 
   for (const category of result.categories) {
     console.log(category)
+  }
+}
+
+export function printSessions(sessions: CodexSessionSummary[], quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!sessions.length) {
+    console.log('No sessions')
+    return
+  }
+
+  for (const session of sessions) {
+    const status = session.status === 'archived' ? ' [archived]' : ''
+    const project = session.projectName ? ` (${session.projectName})` : ''
+    console.log(`${session.id}  ${session.title.slice(0, 60)}${project}${status}`)
   }
 }

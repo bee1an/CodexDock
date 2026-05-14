@@ -33,6 +33,8 @@ import type {
   PromptSearchInput,
   PromptSummary,
   ReadCodexSessionDetailInput,
+  TrashCodexSessionInput,
+  TrashCodexSessionResult,
   UpdateCustomProviderInput,
   UpdatePromptInput,
   LoginEvent,
@@ -125,6 +127,8 @@ const codexApp = {
     input: CopyCodexSessionToProviderInput
   ): Promise<CopyCodexSessionToProviderResult> =>
     ipcRenderer.invoke('codex:copy-session-to-provider', input),
+  trashCodexSession: (input: TrashCodexSessionInput): Promise<TrashCodexSessionResult> =>
+    ipcRenderer.invoke('codex:trash-session', input),
   listCodexSkills: (): Promise<CodexSkillsResult> => ipcRenderer.invoke('codex:list-skills'),
   readCodexSkillDetail: (instanceId: string, skillDirName: string): Promise<CodexSkillDetail> =>
     ipcRenderer.invoke('codex:read-skill-detail', instanceId, skillDirName),

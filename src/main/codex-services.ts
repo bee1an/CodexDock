@@ -46,7 +46,8 @@ import {
   copyCodexSessionToProvider,
   listCodexSessionProjects,
   listCodexSessions,
-  readCodexSessionDetail
+  readCodexSessionDetail,
+  trashCodexSession
 } from './codex-sessions'
 import { createCodexSkillService } from './codex-skills'
 import { createCodexPromptService } from './codex-prompts'
@@ -581,7 +582,8 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         }
 
         return copyCodexSessionToProvider(instances, input, targetInstance, targetProvider)
-      }
+      },
+      trash: async (input) => trashCodexSession(await listCodexInstances(), input, options.platform)
     },
     settings: {
       get: async () => store.getSettings(),

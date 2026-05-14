@@ -18,6 +18,8 @@ import {
   parseInstanceOptions,
   parsePromptOptions,
   parseProviderOptions,
+  parseSessionInstanceOption,
+  parseSessionListOptions,
   parseSettingsValue,
   parseUpdateTokensOptions
 } from './cli-parsing'
@@ -35,6 +37,7 @@ import {
   printPrompts,
   printProviderCheck,
   printProviders,
+  printSessions,
   printSettings,
   printGroups,
   printTokenCost,
@@ -542,12 +545,67 @@ async function execute(
       }
     }
     case 'session': {
-      if (subcommand !== 'current') {
-        throw new CliError('Unknown session command', EXIT_USAGE)
+      switch (subcommand) {
+        case 'current': {
+          const session = await runtime.services.session.current()
+          printIfNeeded(`Current session: ${sessionLabel(session)}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(session) }
+        }
+        case 'list': {
+          const sessionFlags = parseSessionListOptions(rest)
+          const result = await runtime.services.session.list(sessionFlags)
+          printSessions(result.sessions, silent)
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'remove': {
+          const target = rest.find((arg) => !arg.startsWith('--'))
+          if (!target) {
+            throw new CliError('Missing session-id or file-path', EXIT_USAGE)
+          }
+
+          const instanceFlag = parseSessionInstanceOption(rest)
+          const result = await runtime.services.session.list(
+            instanceFlag ? { instanceId: instanceFlag } : undefined
+          )
+          const allSessions = result.sessions
+
+          let match: { instanceId: string; filePath: string } | undefined
+          if (target.endsWith('.jsonl') || target.includes('/')) {
+            const found = allSessions.find((s) => s.filePath === target)
+            if (found) {
+              match = { instanceId: found.instanceId, filePath: found.filePath }
+            } else if (instanceFlag) {
+              match = { instanceId: instanceFlag, filePath: target }
+            } else {
+              throw new CliError(`Session file not found: ${target}`, EXIT_FAILURE)
+            }
+          } else {
+            const matches = allSessions.filter((s) => s.id === target)
+            if (matches.length === 0) {
+              throw new CliError(`Session not found: ${target}`, EXIT_FAILURE)
+            }
+            if (matches.length > 1) {
+              throw new CliError(
+                `Ambiguous session id "${target}" matches ${matches.length} sessions across instances. Use --instance <id> or provide the full file path.`,
+                EXIT_USAGE
+              )
+            }
+            match = { instanceId: matches[0].instanceId, filePath: matches[0].filePath }
+          }
+
+          const trashResult = await runtime.services.session.trash({
+            instanceId: match.instanceId,
+            filePath: match.filePath
+          })
+          printIfNeeded(
+            `Moved session to Trash: ${trashResult.session.title.slice(0, 60)}`,
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(trashResult) }
+        }
+        default:
+          throw new CliError('Unknown session command', EXIT_USAGE)
       }
-      const session = await runtime.services.session.current()
-      printIfNeeded(`Current session: ${sessionLabel(session)}`, silent)
-      return { code: EXIT_OK, payload: toCliResult(session) }
     }
     case 'group': {
       switch (subcommand) {

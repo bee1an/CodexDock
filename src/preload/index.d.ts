@@ -33,6 +33,8 @@ import type {
   ProbeProviderModelsInput,
   ProviderModelsProbeResult,
   ReadCodexSessionDetailInput,
+  TrashCodexSessionInput,
+  TrashCodexSessionResult,
   LoginAttempt,
   LoginEvent,
   LoginMethod,
@@ -108,6 +110,7 @@ interface CodexDesktopApi {
   copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
+  trashCodexSession: (input: TrashCodexSessionInput) => Promise<TrashCodexSessionResult>
   listCodexSkills: () => Promise<CodexSkillsResult>
   readCodexSkillDetail: (instanceId: string, skillDirName: string) => Promise<CodexSkillDetail>
   copyCodexSkill: (input: CopyCodexSkillInput) => Promise<CopyCodexSkillResult>

@@ -8,4 +8,5 @@ export interface CodexPlatformAdapter {
   protect(value: string): ProtectedPayload
   unprotect(payload: ProtectedPayload): string
   openExternal(url: string): Promise<void>
+  trashItem?(path: string): Promise<void>
 }

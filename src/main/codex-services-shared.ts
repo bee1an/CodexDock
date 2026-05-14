@@ -51,6 +51,8 @@ import {
   type ReadCodexSessionDetailInput,
   type TokenCostDetail,
   type TokenCostReadOptions,
+  type TrashCodexSessionInput,
+  type TrashCodexSessionResult,
   type UpdateAccountHealthInput,
   type UpdateAccountWakeScheduleInput,
   type UpdateAccountTokensInput,
@@ -425,6 +427,7 @@ export interface CodexServices {
     copyToProvider(
       input: CopyCodexSessionToProviderInput
     ): Promise<CopyCodexSessionToProviderResult>
+    trash(input: TrashCodexSessionInput): Promise<TrashCodexSessionResult>
   }
   settings: {
     get(): Promise<AppSettings>

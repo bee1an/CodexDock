@@ -1840,6 +1840,7 @@
               readCodexSessionDetail={(input) => window.codexApp.readCodexSessionDetail(input)}
               copyCodexSessionToProvider={(input) =>
                 window.codexApp.copyCodexSessionToProvider(input)}
+              trashCodexSession={(input) => window.codexApp.trashCodexSession(input)}
               listCodexSkills={() => window.codexApp.listCodexSkills()}
               readCodexSkillDetail={(instanceId, skillDirName) =>
                 window.codexApp.readCodexSkillDetail(instanceId, skillDirName)}
