@@ -216,5 +216,4 @@
   .group-row:hover {
     background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
   }
-
 </style>

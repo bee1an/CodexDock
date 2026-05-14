@@ -80,6 +80,7 @@ interface CliTestRuntime {
       get: ReturnType<typeof vi.fn>
       check: ReturnType<typeof vi.fn>
       open: ReturnType<typeof vi.fn>
+      openIsolated: ReturnType<typeof vi.fn>
     }
     doctor: {
       run: ReturnType<typeof vi.fn>
@@ -115,6 +116,8 @@ interface CliTestRuntime {
       show: ReturnType<typeof vi.fn>
       open: ReturnType<typeof vi.fn>
       openIsolated: ReturnType<typeof vi.fn>
+      openLocalGateway: ReturnType<typeof vi.fn>
+      openLocalGatewayIsolated: ReturnType<typeof vi.fn>
       instances: {
         list: ReturnType<typeof vi.fn>
         getDefaults: ReturnType<typeof vi.fn>
@@ -331,7 +334,8 @@ function createRuntime(): {
             }
           ]
         })),
-        open: vi.fn(async () => snapshot)
+        open: vi.fn(async () => snapshot),
+        openIsolated: vi.fn(async () => snapshot)
       },
       doctor: {
         run: vi.fn(async () => ({
@@ -442,6 +446,8 @@ function createRuntime(): {
         show: vi.fn(async () => snapshot),
         open: vi.fn(async () => snapshot),
         openIsolated: vi.fn(async () => snapshot),
+        openLocalGateway: vi.fn(async () => snapshot),
+        openLocalGatewayIsolated: vi.fn(async () => snapshot),
         instances: {
           list: vi.fn(async () => snapshot.codexInstances),
           getDefaults: vi.fn(async () => snapshot.codexInstanceDefaults),
@@ -494,12 +500,12 @@ describe('runCli', () => {
     expect(runtime.services.accounts.list).toHaveBeenCalledOnce()
     expect(parseJsonLog(logSpy)).toEqual({
       ok: true,
-        data: {
-          accounts: snapshot.accounts,
-          activeAccountId: snapshot.activeAccountId,
-          currentSession: snapshot.currentSession,
-          accountHealthByAccountId: snapshot.accountHealthByAccountId
-        },
+      data: {
+        accounts: snapshot.accounts,
+        activeAccountId: snapshot.activeAccountId,
+        currentSession: snapshot.currentSession,
+        accountHealthByAccountId: snapshot.accountHealthByAccountId
+      },
       error: null
     })
 
@@ -628,6 +634,12 @@ describe('runCli', () => {
       runCli(runtime as never, ['provider', 'open', 'provider_1', '--json'])
     ).resolves.toBe(0)
     expect(runtime.services.providers.open).toHaveBeenCalledWith('provider_1')
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['provider', 'open', 'provider_1', '--isolated', '--json'])
+    ).resolves.toBe(0)
+    expect(runtime.services.providers.openIsolated).toHaveBeenCalledWith('provider_1')
 
     logSpy.mockClear()
     await expect(
@@ -806,6 +818,23 @@ describe('runCli', () => {
       },
       error: null
     })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['gateway', 'open', '--json'])).resolves.toBe(0)
+    expect(runtime.services.codex.openLocalGateway).toHaveBeenCalledTimes(1)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        activeAccountId: 'acct_1'
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['gateway', 'open', '--isolated', '--json'])).resolves.toBe(
+      0
+    )
+    expect(runtime.services.codex.openLocalGatewayIsolated).toHaveBeenCalledTimes(1)
 
     logSpy.mockClear()
     await expect(runCli(runtime as never, ['gateway', 'port', 'status', '--json'])).resolves.toBe(0)

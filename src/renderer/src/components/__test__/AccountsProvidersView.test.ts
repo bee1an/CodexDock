@@ -94,6 +94,7 @@ describe('AccountsProvidersView', () => {
 
   it('renders action buttons in readonly mode', async () => {
     const openProviderInCodex = vi.fn().mockResolvedValue(undefined)
+    const openProviderIsolatedInCodex = vi.fn().mockResolvedValue(undefined)
     const startEditingProvider = vi.fn().mockResolvedValue(undefined)
     const confirmRemoveProvider = vi.fn().mockResolvedValue(undefined)
 
@@ -113,6 +114,7 @@ describe('AccountsProvidersView', () => {
         createProvider: vi.fn().mockResolvedValue(undefined),
         probeProviderModels: vi.fn().mockResolvedValue({ ok: true, availableModels: [] }),
         openProviderInCodex,
+        openProviderIsolatedInCodex,
         startEditingProvider,
         saveProvider: vi.fn().mockResolvedValue(undefined),
         cancelEditingProvider: vi.fn(),
@@ -126,6 +128,11 @@ describe('AccountsProvidersView', () => {
       screen.getByRole('button', { name: `${copy.openCustomProvider} · ${provider.name}` })
     )
     await fireEvent.click(
+      screen.getByRole('button', {
+        name: `${copy.openCustomProviderIsolated} · ${provider.name}`
+      })
+    )
+    await fireEvent.click(
       screen.getByRole('button', { name: `${copy.editProvider} · ${provider.name}` })
     )
     await fireEvent.click(
@@ -133,6 +140,7 @@ describe('AccountsProvidersView', () => {
     )
 
     expect(openProviderInCodex).toHaveBeenCalledWith(provider.id)
+    expect(openProviderIsolatedInCodex).toHaveBeenCalledWith(provider.id)
     expect(startEditingProvider).toHaveBeenCalledWith(provider)
     expect(confirmRemoveProvider).toHaveBeenCalledWith(provider)
   })

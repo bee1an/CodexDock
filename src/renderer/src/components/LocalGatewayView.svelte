@@ -1,17 +1,20 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte'
+  import { fly } from 'svelte/transition'
+  import { SvelteSet } from 'svelte/reactivity'
   import type {
     AccountGroup,
     AccountSummary,
     CustomProviderSummary,
     LocalGatewayLogEntry,
     LocalGatewayModelMapping,
-    LocalGatewayRoutingMode,
     LocalGatewayStatus,
     PortOccupant
   } from '../../../shared/codex'
   import { accountEmail, type LocalizedCopy } from './app-view'
+  import { floatingAnchor, portal, stopFloatingPointerPropagation } from './floating'
   import AppButton from './AppButton.svelte'
+  import Checkbox from './Checkbox.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
   import CopyIcon from './CopyIcon.svelte'
@@ -25,56 +28,42 @@
   export let modelMappings: LocalGatewayModelMapping[] = []
   export let allowedGroupIds: string[] = []
   export let allowedAccountIds: string[] = []
+  export let allowedProviderIds: string[] = []
   export let groups: AccountGroup[] = []
   export let accounts: AccountSummary[] = []
   export let providers: CustomProviderSummary[] = []
-  export let routingMode: LocalGatewayRoutingMode = 'codex'
-  export let routingProviderId: string | undefined = undefined
   export let startLocalGateway: () => Promise<void>
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
   export let openLocalGatewayInCodex: () => Promise<void> = async () => {}
+  export let openLocalGatewayIsolatedInCodex: () => Promise<void> = async () => {}
   export let updateModelMappings: (
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
   export let updateAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
-  export let updateRoutingMode: (
-    mode: LocalGatewayRoutingMode,
-    providerId?: string
-  ) => Promise<void> = async () => {}
+  export let updateAllowedProviders: (providerIds: string[]) => Promise<void> = async () => {}
   export let portOccupant: PortOccupant | null = null
   export let killingPortOccupant = false
   export let killPortOccupant: () => Promise<void> = async () => {}
 
   let allowedGroupsBusy = false
   let allowedAccountsBusy = false
+  let allowedProvidersBusy = false
   let showAccountPicker = false
-  let routingModeBusy = false
+  let showProviderPicker = false
 
-  const setRoutingMode = async (mode: LocalGatewayRoutingMode, providerId?: string): Promise<void> => {
-    if (routingModeBusy) return
-    routingModeBusy = true
+  const toggleAllowedProvider = async (providerId: string): Promise<void> => {
+    if (allowedProvidersBusy) return
+    const next = allowedProviderIds.includes(providerId)
+      ? allowedProviderIds.filter((id) => id !== providerId)
+      : [...allowedProviderIds, providerId]
+    allowedProvidersBusy = true
     try {
-      await updateRoutingMode(mode, providerId)
+      await updateAllowedProviders(next)
     } finally {
-      routingModeBusy = false
+      allowedProvidersBusy = false
     }
-  }
-
-  const onRoutingModeChange = (event: Event): void => {
-    const target = event.target as HTMLSelectElement
-    const mode = target.value as LocalGatewayRoutingMode
-    if (mode === 'codex') {
-      void setRoutingMode('codex')
-    } else {
-      void setRoutingMode('provider', routingProviderId || providers[0]?.id)
-    }
-  }
-
-  const onProviderSelect = (event: Event): void => {
-    const target = event.target as HTMLSelectElement
-    void setRoutingMode('provider', target.value)
   }
 
   const toggleAllowedGroup = async (groupId: string): Promise<void> => {
@@ -212,8 +201,9 @@
     return labels[col]
   }
 
-  let visibleColumns: Set<LogColumn> = new Set(allColumns)
+  let visibleColumns: Set<LogColumn> = new SvelteSet(allColumns)
   let showColumnMenu = false
+  let columnMenuAnchorRect: DOMRect | null = null
 
   const toggleColumn = (col: LogColumn): void => {
     if (visibleColumns.has(col)) {
@@ -240,7 +230,9 @@
   const markCopied = (key: string): void => {
     copiedKey = key
     if (copiedTimer) clearTimeout(copiedTimer)
-    copiedTimer = setTimeout(() => { copiedKey = '' }, 1500)
+    copiedTimer = setTimeout(() => {
+      copiedKey = ''
+    }, 1500)
   }
 
   const copyText = async (value: string, key = 'url'): Promise<void> => {
@@ -420,9 +412,10 @@
   )
   $: allowedTargetCount = allowedGroupIds.length + selectedStandaloneAccounts.length
   $: hasAllowedEntities = allowedTargetCount > 0
-  $: isProviderMode = routingMode === 'provider'
-  $: providerReady = isProviderMode && Boolean(routingProviderId)
-  $: startDisabled = localGatewayBusy || (isProviderMode ? !providerReady : !hasAllowedEntities)
+  $: allowedProviderIdSet = new Set(allowedProviderIds)
+  $: selectedProviders = providers.filter((p) => allowedProviderIdSet.has(p.id))
+  $: availableProviders = providers.filter((p) => !allowedProviderIdSet.has(p.id))
+  $: startDisabled = localGatewayBusy || (!hasAllowedEntities && allowedProviderIds.length === 0)
 
   onMount(() => {
     void refreshGatewayStatus()
@@ -434,9 +427,7 @@
   })
 </script>
 
-<div
-  class="gateway-container gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4"
->
+<div class="gateway-container flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4">
   <div
     class="gateway-toolbar theme-soft-panel flex flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
   >
@@ -502,9 +493,30 @@
             aria-hidden="true"
           ></span>
         {:else}
-          <span class="i-lucide-copy-plus h-3.5 w-3.5" aria-hidden="true"></span>
+          <span class="i-lucide-plug-zap h-3.5 w-3.5" aria-hidden="true"></span>
         {/if}
         <span>{copy.localGatewayOpenCodex}</span>
+      </AppButton>
+
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={() => void openLocalGatewayIsolatedInCodex()}
+        disabled={localGatewayBusy || !displayedStatus.running}
+        ariaLabel={copy.localGatewayOpenCodexIsolated}
+        title={displayedStatus.running
+          ? copy.localGatewayOpenCodexIsolated
+          : copy.localGatewayOpenCodexRequiresRunning}
+      >
+        {#if localGatewayBusy}
+          <span
+            class="i-lucide-loader-circle gateway-spinner h-3.5 w-3.5 animate-spin"
+            aria-hidden="true"
+          ></span>
+        {:else}
+          <span class="i-lucide-copy-plus h-3.5 w-3.5" aria-hidden="true"></span>
+        {/if}
+        <span>{copy.localGatewayOpenCodexIsolated}</span>
       </AppButton>
 
       {#if displayedStatus.running}
@@ -532,9 +544,9 @@
           onclick={() => void startLocalGateway()}
           disabled={startDisabled}
           ariaLabel={copy.startLocalGateway}
-          title={isProviderMode
-            ? (providerReady ? copy.startLocalGateway : copy.localGatewayRoutingNoProviders)
-            : (hasAllowedEntities ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired)}
+          title={hasAllowedEntities || allowedProviderIds.length > 0
+            ? copy.startLocalGateway
+            : copy.localGatewayAllowedGroupsRequired}
         >
           {#if localGatewayBusy}
             <span
@@ -550,7 +562,9 @@
     </div>
   </div>
 
-  <div class="gateway-scroll flex flex-col gap-4 overflow-x-hidden">
+  <div
+    class="gateway-scroll gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden"
+  >
     {#if displayedStatus.lastError}
       <div
         class="gateway-error flex items-start gap-2 rounded-[0.45rem] border p-2.5 text-xs text-danger"
@@ -573,7 +587,11 @@
             aria-hidden="true"
           ></span>
           <span class="gateway-port-conflict-text min-w-0 break-words leading-relaxed">
-            {copy.localGatewayPortOccupied(Number(gatewayPort) || 0, portOccupant.command, portOccupant.pid)}
+            {copy.localGatewayPortOccupied(
+              Number(gatewayPort) || 0,
+              portOccupant.command,
+              portOccupant.pid
+            )}
           </span>
         </div>
         <AppButton
@@ -723,9 +741,7 @@
         </div>
       </div>
 
-      <div
-        class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2"
-      >
+      <div class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2">
         <div class="gateway-metric-card rounded-[0.45rem] border p-3">
           <div class="mb-2 flex items-center justify-between gap-2">
             <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -777,74 +793,7 @@
     </section>
 
     <section
-      class="gateway-panel gateway-routing-panel rounded-[0.45rem] border"
-      aria-labelledby="local-gateway-routing-heading"
-    >
-      <div class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5">
-        <div class="flex min-w-0 items-start gap-2">
-          <span
-            class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
-            aria-hidden="true"
-          >
-            <span class="i-lucide-route h-3.5 w-3.5"></span>
-          </span>
-          <div class="min-w-0">
-            <h3 id="local-gateway-routing-heading" class="text-[12px] font-semibold text-carbon">
-              {copy.localGatewayRoutingTitle}
-            </h3>
-            <p class="mt-0.5 text-[10px] leading-4 text-faint">
-              {copy.localGatewayRoutingHint}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div class="flex flex-col gap-3 p-3">
-        <div class="flex items-center gap-3">
-          <label for="gateway-routing-mode" class="text-[11px] font-medium text-muted-strong whitespace-nowrap">
-            {copy.localGatewayRoutingModeLabel}
-          </label>
-          <select
-            id="gateway-routing-mode"
-            class="gateway-select min-w-0 flex-1 rounded-[0.3rem] border bg-transparent px-2 py-1 text-[11px] text-carbon"
-            value={routingMode}
-            disabled={routingModeBusy || localGatewayBusy}
-            on:change={onRoutingModeChange}
-          >
-            <option value="codex">{copy.localGatewayRoutingCodex}</option>
-            <option value="provider">{copy.localGatewayRoutingProvider}</option>
-          </select>
-        </div>
-
-        {#if isProviderMode}
-          <div class="flex items-center gap-3">
-            <label for="gateway-routing-provider" class="text-[11px] font-medium text-muted-strong whitespace-nowrap">
-              {copy.localGatewayRoutingProviderLabel}
-            </label>
-            {#if providers.length > 0}
-              <select
-                id="gateway-routing-provider"
-                class="gateway-select min-w-0 flex-1 rounded-[0.3rem] border bg-transparent px-2 py-1 text-[11px] text-carbon"
-                value={routingProviderId ?? ''}
-                disabled={routingModeBusy || localGatewayBusy}
-                on:change={onProviderSelect}
-              >
-                <option value="" disabled>{copy.localGatewayRoutingProviderPlaceholder}</option>
-                {#each providers as provider (provider.id)}
-                  <option value={provider.id}>{provider.name || provider.baseUrl}</option>
-                {/each}
-              </select>
-            {:else}
-              <p class="text-[11px] text-danger">{copy.localGatewayRoutingNoProviders}</p>
-            {/if}
-          </div>
-        {/if}
-      </div>
-    </section>
-
-    <section
       class="gateway-panel gateway-groups-panel rounded-[0.45rem] border"
-      class:hidden={isProviderMode}
       aria-labelledby="local-gateway-groups-heading"
     >
       <div
@@ -906,11 +855,16 @@
           <AppButton
             variant="secondary"
             size="xs"
-            onclick={() => { showAccountPicker = !showAccountPicker }}
+            onclick={() => {
+              showAccountPicker = !showAccountPicker
+            }}
             ariaLabel={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
             title={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
           >
-            <span class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`} aria-hidden="true"></span>
+            <span
+              class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`}
+              aria-hidden="true"
+            ></span>
           </AppButton>
         </div>
         {#if showAccountPicker}
@@ -943,7 +897,56 @@
             {/each}
           </div>
         {/if}
-        {#if !hasAllowedEntities && !showAccountPicker && !isProviderMode}
+        {#if providers.length > 0}
+          <div
+            class="flex flex-wrap items-center gap-1.5 border-t border-[var(--card-border)] pt-2"
+          >
+            <span class="text-[10px] font-medium text-faint"
+              >{copy.localGatewayAllowedProvidersTitle}:</span
+            >
+            {#each selectedProviders as provider (provider.id)}
+              <AppButton
+                variant="filter"
+                size="xs"
+                selected
+                ariaPressed={true}
+                disabled={allowedProvidersBusy || localGatewayBusy}
+                onclick={() => void toggleAllowedProvider(provider.id)}
+              >
+                <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
+                <span>{provider.name || provider.baseUrl}</span>
+              </AppButton>
+            {/each}
+            <AppButton
+              variant="filter"
+              size="xs"
+              disabled={allowedProvidersBusy || localGatewayBusy || availableProviders.length === 0}
+              onclick={() => {
+                showProviderPicker = !showProviderPicker
+              }}
+              ariaLabel={copy.localGatewayAddProvider}
+            >
+              <span class="i-lucide-plus h-3 w-3" aria-hidden="true"></span>
+            </AppButton>
+          </div>
+          {#if showProviderPicker && availableProviders.length > 0}
+            <div class="flex flex-wrap gap-1.5 border-t border-[var(--card-border)] pt-2">
+              {#each availableProviders as provider (provider.id)}
+                <AppButton
+                  variant="filter"
+                  size="xs"
+                  ariaPressed={false}
+                  disabled={allowedProvidersBusy || localGatewayBusy}
+                  onclick={() => void toggleAllowedProvider(provider.id)}
+                >
+                  <span class="i-lucide-plug-zap h-3 w-3" aria-hidden="true"></span>
+                  <span>{provider.name || provider.baseUrl}</span>
+                </AppButton>
+              {/each}
+            </div>
+          {/if}
+        {/if}
+        {#if !hasAllowedEntities && allowedProviderIds.length === 0 && !showAccountPicker}
           <p class="text-[11px] leading-4 text-danger" role="alert">
             {copy.localGatewayAllowedGroupsRequired}
           </p>
@@ -1059,32 +1062,53 @@
             {statusFilterLabel(option)}
           </AppButton>
         {/each}
-        <div class="relative ml-auto">
+        <div class="relative ml-auto" use:stopFloatingPointerPropagation data-floating-root="">
           <AppButton
             variant="filter"
             size="xs"
-            onclick={() => (showColumnMenu = !showColumnMenu)}
+            onclick={(e) => {
+              if (showColumnMenu) {
+                showColumnMenu = false
+                columnMenuAnchorRect = null
+                return
+              }
+              columnMenuAnchorRect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              showColumnMenu = true
+            }}
             ariaLabel={copy.localGatewayColumnSettings}
           >
             <span class="i-lucide-columns-3 mr-1 h-3 w-3" aria-hidden="true"></span>
             {copy.localGatewayColumnSettings}
           </AppButton>
+
           {#if showColumnMenu}
             <div
-              class="gateway-column-menu absolute right-0 top-full z-20 mt-1 w-44 rounded-md border bg-surface p-1.5 shadow-lg"
+              use:portal
+              use:floatingAnchor={{
+                anchorRect: columnMenuAnchorRect,
+                minWidth: 180,
+                matchAnchorWidth: false
+              }}
+              use:stopFloatingPointerPropagation
+              data-floating-root=""
+              transition:fly={{ y: -6, duration: 200 }}
+              class="theme-tag-picker-surface z-[999] w-[200px] rounded-[1.1rem] p-1.5"
+              style="background-color: var(--panel-strong); box-shadow: var(--elevation-2), 0 0 0 1px var(--line-strong);"
             >
+              <div
+                class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]"
+              >
+                {copy.localGatewayColumnSettings}
+              </div>
               {#each allColumns as col (col)}
-                <label
-                  class="flex cursor-pointer items-center gap-2 rounded px-2 py-1 text-[11px] text-carbon hover:bg-surface-hover"
+                <button
+                  class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2.5 py-2 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98]"
+                  type="button"
+                  onclick={() => toggleColumn(col)}
                 >
-                  <input
-                    type="checkbox"
-                    checked={visibleColumns.has(col)}
-                    onchange={() => toggleColumn(col)}
-                    class="h-3 w-3"
-                  />
-                  {columnLabel(col)}
-                </label>
+                  <Checkbox checked={visibleColumns.has(col)} />
+                  <span>{columnLabel(col)}</span>
+                </button>
               {/each}
             </div>
           {/if}
@@ -1093,50 +1117,76 @@
 
       <div class="gateway-table-container">
         {#if visibleLogs.length}
-          <div class="gateway-scrollbar max-h-[400px] overflow-auto">
+          <div class="gateway-scrollbar max-h-[400px] overflow-y-auto overflow-x-auto">
             <table class="w-full text-left text-xs" aria-label={copy.localGatewayLogs}>
               <thead
                 class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
               >
                 <tr>
                   {#if visibleColumns.has('time')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTime}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogTime}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('method')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogMethod}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogMethod}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('path')}
-                    <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]">{copy.localGatewayLogPath}</th>
+                    <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]"
+                      >{copy.localGatewayLogPath}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('target')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogTarget}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogTarget}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('provider')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogProvider}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogProvider}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('model')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogModel}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogModel}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('client')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogClient}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogClient}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('requestBytes')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogRequestBytes}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                      >{copy.localGatewayLogRequestBytes}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('responseBytes')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogResponseBytes}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                      >{copy.localGatewayLogResponseBytes}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('contentType')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap">{copy.localGatewayLogContentType}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap"
+                      >{copy.localGatewayLogContentType}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('tokens')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogTokens}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                      >{copy.localGatewayLogTokens}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('latency')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogLatency}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                      >{copy.localGatewayLogLatency}</th
+                    >
                   {/if}
                   {#if visibleColumns.has('status')}
-                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right">{copy.localGatewayLogStatus}</th>
+                    <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
+                      >{copy.localGatewayLogStatus}</th
+                    >
                   {/if}
                 </tr>
               </thead>
@@ -1238,7 +1288,7 @@
                           class="gateway-log-detail-toggle flex items-center gap-1 text-[10px] font-medium text-muted-strong hover:text-carbon"
                           onclick={() => {
                             if (expandedLogIds[log.id]) {
-                              const { [log.id]: _, ...rest } = expandedLogIds
+                              const { [log.id]: _, ...rest } = expandedLogIds // eslint-disable-line @typescript-eslint/no-unused-vars
                               expandedLogIds = rest
                             } else {
                               expandedLogIds = { ...expandedLogIds, [log.id]: true }
@@ -1250,7 +1300,11 @@
                             class="i-lucide-alert-circle h-3.5 w-3.5 flex-none text-danger/70"
                             aria-hidden="true"
                           ></span>
-                          <span>{expandedLogIds[log.id] ? copy.localGatewayCollapseDetail : copy.localGatewayExpandDetail}</span>
+                          <span
+                            >{expandedLogIds[log.id]
+                              ? copy.localGatewayCollapseDetail
+                              : copy.localGatewayExpandDetail}</span
+                          >
                           <span
                             class={`h-3 w-3 transition-transform ${expandedLogIds[log.id] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'}`}
                             aria-hidden="true"
@@ -1413,27 +1467,7 @@
 
   .gateway-scrollbar {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
-  }
-
-  .gateway-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .gateway-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .gateway-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: padding-box;
-    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
-  }
-
-  .gateway-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
+    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
   }
 
   .gateway-toolbar {

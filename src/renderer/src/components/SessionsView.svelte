@@ -672,7 +672,9 @@
 </script>
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-  <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+  <section
+    class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.sessionsTitle}</p>
@@ -770,7 +772,9 @@
   {/if}
 
   {#if selectedSummary}
-    <section class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+    <section
+      class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+    >
       <div class="flex flex-wrap items-start justify-between gap-3">
         <div class="min-w-0">
           <p class="text-xs text-faint">{copy.sessionsDetail}</p>
@@ -1851,5 +1855,4 @@
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
   }
-
 </style>

@@ -93,6 +93,7 @@ interface CodexDesktopApi {
   openProviderInCodex: (providerId: string) => Promise<AppSnapshot>
   openProviderIsolatedInCodex: (providerId: string) => Promise<AppSnapshot>
   openLocalGatewayInCodex: () => Promise<AppSnapshot>
+  openLocalGatewayIsolatedInCodex: () => Promise<AppSnapshot>
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
   openAccountInIsolatedCodex: (accountId: string) => Promise<AppSnapshot>
   readAccountRateLimits: (accountId: string) => Promise<AccountRateLimits>

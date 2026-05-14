@@ -21,9 +21,7 @@
   let rawConfirmed = false
   let logPanel: HTMLPreElement | null = null
 
-  $: logs = result
-    ? (showRaw && rawConfirmed ? result.rawLogs : result.sanitizedLogs)
-    : []
+  $: logs = result ? (showRaw && rawConfirmed ? result.rawLogs : result.sanitizedLogs) : []
 
   $: if (logs.length) {
     void tick().then(() => {
@@ -55,19 +53,27 @@
 
   const statusLabel = (): string => {
     switch (status) {
-      case 'running': return copy.forceRefreshTokensRunning
-      case 'success': return copy.forceRefreshTokensSuccess
-      case 'error': return copy.forceRefreshTokensError
-      default: return copy.forceRefreshTokensIdle
+      case 'running':
+        return copy.forceRefreshTokensRunning
+      case 'success':
+        return copy.forceRefreshTokensSuccess
+      case 'error':
+        return copy.forceRefreshTokensError
+      default:
+        return copy.forceRefreshTokensIdle
     }
   }
 
   const statusToneClass = (): string => {
     switch (status) {
-      case 'running': return 'refresh-status-running'
-      case 'success': return 'refresh-status-success'
-      case 'error': return 'refresh-status-error'
-      default: return 'refresh-status-idle'
+      case 'running':
+        return 'refresh-status-running'
+      case 'success':
+        return 'refresh-status-success'
+      case 'error':
+        return 'refresh-status-error'
+      default:
+        return 'refresh-status-idle'
     }
   }
 
@@ -165,18 +171,15 @@
       <div class="refresh-logs-header">
         <span class="refresh-logs-title">{copy.forceRefreshTokensLogTitle}</span>
         {#if result && result.rawLogs.length}
-          <button
-            type="button"
-            class="refresh-raw-toggle"
-            onclick={handleShowRaw}
-          >
+          <button type="button" class="refresh-raw-toggle" onclick={handleShowRaw}>
             {showRaw ? copy.forceRefreshTokensHideRaw : copy.forceRefreshTokensShowRaw}
           </button>
         {/if}
       </div>
       <pre bind:this={logPanel} class="refresh-log-panel"><code
-        >{#if logs.length}{#each logs as entry, i (i)}{entry.timestamp}  {entry.message}
-{/each}{:else}{copy.forceRefreshTokensLogEmpty}{/if}</code></pre>
+          >{#if logs.length}{#each logs as entry, i (i)}{entry.timestamp}  {entry.message}
+            {/each}{:else}{copy.forceRefreshTokensLogEmpty}{/if}</code
+        ></pre>
     </div>
 
     <!-- Footer -->
@@ -386,7 +389,9 @@
     background: none;
     padding: 0.125rem 0.25rem;
     border-radius: 0.2rem;
-    transition: color 0.14s, background 0.14s;
+    transition:
+      color 0.14s,
+      background 0.14s;
   }
 
   .refresh-raw-toggle:hover {
@@ -417,5 +422,4 @@
     justify-content: flex-end;
     gap: 0.5rem;
   }
-
 </style>

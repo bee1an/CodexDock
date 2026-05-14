@@ -35,7 +35,7 @@
     input: ProbeProviderModelsInput
   ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
-  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void>
+  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void> = async () => {}
   export let startEditingProvider: (provider: CustomProviderSummary) => Promise<void>
   export let saveProvider: (provider: CustomProviderSummary) => Promise<void>
   export let cancelEditingProvider: () => void
@@ -99,7 +99,10 @@
     try {
       const result = await probeProviderModels({ baseUrl, apiKey, protocol: 'openai' })
       probedModels = result.availableModels
-      if (result.availableModels.length && (!newProviderModel.trim() || newProviderModel === '5.4')) {
+      if (
+        result.availableModels.length &&
+        (!newProviderModel.trim() || newProviderModel === '5.4')
+      ) {
         newProviderModel = result.availableModels[0]
       }
       if (!result.ok) {
@@ -155,10 +158,14 @@
 </script>
 
 <div class="flex flex-none px-4 pb-3">
-  <div class="theme-soft-panel flex w-full flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-3">
+  <div
+    class="theme-soft-panel flex w-full flex-wrap items-center justify-between gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-3"
+  >
     <div class="min-w-0">
       <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.createProvider}</p>
-      <p class="mt-0.5 text-xs leading-5 text-muted-strong">{copy.providerCreateDialogDescription}</p>
+      <p class="mt-0.5 text-xs leading-5 text-muted-strong">
+        {copy.providerCreateDialogDescription}
+      </p>
     </div>
     <AppButton
       variant="primary"
@@ -570,7 +577,6 @@
     cursor: not-allowed;
     opacity: 0.48;
   }
-
 
   :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card {
     transform: translateY(3px);

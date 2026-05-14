@@ -105,6 +105,8 @@ const codexApp = {
   openProviderIsolatedInCodex: (providerId: string) =>
     ipcRenderer.invoke('codex:open-provider-isolated-in-codex', providerId),
   openLocalGatewayInCodex: () => ipcRenderer.invoke('codex:open-local-gateway-in-codex'),
+  openLocalGatewayIsolatedInCodex: () =>
+    ipcRenderer.invoke('codex:open-local-gateway-isolated-in-codex'),
   openAccountInCodex: (accountId: string) =>
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),
   openAccountInIsolatedCodex: (accountId: string) =>

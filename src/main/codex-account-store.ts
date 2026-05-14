@@ -17,6 +17,7 @@ import type {
   UpdateAccountWakeScheduleInput
 } from '../shared/codex'
 import type { CodexPlatformAdapter, ProtectedPayload } from '../shared/codex-platform'
+import type { ConfigGuard } from './codex-config-guard'
 import { decodeJwtPayload } from '../shared/openai-auth'
 import {
   defaultWakeModel,
@@ -61,7 +62,8 @@ export class CodexAccountStore {
   constructor(
     userDataPath: string,
     private readonly platform: CodexPlatformAdapter,
-    private readonly defaultCodexHome = join(process.env.HOME ?? '', '.codex')
+    private readonly defaultCodexHome = join(process.env.HOME ?? '', '.codex'),
+    private readonly configGuard?: ConfigGuard
   ) {
     this.stateFile = join(userDataPath, 'codex-accounts.json')
     this.stateBackupFile = `${this.stateFile}.bak`
@@ -250,10 +252,7 @@ export class CodexAccountStore {
     })
   }
 
-  async updateAccountHealth(
-    accountId: string,
-    input: UpdateAccountHealthInput
-  ): Promise<void> {
+  async updateAccountHealth(accountId: string, input: UpdateAccountHealthInput): Promise<void> {
     await this.runStateTask(async () => {
       const state = await this.readState()
 
@@ -1196,7 +1195,13 @@ export class CodexAccountStore {
   }
 
   private async writeCodexAuthFile(auth: CodexAuthPayload): Promise<void> {
+    if (this.configGuard) {
+      await this.configGuard.guardBeforeWrite(this.codexAuthFile, { sensitive: true })
+    }
     await fs.mkdir(this.defaultCodexHome, { recursive: true })
     await fs.writeFile(this.codexAuthFile, `${JSON.stringify(auth, null, 2)}\n`, 'utf8')
+    if (this.configGuard) {
+      await this.configGuard.recordWriteComplete(this.codexAuthFile)
+    }
   }
 }

@@ -63,6 +63,27 @@ describe('LocalGatewayView', () => {
     expect(screen.queryByText('sk-cdock-full-secret')).toBeNull()
   })
 
+  it('opens local gateway in direct and isolated Codex modes', async () => {
+    const openLocalGatewayInCodex = vi.fn().mockResolvedValue(undefined)
+    const openLocalGatewayIsolatedInCodex = vi.fn().mockResolvedValue(undefined)
+    renderGateway({
+      localGatewayStatus: {
+        ...status,
+        running: true
+      },
+      openLocalGatewayInCodex,
+      openLocalGatewayIsolatedInCodex
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayOpenCodex }))
+    expect(openLocalGatewayInCodex).toHaveBeenCalledOnce()
+
+    await fireEvent.click(
+      screen.getByRole('button', { name: copy.localGatewayOpenCodexIsolated })
+    )
+    expect(openLocalGatewayIsolatedInCodex).toHaveBeenCalledOnce()
+  })
+
   it('manages model mappings from a dialog', async () => {
     const updateModelMappings = vi.fn().mockResolvedValue(undefined)
     renderGateway({ updateModelMappings })
@@ -70,9 +91,12 @@ describe('LocalGatewayView', () => {
     await fireEvent.click(
       screen.getByRole('button', { name: copy.localGatewayModelMappingsManage })
     )
-    await fireEvent.input(screen.getByPlaceholderText(copy.localGatewayModelMappingFromPlaceholder), {
-      target: { value: 'client-model' }
-    })
+    await fireEvent.input(
+      screen.getByPlaceholderText(copy.localGatewayModelMappingFromPlaceholder),
+      {
+        target: { value: 'client-model' }
+      }
+    )
     await fireEvent.input(screen.getByPlaceholderText(copy.localGatewayModelMappingToPlaceholder), {
       target: { value: 'gpt-5.4' }
     })
@@ -142,9 +166,7 @@ describe('LocalGatewayView', () => {
 
     expect(screen.queryByText('grouped@example.com')).toBeNull()
     expect(screen.getByText('standalone@example.com')).toBeTruthy()
-    await waitFor(() =>
-      expect(updateAllowedAccounts).toHaveBeenCalledWith(['standalone-account'])
-    )
+    await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith(['standalone-account']))
   })
 
   it('shows details for non-200 request logs', async () => {

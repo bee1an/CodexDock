@@ -115,7 +115,9 @@
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   export let tagVisibility: TagVisibilitySettings = {}
-  export let updateTagVisibility: (settings: TagVisibilitySettings) => Promise<void> = async () => {}
+  export let updateTagVisibility: (
+    settings: TagVisibilitySettings
+  ) => Promise<void> = async () => {}
 
   let expandedAccountIds: string[] = []
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
@@ -528,12 +530,19 @@
 
   function accountRefreshDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || usageLoading || accountHealthBlocked(account) || isLocalMockAccount(account)
+    return (
+      loginActionBusy ||
+      usageLoading ||
+      accountHealthBlocked(account) ||
+      isLocalMockAccount(account)
+    )
   }
 
   function wakeDialogDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || Boolean(wakingAccountId) || usageLoading || accountHealthBlocked(account)
+    return (
+      loginActionBusy || Boolean(wakingAccountId) || usageLoading || accountHealthBlocked(account)
+    )
   }
 
   function accountMoreActionsLabel(): string {
@@ -687,7 +696,9 @@
   }}
 />
 
-<div class="flex flex-none flex-wrap items-center gap-1.5 border-b border-[var(--card-border)] px-4 py-2">
+<div
+  class="flex flex-none flex-wrap items-center gap-1.5 border-b border-[var(--card-border)] px-4 py-2"
+>
   <AppButton
     variant="secondary"
     size="xs"
@@ -696,7 +707,9 @@
     ariaLabel={copy.callbackLogin}
     title={copy.callbackLogin}
   >
-    <span class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-3.5 w-3.5`}></span>
+    <span
+      class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-3.5 w-3.5`}
+    ></span>
     <span>{copy.callbackLogin}</span>
   </AppButton>
   <AppButton
@@ -768,7 +781,9 @@
           class="theme-tag-picker-surface z-[999] w-[200px] rounded-[1.1rem] p-1.5"
           style="background-color: var(--panel-strong); box-shadow: var(--elevation-2), 0 0 0 1px var(--line-strong);"
         >
-          <div class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+          <div
+            class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]"
+          >
             {copy.tagVisibilityTitle}
           </div>
           <button
@@ -822,7 +837,9 @@
       ariaLabel={copy.refreshAllQuota}
       title={copy.refreshAllQuota}
     >
-      <span class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}></span>
+      <span
+        class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+      ></span>
     </AppButton>
     <AppButton
       variant="secondary"
@@ -1148,11 +1165,7 @@
           language,
           copy
         )}
-        {@const tokenBadge = accountTokenExpiryBadge(
-          account.accessTokenExpiresAt,
-          language,
-          copy
-        )}
+        {@const tokenBadge = accountTokenExpiryBadge(account.accessTokenExpiresAt, language, copy)}
         {@const assignableGroups = availableGroupsForAccount(groups, account)}
         <article
           class={`theme-account-row group grid items-center gap-3 px-2.5 py-2.5 md:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] ${accountRowTone(
@@ -1829,26 +1842,6 @@
   .accounts-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thin-thumb) transparent;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: padding-box;
-    background-color: var(--scrollbar-thin-thumb);
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thin-thumb-hover);
   }
 
   .theme-account-divider {

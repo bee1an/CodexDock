@@ -100,7 +100,10 @@
         return copy.updateAvailableVersion(updateState.availableVersion)
       case 'downloading':
         return updateState.delivery === 'external' && updateState.externalAction === 'homebrew'
-          ? copy.homebrewUpdateStatus(updateState.externalCommandStatus, updateState.externalCommand)
+          ? copy.homebrewUpdateStatus(
+              updateState.externalCommandStatus,
+              updateState.externalCommand
+            )
           : copy.updateDownloadProgress(updateState.downloadProgress)
       case 'downloaded':
         return copy.updateReady
@@ -125,24 +128,33 @@
 </script>
 
 <div class="settings-container flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+  <section
+    class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
     <div class="flex items-center gap-3 mb-4">
-      <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
+      <div
+        class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border"
+      >
         <span class="i-lucide-sliders-horizontal h-4 w-4" aria-hidden="true"></span>
       </div>
       <div class="min-w-0">
         <p class="text-[13px] font-semibold text-carbon">{copy.generalSettings}</p>
-        <p class="mt-0.5 text-[10px] leading-4 text-muted-strong">{copy.generalSettingsDescription}</p>
+        <p class="mt-0.5 text-[10px] leading-4 text-muted-strong">
+          {copy.generalSettingsDescription}
+        </p>
       </div>
     </div>
 
     <div class="grid gap-3">
-      <div class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5">
+      <div
+        class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5"
+      >
         <span class="text-xs font-medium text-carbon">{copy.pollingInterval}</span>
         <select
           class="settings-select h-7 rounded-[0.35rem] border border-[var(--card-border)] bg-transparent px-2 text-xs text-carbon outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
           value={settings.usagePollingMinutes}
-          onchange={(event) => updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
+          onchange={(event) =>
+            updatePollingInterval(Number((event.currentTarget as HTMLSelectElement).value))}
         >
           {#each pollingOptions as option (option)}
             <option value={option}>{option} {copy.minutes}</option>
@@ -172,9 +184,13 @@
     </div>
   </section>
 
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+  <section
+    class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
     <div class="flex items-center gap-3 mb-4">
-      <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
+      <div
+        class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border"
+      >
         <span class="i-lucide-palette h-4 w-4" aria-hidden="true"></span>
       </div>
       <div class="min-w-0">
@@ -183,7 +199,9 @@
     </div>
 
     <div class="grid gap-3">
-      <div class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5">
+      <div
+        class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5"
+      >
         <span class="text-xs font-medium text-carbon">{copy.switchLanguage}</span>
         <AppButtonGroup ariaLabel={copy.switchLanguage}>
           {#each languageOptions as option (option.value)}
@@ -200,7 +218,9 @@
         </AppButtonGroup>
 
         <div class="ml-auto flex items-center gap-2">
-          <span class="text-xs font-medium text-carbon">{copy.switchTheme(themeTitle(theme, copy))}</span>
+          <span class="text-xs font-medium text-carbon"
+            >{copy.switchTheme(themeTitle(theme, copy))}</span
+          >
           <AppButton
             variant="secondary"
             size="xs"
@@ -215,9 +235,13 @@
   </section>
 
   {#if showCodexDesktopExecutablePath}
-    <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+    <section
+      class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+    >
       <div class="flex items-center gap-3 mb-4">
-        <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
+        <div
+          class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border"
+        >
           <span class="i-lucide-terminal h-4 w-4" aria-hidden="true"></span>
         </div>
         <div class="min-w-0">
@@ -227,9 +251,13 @@
           variant="secondary"
           size="xs"
           class="ml-auto"
-          onclick={() => { showPathEditor = !showPathEditor }}
+          onclick={() => {
+            showPathEditor = !showPathEditor
+          }}
         >
-          {showPathEditor ? copy.hideCodexDesktopExecutablePath : copy.showCodexDesktopExecutablePath}
+          {showPathEditor
+            ? copy.hideCodexDesktopExecutablePath
+            : copy.showCodexDesktopExecutablePath}
         </AppButton>
       </div>
 
@@ -252,9 +280,13 @@
     </section>
   {/if}
 
-  <section class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+  <section
+    class="settings-section theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
     <div class="flex items-center gap-3 mb-4">
-      <div class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border">
+      <div
+        class="settings-section-icon flex h-7 w-7 flex-none items-center justify-center rounded-[0.4rem] border"
+      >
         <span class="i-lucide-download h-4 w-4" aria-hidden="true"></span>
       </div>
       <div class="min-w-0">
@@ -265,7 +297,9 @@
       </div>
     </div>
 
-    <div class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5">
+    <div
+      class="settings-row flex flex-wrap items-center gap-3 rounded-[0.45rem] border px-3 py-2.5"
+    >
       <span class="text-xs text-muted-strong">v{appMeta.version}</span>
       <AppButton
         variant="secondary"
@@ -328,5 +362,4 @@
   .settings-select:focus-visible {
     border-color: color-mix(in srgb, var(--color-carbon) 34%, var(--line-strong));
   }
-
 </style>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DndEvent as SortEvent } from 'svelte-dnd-action'
 
-	import type {
+  import type {
     AccountHealth,
     AccountRateLimits,
     AccountSummary,
@@ -116,6 +116,7 @@
     input: ProbeProviderModelsInput
   ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
+  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void> = async () => {}
   export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
   export let reorderProviders: (providerIds: string[]) => Promise<void>
   export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
@@ -124,18 +125,19 @@
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
   export let openLocalGatewayInCodex: () => Promise<void>
+  export let openLocalGatewayIsolatedInCodex: () => Promise<void>
   export let updateLocalGatewayModelMappings: (
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
   export let localGatewayAllowedGroupIds: string[] = []
   export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
-  export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
-  export let localGatewayRoutingMode: import('../../../shared/codex').LocalGatewayRoutingMode = 'codex'
-  export let localGatewayRoutingProviderId: string | undefined = undefined
-  export let updateLocalGatewayRoutingMode: (
-    mode: import('../../../shared/codex').LocalGatewayRoutingMode,
-    providerId?: string
+  export let updateLocalGatewayAllowedAccounts: (
+    accountIds: string[]
+  ) => Promise<void> = async () => {}
+  export let localGatewayAllowedProviderIds: string[] = []
+  export let updateLocalGatewayAllowedProviders: (
+    providerIds: string[]
   ) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
@@ -184,7 +186,10 @@
   export let theme: AppTheme = 'light'
   export let updateState: AppUpdateState
   export let updateLanguage: (language: AppLanguage) => void = () => {}
-  export let updateTheme: (theme: AppTheme, origin?: { x?: number; y?: number; target?: HTMLElement | null }) => void = () => {}
+  export let updateTheme: (
+    theme: AppTheme,
+    origin?: { x?: number; y?: number; target?: HTMLElement | null }
+  ) => void = () => {}
   export let updatePollingInterval: (minutes: number) => void = () => {}
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void = () => {}
   export let checkForUpdates: () => void = () => {}
@@ -655,16 +660,16 @@
       {groups}
       {accounts}
       {providers}
-      routingMode={localGatewayRoutingMode}
-      routingProviderId={localGatewayRoutingProviderId}
+      allowedProviderIds={localGatewayAllowedProviderIds}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
       {openLocalGatewayInCodex}
+      {openLocalGatewayIsolatedInCodex}
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
-      updateRoutingMode={updateLocalGatewayRoutingMode}
+      updateAllowedProviders={updateLocalGatewayAllowedProviders}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
@@ -684,6 +689,7 @@
       {createProvider}
       {probeProviderModels}
       {openProviderInCodex}
+      {openProviderIsolatedInCodex}
       {startEditingProvider}
       {saveProvider}
       {cancelEditingProvider}
@@ -775,5 +781,4 @@
   .theme-view-toggle {
     position: relative;
   }
-
 </style>

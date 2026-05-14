@@ -33,7 +33,8 @@
             ? '1'
             : digitIndex === digits.length - 1
               ? '2'
-              : undefined}>{digit}</span>
+              : undefined}>{digit}</span
+        >
       {/each}
     </span>
   {/key}

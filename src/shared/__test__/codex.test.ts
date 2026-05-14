@@ -514,13 +514,51 @@ describe('codex shared helpers', () => {
 })
 
 describe('normalizeLocalGatewaySettings', () => {
-  it('defaults routingMode to codex when not provided', () => {
+  it('defaults allowedProviderIds to empty array when not provided', () => {
     const result = normalizeLocalGatewaySettings({})
-    expect(result.routingMode).toBe('codex')
-    expect(result.providerId).toBeUndefined()
+    expect(result.allowedProviderIds).toEqual([])
   })
 
-  it('defaults routingMode to codex for legacy settings without routingMode', () => {
+  it('preserves allowedProviderIds', () => {
+    const result = normalizeLocalGatewaySettings({
+      allowedProviderIds: ['prov-1', 'prov-2']
+    })
+    expect(result.allowedProviderIds).toEqual(['prov-1', 'prov-2'])
+  })
+
+  it('deduplicates allowedProviderIds', () => {
+    const result = normalizeLocalGatewaySettings({
+      allowedProviderIds: ['prov-1', 'prov-1', 'prov-2']
+    })
+    expect(result.allowedProviderIds).toEqual(['prov-1', 'prov-2'])
+  })
+
+  it('migrates legacy routingMode provider + providerId to allowedProviderIds', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'provider',
+      providerId: 'prov-123'
+    } as unknown as Parameters<typeof normalizeLocalGatewaySettings>[0])
+    expect(result.allowedProviderIds).toEqual(['prov-123'])
+  })
+
+  it('does not migrate legacy providerId when allowedProviderIds already set', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'provider',
+      providerId: 'prov-old',
+      allowedProviderIds: ['prov-new']
+    } as unknown as Parameters<typeof normalizeLocalGatewaySettings>[0])
+    expect(result.allowedProviderIds).toEqual(['prov-new'])
+  })
+
+  it('does not migrate when routingMode is codex', () => {
+    const result = normalizeLocalGatewaySettings({
+      routingMode: 'codex',
+      providerId: 'prov-123'
+    } as unknown as Parameters<typeof normalizeLocalGatewaySettings>[0])
+    expect(result.allowedProviderIds).toEqual([])
+  })
+
+  it('normalizes legacy settings without routingMode', () => {
     const result = normalizeLocalGatewaySettings({
       host: '127.0.0.1',
       port: 11456,
@@ -529,42 +567,8 @@ describe('normalizeLocalGatewaySettings', () => {
       modelMappings: [],
       allowedGroupIds: ['group-1'],
       allowedAccountIds: []
-    } as any)
-    expect(result.routingMode).toBe('codex')
-    expect(result.providerId).toBeUndefined()
-  })
-
-  it('preserves provider mode with explicit providerId', () => {
-    const result = normalizeLocalGatewaySettings({
-      routingMode: 'provider',
-      providerId: 'prov-123'
-    })
-    expect(result.routingMode).toBe('provider')
-    expect(result.providerId).toBe('prov-123')
-  })
-
-  it('clears providerId when routingMode is codex', () => {
-    const result = normalizeLocalGatewaySettings({
-      routingMode: 'codex',
-      providerId: 'prov-123'
-    })
-    expect(result.routingMode).toBe('codex')
-    expect(result.providerId).toBeUndefined()
-  })
-
-  it('clears providerId when provider mode has empty string providerId', () => {
-    const result = normalizeLocalGatewaySettings({
-      routingMode: 'provider',
-      providerId: '  '
-    })
-    expect(result.routingMode).toBe('provider')
-    expect(result.providerId).toBeUndefined()
-  })
-
-  it('treats invalid routingMode as codex', () => {
-    const result = normalizeLocalGatewaySettings({
-      routingMode: 'invalid' as any
-    })
-    expect(result.routingMode).toBe('codex')
+    } as unknown as Parameters<typeof normalizeLocalGatewaySettings>[0])
+    expect(result.allowedProviderIds).toEqual([])
+    expect(result.allowedGroupIds).toEqual(['group-1'])
   })
 })

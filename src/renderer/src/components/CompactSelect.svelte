@@ -140,7 +140,9 @@
     on:click={toggle}
   >
     <span class="truncate">{selected?.label ?? value}</span>
-    <span class={`theme-compact-select-icon ${iconClass} h-4 w-4 flex-none text-[var(--trigger-icon-color)]`}></span>
+    <span
+      class={`theme-compact-select-icon ${iconClass} h-4 w-4 flex-none text-[var(--trigger-icon-color)]`}
+    ></span>
   </button>
 
   {#if renderPanel}

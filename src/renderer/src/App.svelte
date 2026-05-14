@@ -790,6 +790,13 @@
       await runAction('gateway:open-codex', () => window.codexApp.openLocalGatewayInCodex())
     })
 
+  const openLocalGatewayIsolatedInCodex = async (): Promise<void> =>
+    runLocalGatewayAction(async () => {
+      await runAction('gateway:open-codex-isolated', () =>
+        window.codexApp.openLocalGatewayIsolatedInCodex()
+      )
+    })
+
   const updateLocalGatewayModelMappings = async (
     mappings: LocalGatewayModelMapping[]
   ): Promise<void> => {
@@ -828,17 +835,13 @@
     )
   }
 
-  const updateLocalGatewayRoutingMode = async (
-    mode: import('../shared/codex').LocalGatewayRoutingMode,
-    providerId?: string
-  ): Promise<void> => {
+  const updateLocalGatewayAllowedProviders = async (providerIds: string[]): Promise<void> => {
     const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-routing', () =>
+    await runAction('settings:gateway-providers', () =>
       window.codexApp.updateSettings({
         localGateway: {
           ...(currentGateway ?? {}),
-          routingMode: mode,
-          providerId: mode === 'provider' ? providerId : undefined
+          allowedProviderIds: providerIds
         }
       })
     )
@@ -1840,12 +1843,13 @@
               {stopLocalGateway}
               {rotateLocalGatewayKey}
               {openLocalGatewayInCodex}
+              {openLocalGatewayIsolatedInCodex}
               {updateLocalGatewayModelMappings}
               {updateLocalGatewayAllowedGroups}
               {updateLocalGatewayAllowedAccounts}
-              localGatewayRoutingMode={snapshot.settings.localGateway?.routingMode ?? 'codex'}
-              localGatewayRoutingProviderId={snapshot.settings.localGateway?.providerId}
-              {updateLocalGatewayRoutingMode}
+              localGatewayAllowedProviderIds={snapshot.settings.localGateway?.allowedProviderIds ??
+                []}
+              {updateLocalGatewayAllowedProviders}
               {localGatewayPortOccupant}
               {killingLocalGatewayPortOccupant}
               {killLocalGatewayPortOccupant}

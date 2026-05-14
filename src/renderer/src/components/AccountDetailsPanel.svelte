@@ -514,5 +514,4 @@
     background: var(--surface-hover);
     color: var(--color-carbon);
   }
-
 </style>

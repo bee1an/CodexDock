@@ -89,7 +89,9 @@
   }
 </script>
 
-<section class="theme-surface rounded-[1rem] border border-[var(--card-border)] bg-[var(--panel-strong)] px-3 py-2.5">
+<section
+  class="theme-surface rounded-[1rem] border border-[var(--card-border)] bg-[var(--panel-strong)] px-3 py-2.5"
+>
   <div class="flex flex-wrap items-center justify-between gap-2.5">
     <div class="flex flex-wrap items-center gap-2 text-sm text-faint">
       <span
@@ -117,7 +119,9 @@
       {/if}
     </div>
 
-    <div class="theme-toolbar inline-flex items-center gap-0.5 rounded-lg bg-[var(--surface-soft)] p-1">
+    <div
+      class="theme-toolbar inline-flex items-center gap-0.5 rounded-lg bg-[var(--surface-soft)] p-1"
+    >
       <div class="relative">
         <span
           class="pointer-events-none absolute left-2 top-1/2 h-4 w-4 -translate-y-1/2 text-faint i-lucide-languages"

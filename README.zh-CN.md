@@ -48,7 +48,10 @@ cdock provider create                      # 交互式或通过参数创建 Prov
 cdock provider update <provider-id>         # 更新 Provider 配置
 cdock provider remove <provider-id>         # 删除 Provider
 cdock provider check <provider-id>          # 检查 Provider 是否可用
-cdock provider open <provider-id>           # 使用 Provider 打开 Codex
+cdock provider open <provider-id>           # 使用 Provider 直接打开默认 Codex
+cdock provider open <provider-id> --isolated # 使用 Provider 多开隔离 Codex
+cdock gateway open                          # 使用本地服务直接打开默认 Codex
+cdock gateway open --isolated               # 使用本地服务多开隔离 Codex
 cdock tag list                             # 列出账号标签
 cdock tag create <name>                     # 创建标签
 cdock tag rename <tag-id> <name>            # 重命名标签

@@ -172,9 +172,9 @@ function normalizePersistedState(parsed: PersistedState | LegacyPersistedState):
     usageByAccountId: parsed.usageByAccountId ?? {},
     usageErrorByAccountId: parsed.usageErrorByAccountId ?? {},
     accountHealthByAccountId: Object.fromEntries(
-      Object.entries(normalizeAccountHealthByAccountId(parsed.accountHealthByAccountId ?? {})).filter(
-        ([accountId]) => accountIds.has(accountId)
-      )
+      Object.entries(
+        normalizeAccountHealthByAccountId(parsed.accountHealthByAccountId ?? {})
+      ).filter(([accountId]) => accountIds.has(accountId))
     ),
     wakeSchedulesByAccountId: Object.fromEntries(
       Object.entries(parsed.wakeSchedulesByAccountId ?? {})

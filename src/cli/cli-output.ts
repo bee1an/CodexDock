@@ -35,17 +35,17 @@ Usage:
   cdock account import-current [--json]
   cdock account import [--file <path>] [--json]
   cdock account export [account-id...] [--file <path>] [--json]
-	  cdock account activate <account-id> [--json]
-	  cdock account best [--json]
-	  cdock account remove <account-id> [--json]
-	  cdock account status <account-id> <normal|auth-error> [--reason <text>] [--json]
-	  cdock account refresh-tokens <account-id> [--json]
+  cdock account activate <account-id> [--json]
+  cdock account best [--json]
+  cdock account remove <account-id> [--json]
+  cdock account status <account-id> <normal|auth-error> [--reason <text>] [--json]
+  cdock account refresh-tokens <account-id> [--json]
   cdock provider list [--json]
   cdock provider create --base-url <url> --api-key <key> [--protocol openai] [--name <name>] [--model <model>] [--fast <true|false>] [--json]
   cdock provider update <provider-id> [--name <name>] [--base-url <url>] [--api-key <key>] [--protocol openai] [--model <model>] [--fast <true|false>] [--json]
   cdock provider remove <provider-id> [--json]
   cdock provider check <provider-id> [--json]
-  cdock provider open <provider-id> [--json]
+  cdock provider open <provider-id> [--isolated] [--json]
   cdock instance list [--json]
   cdock instance create --name <name> [--codex-home <path>] [--account <account-id>] [--extra-args <args>] [--json]
   cdock instance update <instance-id|default> [--name <name>] [--account <account-id|->] [--extra-args <args>] [--unbind-account] [--json]
@@ -62,6 +62,7 @@ Usage:
   cdock usage read [account-id] [--json]
   cdock cost read [--refresh] [--json]
   cdock gateway start|stop|status [--json]
+  cdock gateway open [--isolated] [--json]
   cdock gateway key rotate [--json]
   cdock gateway port status [--json]
   cdock gateway port kill [--json]
@@ -179,18 +180,18 @@ export function printAccountList(payload: CliAccountListPayload, quiet: boolean)
     return
   }
 
-	  for (const account of payload.accounts) {
-	    const marker = account.id === payload.activeAccountId ? '*' : ' '
-	    const subscriptionExpiresAt = formatCliSubscriptionExpiresAt(account.subscriptionExpiresAt)
-	    const subscriptionSuffix = subscriptionExpiresAt
-	      ? `  subscription_expires_at=${subscriptionExpiresAt}`
-	      : ''
-	    const health = payload.accountHealthByAccountId?.[account.id]
-	    const healthSuffix = health ? `  status=${health.status} reason=${health.reason}` : ''
-	    console.log(
-	      `${marker} ${account.id}  ${accountLabel(account)}${subscriptionSuffix}${healthSuffix}`
-	    )
-	  }
+  for (const account of payload.accounts) {
+    const marker = account.id === payload.activeAccountId ? '*' : ' '
+    const subscriptionExpiresAt = formatCliSubscriptionExpiresAt(account.subscriptionExpiresAt)
+    const subscriptionSuffix = subscriptionExpiresAt
+      ? `  subscription_expires_at=${subscriptionExpiresAt}`
+      : ''
+    const health = payload.accountHealthByAccountId?.[account.id]
+    const healthSuffix = health ? `  status=${health.status} reason=${health.reason}` : ''
+    console.log(
+      `${marker} ${account.id}  ${accountLabel(account)}${subscriptionSuffix}${healthSuffix}`
+    )
+  }
 
   console.log(`Current session: ${sessionLabel(payload.currentSession)}`)
 }

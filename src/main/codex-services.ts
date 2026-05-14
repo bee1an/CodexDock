@@ -42,7 +42,7 @@ import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
 import { createCodexCostUsageService } from './codex-cost-usage'
 import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
 import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
-import { DefaultConfigBackupManager } from './codex-default-config-backup'
+import { ConfigGuard } from './codex-config-guard'
 import {
   copyCodexSessionToProvider,
   listCodexSessionProjects,
@@ -58,10 +58,12 @@ export type { CodexServices, CreateCodexServicesOptions } from './codex-services
 export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
 
 export function createCodexServices(options: CreateCodexServicesOptions): CodexServices {
+  const configGuard = new ConfigGuard(options.userDataPath, options.platform)
   const store = new CodexAccountStore(
     options.userDataPath,
     options.platform,
-    options.defaultCodexHome
+    options.defaultCodexHome,
+    configGuard
   )
   const instanceStore = new CodexInstanceStore(options.userDataPath, options.defaultCodexHome)
   const providerStore = new CodexProviderStore(options.userDataPath, options.platform)
@@ -101,12 +103,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   }
 
   const authRuntime = createCodexServicesAuthRuntime(context)
-  const backupManager = new DefaultConfigBackupManager(
-    join(options.userDataPath, 'provider-override-state.json'),
-    instanceStore.getDefaults().defaultCodexHome,
-    options.platform
-  )
-  const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime, backupManager)
+  const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime, configGuard)
   const costUsageService = createCodexCostUsageService({
     userDataPath: options.userDataPath,
     listInstances: () => instanceRuntime.listCodexInstances()
@@ -150,6 +147,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     startDirectProviderInstance,
     syncLocalGatewayInstanceConfig,
     startLocalGatewayInstance,
+    startDirectLocalGatewayInstance,
     openFromService,
     stopInstance,
     toDefaultInstanceSummary,
@@ -711,6 +709,19 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         return getSnapshot()
       },
       openLocalGateway: async (workspacePath = options.defaultWorkspacePath) => {
+        const status = await localGatewayService.status()
+        if (!status.running) {
+          throw new Error('Local gateway is not running.')
+        }
+        const apiKey = await localGatewayService.getApiKey()
+        await startDirectLocalGatewayInstance({
+          baseUrl: status.baseUrl,
+          apiKey,
+          workspacePath
+        })
+        return getSnapshot()
+      },
+      openLocalGatewayIsolated: async (workspacePath = options.defaultWorkspacePath) => {
         const status = await localGatewayService.status()
         if (!status.running) {
           throw new Error('Local gateway is not running.')

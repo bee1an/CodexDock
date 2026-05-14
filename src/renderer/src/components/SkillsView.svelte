@@ -276,7 +276,9 @@
   use:reveal={{ delay: 0.02 }}
 >
   <!-- Header -->
-  <section class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4">
+  <section
+    class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
         <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.skillsTitle}</p>

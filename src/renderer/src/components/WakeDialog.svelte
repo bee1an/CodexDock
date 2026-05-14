@@ -143,7 +143,6 @@
       logPanel?.scrollTo({ top: logPanel.scrollHeight })
     })
   }
-
 </script>
 
 <AppDialog
@@ -159,338 +158,323 @@
   scrollable
   onclose={requestClose}
 >
-    <div class="grid gap-4">
-      <div class="wake-dialog-heading grid gap-1" data-wake-motion>
-        <p id="wake-dialog-title" class="text-base font-semibold tracking-[-0.015em] text-carbon">
-          {copy.wakeDialogTitle}
-        </p>
-        <p class="max-w-3xl text-xs leading-5 text-muted-strong">
-          {copy.wakeDialogDescription}
-        </p>
-        <p class="text-[11px] leading-4 text-faint">{accountLabelText}</p>
-      </div>
+  <div class="grid gap-4">
+    <div class="wake-dialog-heading grid gap-1" data-wake-motion>
+      <p id="wake-dialog-title" class="text-base font-semibold tracking-[-0.015em] text-carbon">
+        {copy.wakeDialogTitle}
+      </p>
+      <p class="max-w-3xl text-xs leading-5 text-muted-strong">
+        {copy.wakeDialogDescription}
+      </p>
+      <p class="text-[11px] leading-4 text-faint">{accountLabelText}</p>
+    </div>
 
-      <AppButtonGroup
-        class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-[var(--soft-panel-border)] bg-transparent p-0.5"
-        data-wake-motion
+    <AppButtonGroup
+      class="wake-tab-list inline-flex w-fit items-center gap-1 rounded-[0.45rem] border border-[var(--soft-panel-border)] bg-transparent p-0.5"
+      data-wake-motion
+    >
+      <AppButton
+        variant="filter"
+        size="sm"
+        selected={activeTab === 'session'}
+        onclick={() => {
+          if (!dialogBusy()) {
+            activeTab = 'session'
+          }
+        }}
+        disabled={dialogBusy()}
+        ariaPressed={activeTab === 'session'}
       >
-        <AppButton
-          variant="filter"
-          size="sm"
-          selected={activeTab === 'session'}
-          onclick={() => {
-            if (!dialogBusy()) {
-              activeTab = 'session'
-            }
-          }}
-          disabled={dialogBusy()}
-          ariaPressed={activeTab === 'session'}
-        >
-          <span class="i-lucide-zap h-3.5 w-3.5"></span>
-          <span>{copy.wakeQuota}</span>
-        </AppButton>
-        <AppButton
-          variant="filter"
-          size="sm"
-          selected={activeTab === 'schedule'}
-          onclick={() => {
-            if (!dialogBusy()) {
-              activeTab = 'schedule'
-            }
-          }}
-          disabled={dialogBusy()}
-          ariaPressed={activeTab === 'schedule'}
-        >
-          <span class="i-lucide-calendar-clock h-3.5 w-3.5"></span>
-          <span>{copy.wakeSchedule}</span>
-        </AppButton>
-      </AppButtonGroup>
+        <span class="i-lucide-zap h-3.5 w-3.5"></span>
+        <span>{copy.wakeQuota}</span>
+      </AppButton>
+      <AppButton
+        variant="filter"
+        size="sm"
+        selected={activeTab === 'schedule'}
+        onclick={() => {
+          if (!dialogBusy()) {
+            activeTab = 'schedule'
+          }
+        }}
+        disabled={dialogBusy()}
+        ariaPressed={activeTab === 'schedule'}
+      >
+        <span class="i-lucide-calendar-clock h-3.5 w-3.5"></span>
+        <span>{copy.wakeSchedule}</span>
+      </AppButton>
+    </AppButtonGroup>
 
-      {#if activeTab === 'session'}
-        <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
-          <div class="flex items-center justify-between gap-3">
-            <div class="grid gap-1">
-              <p class="text-sm font-medium text-carbon">{copy.wakeQuotaDialogTitle}</p>
-              <p class="text-xs text-muted-strong">{copy.wakeQuotaDialogDescription}</p>
-            </div>
-            <span
-              class={`inline-flex items-center rounded-[0.35rem] px-2.5 py-1 text-[11px] font-medium ${statusToneClass(sessionStatus)}`}
-            >
-              {sessionStatusLabel(sessionStatus)}
-            </span>
+    {#if activeTab === 'session'}
+      <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
+        <div class="flex items-center justify-between gap-3">
+          <div class="grid gap-1">
+            <p class="text-sm font-medium text-carbon">{copy.wakeQuotaDialogTitle}</p>
+            <p class="text-xs text-muted-strong">{copy.wakeQuotaDialogDescription}</p>
+          </div>
+          <span
+            class={`inline-flex items-center rounded-[0.35rem] px-2.5 py-1 text-[11px] font-medium ${statusToneClass(sessionStatus)}`}
+          >
+            {sessionStatusLabel(sessionStatus)}
+          </span>
+        </div>
+
+        <div class="grid gap-3 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
+          <div class="grid content-start gap-3">
+            <label class="grid gap-1.5">
+              <span class="text-xs font-medium text-muted-strong">
+                {copy.wakeQuotaPromptLabel}
+              </span>
+              <AppInput
+                multiline
+                class="min-h-28"
+                bind:value={sessionPrompt}
+                placeholder={copy.wakeQuotaPromptPlaceholder}
+                disabled={dialogBusy()}
+              />
+            </label>
+
+            <label class="grid gap-1.5">
+              <span class="text-xs font-medium text-muted-strong">
+                {copy.wakeQuotaModelLabel}
+              </span>
+              <AppInput
+                bind:value={sessionModel}
+                placeholder={copy.wakeQuotaModelPlaceholder}
+                disabled={dialogBusy()}
+              />
+            </label>
+
+            {#if requestError}
+              <div
+                class="theme-error-panel rounded-[0.4rem] border border-danger/18 bg-danger/6 px-3 py-2.5 text-sm text-danger"
+              >
+                {requestError}
+              </div>
+            {/if}
           </div>
 
-          <div class="grid gap-3 lg:grid-cols-[minmax(0,19rem)_minmax(0,1fr)]">
-            <div class="grid content-start gap-3">
-              <label class="grid gap-1.5">
+          <div class="grid min-h-0 gap-3">
+            <div class="grid gap-2">
+              <div class="flex items-center justify-between gap-3">
                 <span class="text-xs font-medium text-muted-strong">
+                  {copy.wakeQuotaLogTitle}
+                </span>
+                {#if requestResult}
+                  <span
+                    class="theme-version-pill inline-flex items-center rounded-md bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-strong"
+                  >
+                    {copy.wakeQuotaResultStatus}&nbsp;{requestResult.status}
+                  </span>
+                {/if}
+              </div>
+
+              <pre
+                bind:this={logPanel}
+                class="theme-code-surface wake-log-panel min-h-48 max-h-72 overflow-auto rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
+                  >{sessionLogs.length ? sessionLogs.join('\n') : copy.wakeQuotaLogEmpty}</code
+                ></pre>
+            </div>
+
+            {#if requestResult}
+              <div class="grid gap-2">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-xs font-medium text-muted-strong">
+                    {copy.wakeQuotaResult}
+                  </span>
+                  <span class="text-[10px] text-faint">{responsePreview(rawResponseBody)}</span>
+                </div>
+                <pre
+                  class="theme-code-surface max-h-56 overflow-auto overscroll-contain rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
+                    >{rawResponseBody || copy.wakeQuotaResultEmpty}</code
+                  ></pre>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-2" data-wake-motion>
+          <AppButton variant="secondary" size="sm" onclick={requestClose} disabled={dialogBusy()}>
+            {copy.cancel}
+          </AppButton>
+          <AppButton variant="primary" size="sm" onclick={onSubmitSession} disabled={dialogBusy()}>
+            {#if sessionBusy}
+              <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+            {/if}
+            <span>{copy.wakeQuotaConfirm}</span>
+          </AppButton>
+        </div>
+      </div>
+    {:else}
+      <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
+        <div
+          class="wake-section-header flex flex-wrap items-center justify-between gap-3 border-b border-[var(--soft-panel-border)] pb-3"
+        >
+          <div class="grid gap-1">
+            <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">
+              {copy.wakeScheduleDialogTitle}
+            </p>
+            <p class="text-xs leading-5 text-muted-strong">
+              {copy.wakeScheduleDialogDescription}
+            </p>
+          </div>
+          <label class="inline-flex items-center gap-2 text-xs font-medium text-carbon">
+            <Checkbox bind:checked={scheduleEnabled} disabled={dialogBusy()} />
+            <span>{copy.wakeScheduleEnabled}</span>
+          </label>
+        </div>
+
+        <div class="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
+          <div class="grid content-start gap-4">
+            <div class="grid gap-2.5">
+              <div class="flex items-center justify-between gap-3">
+                <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
+                  {copy.wakeScheduleTimes}
+                </span>
+                <AppButton
+                  variant="icon"
+                  size="md"
+                  onclick={addTime}
+                  disabled={dialogBusy()}
+                  ariaLabel={copy.wakeScheduleAddTime}
+                  title={copy.wakeScheduleAddTime}
+                >
+                  <span class="i-lucide-plus h-4 w-4"></span>
+                </AppButton>
+              </div>
+
+              <div class="grid gap-1.5">
+                {#each scheduleTimes as timeValue, timeIndex (timeIndex)}
+                  <div
+                    class="wake-time-row grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2"
+                  >
+                    <AppInput
+                      class="min-w-0"
+                      inputClass="tabular-nums"
+                      value={timeValue}
+                      placeholder={copy.wakeScheduleTimePlaceholder}
+                      disabled={dialogBusy()}
+                      oninput={(event) =>
+                        updateTime(timeIndex, (event.currentTarget as HTMLInputElement).value)}
+                    />
+                    <AppButton
+                      variant="icon"
+                      size="md"
+                      onclick={() => removeTime(timeIndex)}
+                      disabled={dialogBusy()}
+                      ariaLabel={copy.wakeScheduleRemoveTime}
+                      title={copy.wakeScheduleRemoveTime}
+                    >
+                      <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+                    </AppButton>
+                  </div>
+                {/each}
+              </div>
+            </div>
+
+            <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(12rem,0.72fr)]">
+              <label class="grid gap-1.5">
+                <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
                   {copy.wakeQuotaPromptLabel}
                 </span>
                 <AppInput
                   multiline
-                  class="min-h-28"
-                  bind:value={sessionPrompt}
+                  class="min-h-24"
+                  bind:value={schedulePrompt}
                   placeholder={copy.wakeQuotaPromptPlaceholder}
                   disabled={dialogBusy()}
                 />
               </label>
-
-              <label class="grid gap-1.5">
-                <span class="text-xs font-medium text-muted-strong">
+              <label class="grid content-start gap-1.5">
+                <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
                   {copy.wakeQuotaModelLabel}
                 </span>
                 <AppInput
-                  bind:value={sessionModel}
+                  bind:value={scheduleModel}
                   placeholder={copy.wakeQuotaModelPlaceholder}
                   disabled={dialogBusy()}
                 />
               </label>
-
-              {#if requestError}
-                <div
-                  class="theme-error-panel rounded-[0.4rem] border border-danger/18 bg-danger/6 px-3 py-2.5 text-sm text-danger"
-                >
-                  {requestError}
-                </div>
-              {/if}
             </div>
 
-            <div class="grid min-h-0 gap-3">
-              <div class="grid gap-2">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="text-xs font-medium text-muted-strong">
-                    {copy.wakeQuotaLogTitle}
-                  </span>
-                  {#if requestResult}
-                    <span
-                      class="theme-version-pill inline-flex items-center rounded-md bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium tabular-nums text-muted-strong"
-                    >
-                      {copy.wakeQuotaResultStatus}&nbsp;{requestResult.status}
-                    </span>
-                  {/if}
-                </div>
-
-                <pre
-                  bind:this={logPanel}
-                  class="theme-code-surface wake-log-panel min-h-48 max-h-72 overflow-auto rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
-                    >{sessionLogs.length ? sessionLogs.join('\n') : copy.wakeQuotaLogEmpty}</code
-                  ></pre>
+            {#if scheduleError}
+              <div
+                class="theme-error-panel inline-flex items-center gap-2 rounded-[0.4rem] border border-danger/18 bg-danger/8 px-3 py-2 text-sm font-medium text-danger"
+                role="alert"
+              >
+                <span class="i-lucide-circle-alert h-4 w-4 flex-none"></span>
+                <span>{scheduleError}</span>
               </div>
-
-              {#if requestResult}
-                <div class="grid gap-2">
-                  <div class="flex items-center justify-between gap-3">
-                    <span class="text-xs font-medium text-muted-strong">
-                      {copy.wakeQuotaResult}
-                    </span>
-                    <span class="text-[10px] text-faint">{responsePreview(rawResponseBody)}</span>
-                  </div>
-                  <pre
-                    class="theme-code-surface max-h-56 overflow-auto overscroll-contain rounded-[0.4rem] border border-[var(--card-border)] bg-transparent px-3.5 py-3 text-[13px] leading-relaxed text-carbon"><code
-                      >{rawResponseBody || copy.wakeQuotaResultEmpty}</code
-                    ></pre>
-                </div>
-              {/if}
-            </div>
+            {/if}
           </div>
 
-          <div class="flex justify-end gap-2" data-wake-motion>
+          <div
+            class="wake-schedule-summary grid content-start gap-0 rounded-[0.5rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-xs text-muted-strong"
+          >
+            <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
+              <span>{copy.wakeScheduleNextRun}</span>
+              <span class="font-medium tabular-nums text-carbon">
+                {nextWakeScheduleLabel(schedule, language, copy.wakeScheduleEmpty)}
+              </span>
+            </div>
+            <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
+              <span>{copy.wakeScheduleLastRun}</span>
+              <span class="font-medium tabular-nums text-carbon"
+                >{formatWakeScheduleLastTriggeredAt(
+                  schedule?.lastTriggeredAt,
+                  language,
+                  copy.wakeScheduleEmpty
+                )}</span
+              >
+            </div>
+            <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
+              <span>{copy.wakeScheduleLastStatus}</span>
+              <span class="font-medium text-carbon"
+                >{scheduleStatusLabel(schedule?.lastStatus)}</span
+              >
+            </div>
+            {#if schedule?.lastMessage}
+              <div class="grid gap-1 border-t border-[var(--soft-panel-border)] pt-2">
+                <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-faint">
+                  {copy.wakeScheduleLastMessage}
+                </span>
+                <pre
+                  class="theme-code-surface max-h-36 overflow-auto rounded-[0.35rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-[11px] leading-5 text-carbon"><code
+                    >{schedule.lastMessage}</code
+                  ></pre>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div class="flex items-center justify-between gap-3" data-wake-motion>
+          <AppButton
+            variant="danger"
+            size="sm"
+            onclick={() => void handleDeleteSchedule()}
+            disabled={dialogBusy() || scheduleDeleting || !schedule}
+          >
+            {#if scheduleDeleting}
+              <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+            {/if}
+            <span>{copy.wakeScheduleDelete}</span>
+          </AppButton>
+
+          <div class="flex justify-end gap-2">
             <AppButton variant="secondary" size="sm" onclick={requestClose} disabled={dialogBusy()}>
               {copy.cancel}
             </AppButton>
-            <AppButton
-              variant="primary"
-              size="sm"
-              onclick={onSubmitSession}
-              disabled={dialogBusy()}
-            >
-              {#if sessionBusy}
+            <AppButton variant="primary" size="sm" onclick={onSaveSchedule} disabled={dialogBusy()}>
+              {#if scheduleSaving}
                 <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
               {/if}
-              <span>{copy.wakeQuotaConfirm}</span>
+              <span>{copy.wakeScheduleSave}</span>
             </AppButton>
           </div>
         </div>
-      {:else}
-        <div class="grid gap-4" data-wake-motion use:reveal={{ delay: 0.02 }}>
-          <div
-            class="wake-section-header flex flex-wrap items-center justify-between gap-3 border-b border-[var(--soft-panel-border)] pb-3"
-          >
-            <div class="grid gap-1">
-              <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">
-                {copy.wakeScheduleDialogTitle}
-              </p>
-              <p class="text-xs leading-5 text-muted-strong">
-                {copy.wakeScheduleDialogDescription}
-              </p>
-            </div>
-            <label class="inline-flex items-center gap-2 text-xs font-medium text-carbon">
-              <Checkbox bind:checked={scheduleEnabled} disabled={dialogBusy()} />
-              <span>{copy.wakeScheduleEnabled}</span>
-            </label>
-          </div>
-
-          <div class="grid gap-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(18rem,0.8fr)]">
-            <div class="grid content-start gap-4">
-              <div class="grid gap-2.5">
-                <div class="flex items-center justify-between gap-3">
-                  <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-                    {copy.wakeScheduleTimes}
-                  </span>
-                  <AppButton
-                    variant="icon"
-                    size="md"
-                    onclick={addTime}
-                    disabled={dialogBusy()}
-                    ariaLabel={copy.wakeScheduleAddTime}
-                    title={copy.wakeScheduleAddTime}
-                  >
-                    <span class="i-lucide-plus h-4 w-4"></span>
-                  </AppButton>
-                </div>
-
-                <div class="grid gap-1.5">
-                  {#each scheduleTimes as timeValue, timeIndex (timeIndex)}
-                    <div
-                      class="wake-time-row grid grid-cols-[minmax(0,1fr)_2.25rem] items-center gap-2"
-                    >
-                      <AppInput
-                        class="min-w-0"
-                        inputClass="tabular-nums"
-                        value={timeValue}
-                        placeholder={copy.wakeScheduleTimePlaceholder}
-                        disabled={dialogBusy()}
-                        oninput={(event) =>
-                          updateTime(timeIndex, (event.currentTarget as HTMLInputElement).value)}
-                      />
-                      <AppButton
-                        variant="icon"
-                        size="md"
-                        onclick={() => removeTime(timeIndex)}
-                        disabled={dialogBusy()}
-                        ariaLabel={copy.wakeScheduleRemoveTime}
-                        title={copy.wakeScheduleRemoveTime}
-                      >
-                        <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
-                      </AppButton>
-                    </div>
-                  {/each}
-                </div>
-              </div>
-
-              <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(12rem,0.72fr)]">
-                <label class="grid gap-1.5">
-                  <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-                    {copy.wakeQuotaPromptLabel}
-                  </span>
-                  <AppInput
-                    multiline
-                    class="min-h-24"
-                    bind:value={schedulePrompt}
-                    placeholder={copy.wakeQuotaPromptPlaceholder}
-                    disabled={dialogBusy()}
-                  />
-                </label>
-                <label class="grid content-start gap-1.5">
-                  <span class="text-xs font-semibold uppercase tracking-[0.12em] text-faint">
-                    {copy.wakeQuotaModelLabel}
-                  </span>
-                  <AppInput
-                    bind:value={scheduleModel}
-                    placeholder={copy.wakeQuotaModelPlaceholder}
-                    disabled={dialogBusy()}
-                  />
-                </label>
-              </div>
-
-              {#if scheduleError}
-                <div
-                  class="theme-error-panel inline-flex items-center gap-2 rounded-[0.4rem] border border-danger/18 bg-danger/8 px-3 py-2 text-sm font-medium text-danger"
-                  role="alert"
-                >
-                  <span class="i-lucide-circle-alert h-4 w-4 flex-none"></span>
-                  <span>{scheduleError}</span>
-                </div>
-              {/if}
-            </div>
-
-            <div
-              class="wake-schedule-summary grid content-start gap-0 rounded-[0.5rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-xs text-muted-strong"
-            >
-              <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
-                <span>{copy.wakeScheduleNextRun}</span>
-                <span class="font-medium tabular-nums text-carbon">
-                  {nextWakeScheduleLabel(schedule, language, copy.wakeScheduleEmpty)}
-                </span>
-              </div>
-              <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
-                <span>{copy.wakeScheduleLastRun}</span>
-                <span class="font-medium tabular-nums text-carbon"
-                  >{formatWakeScheduleLastTriggeredAt(
-                    schedule?.lastTriggeredAt,
-                    language,
-                    copy.wakeScheduleEmpty
-                  )}</span
-                >
-              </div>
-              <div class="wake-summary-row flex items-center justify-between gap-3 py-2">
-                <span>{copy.wakeScheduleLastStatus}</span>
-                <span class="font-medium text-carbon"
-                  >{scheduleStatusLabel(schedule?.lastStatus)}</span
-                >
-              </div>
-              {#if schedule?.lastMessage}
-                <div class="grid gap-1 border-t border-[var(--soft-panel-border)] pt-2">
-                  <span class="text-[11px] font-semibold uppercase tracking-[0.12em] text-faint">
-                    {copy.wakeScheduleLastMessage}
-                  </span>
-                  <pre
-                    class="theme-code-surface max-h-36 overflow-auto rounded-[0.35rem] border border-[var(--card-border)] bg-transparent px-3 py-2 text-[11px] leading-5 text-carbon"><code
-                      >{schedule.lastMessage}</code
-                    ></pre>
-                </div>
-              {/if}
-            </div>
-          </div>
-
-          <div class="flex items-center justify-between gap-3" data-wake-motion>
-            <AppButton
-              variant="danger"
-              size="sm"
-              onclick={() => void handleDeleteSchedule()}
-              disabled={dialogBusy() || scheduleDeleting || !schedule}
-            >
-              {#if scheduleDeleting}
-                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-              {/if}
-              <span>{copy.wakeScheduleDelete}</span>
-            </AppButton>
-
-            <div class="flex justify-end gap-2">
-              <AppButton
-                variant="secondary"
-                size="sm"
-                onclick={requestClose}
-                disabled={dialogBusy()}
-              >
-                {copy.cancel}
-              </AppButton>
-              <AppButton
-                variant="primary"
-                size="sm"
-                onclick={onSaveSchedule}
-                disabled={dialogBusy()}
-              >
-                {#if scheduleSaving}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {/if}
-                <span>{copy.wakeScheduleSave}</span>
-              </AppButton>
-            </div>
-          </div>
-        </div>
-      {/if}
-    </div>
+      </div>
+    {/if}
+  </div>
 </AppDialog>
 
 <style>
@@ -542,5 +526,4 @@
   .wake-summary-row + .wake-summary-row {
     border-top: 1px solid var(--color-arctic-mist);
   }
-
 </style>

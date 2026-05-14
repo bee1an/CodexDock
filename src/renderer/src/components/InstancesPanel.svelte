@@ -196,7 +196,9 @@
 
     <div class="grid gap-3">
       {#each instances as instance (instance.id)}
-        <article class="theme-soft-panel grid gap-3 rounded-2xl border border-[var(--card-border)] p-4">
+        <article
+          class="theme-soft-panel grid gap-3 rounded-2xl border border-[var(--card-border)] p-4"
+        >
           <div class="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div class="text-sm font-medium text-carbon">

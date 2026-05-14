@@ -197,10 +197,7 @@ export interface ToastOptions {
   autoDismissMs?: number
 }
 
-export function toastReveal(
-  node: HTMLElement,
-  options: ToastOptions = {}
-): DestroyActionReturn {
+export function toastReveal(node: HTMLElement, options: ToastOptions = {}): DestroyActionReturn {
   if (prefersReducedMotion()) {
     return { destroy: noop }
   }

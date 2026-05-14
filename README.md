@@ -48,7 +48,10 @@ cdock provider create                      # Create a custom API provider intera
 cdock provider update <provider-id>         # Update a custom provider
 cdock provider remove <provider-id>         # Remove a custom provider
 cdock provider check <provider-id>          # Validate a provider configuration
-cdock provider open <provider-id>           # Open Codex with a custom provider
+cdock provider open <provider-id>           # Open default Codex with a custom provider
+cdock provider open <provider-id> --isolated # Open an isolated Codex with a custom provider
+cdock gateway open                          # Open default Codex through the local service
+cdock gateway open --isolated               # Open an isolated Codex through the local service
 cdock tag list                             # List account tags
 cdock tag create <name>                     # Create a tag
 cdock tag rename <tag-id> <name>            # Rename a tag

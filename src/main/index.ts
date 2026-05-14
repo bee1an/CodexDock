@@ -462,7 +462,7 @@ function createTray(): void {
               modelMappings: [],
               allowedGroupIds: [],
               allowedAccountIds: [],
-              routingMode: 'codex'
+              allowedProviderIds: []
             }
           },
           usageByAccountId: {},
@@ -861,6 +861,10 @@ app.whenReady().then(async () => {
   })
   ipcMain.handle('codex:open-local-gateway-in-codex', async () => {
     await codexServices.codex.openLocalGateway()
+    return refreshTrayTitle()
+  })
+  ipcMain.handle('codex:open-local-gateway-isolated-in-codex', async () => {
+    await codexServices.codex.openLocalGatewayIsolated()
     return refreshTrayTitle()
   })
   ipcMain.handle('codex:open-account-in-codex', async (_, accountId: string) => {

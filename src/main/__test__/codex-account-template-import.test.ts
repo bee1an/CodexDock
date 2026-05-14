@@ -85,7 +85,10 @@ describe('parseTemplateFileRecord — ChatGPT Web Session', () => {
   })
 
   it('throws when both account and user are missing (not recognized as web session)', () => {
-    const session = { accessToken: 'eyJhbGciOiJub25lIn0.eyJ0ZXN0Ijp0cnVlfQ.sig', expires: '2026-04-15T12:00:00.000Z' }
+    const session = {
+      accessToken: 'eyJhbGciOiJub25lIn0.eyJ0ZXN0Ijp0cnVlfQ.sig',
+      expires: '2026-04-15T12:00:00.000Z'
+    }
     expect(() => parseTemplateFileRecord(JSON.stringify(session))).toThrow(
       'Invalid account template file.'
     )

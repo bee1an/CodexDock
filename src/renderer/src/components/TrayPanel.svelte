@@ -64,7 +64,9 @@
   <div class="grid gap-2">
     {#if statusAccounts.length}
       {#each statusAccounts as account (account.id)}
-        <article class="theme-soft-panel grid gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2.5">
+        <article
+          class="theme-soft-panel grid gap-2 rounded-xl bg-[var(--surface-soft)] px-3 py-2.5"
+        >
           <div class="flex items-center gap-2">
             <span
               class={`h-2 w-2 flex-none rounded-full ${snapshot.activeAccountId === account.id ? 'bg-success' : 'theme-status-idle bg-black/14'}`}
@@ -125,7 +127,9 @@
         </article>
       {/each}
     {:else}
-      <div class="theme-soft-panel rounded-xl bg-[var(--surface-soft)] px-3 py-3 text-sm text-muted-strong">
+      <div
+        class="theme-soft-panel rounded-xl bg-[var(--surface-soft)] px-3 py-3 text-sm text-muted-strong"
+      >
         {copy.noStatusBarAccounts}
       </div>
     {/if}
@@ -158,7 +162,9 @@
     </div>
   </div>
 
-  <div class="flex items-center justify-between gap-3 border-t border-[var(--soft-panel-border)] pt-3">
+  <div
+    class="flex items-center justify-between gap-3 border-t border-[var(--soft-panel-border)] pt-3"
+  >
     <span class="text-xs text-muted-strong">{copy.pollingInterval}</span>
     <select
       class="theme-select h-8 rounded-md border border-[var(--card-border)] bg-[var(--panel-strong)] px-2 text-sm text-carbon outline-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"

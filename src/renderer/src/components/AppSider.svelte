@@ -246,7 +246,10 @@
         <span class="i-lucide-chevron-down h-4.5 w-4.5"></span>
       </AppButton>
 
-      <div class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]" aria-hidden="true"></div>
+      <div
+        class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]"
+        aria-hidden="true"
+      ></div>
 
       <AppButton
         variant="icon"
@@ -358,7 +361,10 @@
         <span class="i-lucide-cog h-4.5 w-4.5"></span>
       </AppButton>
 
-      <div class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]" aria-hidden="true"></div>
+      <div
+        class="theme-sider-divider h-6 w-px bg-[var(--sider-rail-border)]"
+        aria-hidden="true"
+      ></div>
 
       <div class="theme-sider-language relative w-10">
         <FloatingSelect
@@ -514,5 +520,4 @@
   .theme-sider-utility-button:disabled {
     opacity: 0.48;
   }
-
 </style>

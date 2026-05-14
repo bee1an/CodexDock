@@ -1,4 +1,5 @@
 import { execFile as execFileCallback, spawn } from 'node:child_process'
+import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -359,11 +360,18 @@ export async function writeProviderApiKeyToCodexHome(
   apiKey: string
 ): Promise<void> {
   await fs.mkdir(codexHome, { recursive: true })
-  await fs.writeFile(
-    join(codexHome, 'auth.json'),
-    `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
-    'utf8'
-  )
+  const authPath = join(codexHome, 'auth.json')
+  const tmpAuthPath = `${authPath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    await fs.writeFile(
+      tmpAuthPath,
+      `${JSON.stringify({ OPENAI_API_KEY: apiKey }, null, 2)}\n`,
+      'utf8'
+    )
+    await fs.rename(tmpAuthPath, authPath)
+  } finally {
+    await fs.rm(tmpAuthPath, { force: true })
+  }
 }
 
 export async function writeProviderConfigToCodexHome(
@@ -403,9 +411,15 @@ export async function writeProviderConfigToCodexHome(
   nextConfig['feature'] = feature
 
   await fs.mkdir(codexHome, { recursive: true })
-  await fs.writeFile(
-    configPath,
-    `${stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])}\n`,
-    'utf8'
-  )
+  const tmpConfigPath = `${configPath}.${process.pid}.${randomUUID()}.tmp`
+  try {
+    await fs.writeFile(
+      tmpConfigPath,
+      `${stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])}\n`,
+      'utf8'
+    )
+    await fs.rename(tmpConfigPath, configPath)
+  } finally {
+    await fs.rm(tmpConfigPath, { force: true })
+  }
 }

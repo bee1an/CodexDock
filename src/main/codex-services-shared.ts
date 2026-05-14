@@ -463,6 +463,7 @@ export interface CodexServices {
     open(accountId?: string, workspacePath?: string): Promise<AppSnapshot>
     openIsolated(accountId: string, workspacePath?: string): Promise<AppSnapshot>
     openLocalGateway(workspacePath?: string): Promise<AppSnapshot>
+    openLocalGatewayIsolated(workspacePath?: string): Promise<AppSnapshot>
     openFromService(input?: OpenCodexFromServiceInput): Promise<OpenCodexFromServiceResult>
     instances: {
       list(): Promise<CodexInstanceSummary[]>

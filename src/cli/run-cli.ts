@@ -194,9 +194,9 @@ async function execute(
             throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
           }
 
-          const status = (rawStatus === 'auth-error'
-            ? 'auth_error'
-            : rawStatus) as UpdateAccountHealthInput['status']
+          const status = (
+            rawStatus === 'auth-error' ? 'auth_error' : rawStatus
+          ) as UpdateAccountHealthInput['status']
           if (status !== 'normal' && status !== 'auth_error') {
             throw new CliError('Account status must be normal or auth-error', EXIT_USAGE)
           }
@@ -270,10 +270,7 @@ async function execute(
         case 'refresh-tokens': {
           const accountId = rest[0]
           if (!accountId) {
-            throw new CliError(
-              'Usage: cdock account refresh-tokens <account-id>',
-              EXIT_USAGE
-            )
+            throw new CliError('Usage: cdock account refresh-tokens <account-id>', EXIT_USAGE)
           }
 
           const result = await runtime.services.accounts.refreshTokens(accountId)
@@ -286,14 +283,32 @@ async function execute(
             }
             printIfNeeded('', silent)
             printIfNeeded('Before:', silent)
-            printIfNeeded(`  Access Token expires: ${result.before.accessTokenExpiresAt ? new Date(result.before.accessTokenExpiresAt).toISOString() : 'N/A'}`, silent)
-            printIfNeeded(`  Refresh Token expires: ${result.before.refreshTokenExpiresAt ? new Date(result.before.refreshTokenExpiresAt).toISOString() : 'N/A'}`, silent)
-            printIfNeeded(`  ID Token expires: ${result.before.idTokenExpiresAt ? new Date(result.before.idTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+            printIfNeeded(
+              `  Access Token expires: ${result.before.accessTokenExpiresAt ? new Date(result.before.accessTokenExpiresAt).toISOString() : 'N/A'}`,
+              silent
+            )
+            printIfNeeded(
+              `  Refresh Token expires: ${result.before.refreshTokenExpiresAt ? new Date(result.before.refreshTokenExpiresAt).toISOString() : 'N/A'}`,
+              silent
+            )
+            printIfNeeded(
+              `  ID Token expires: ${result.before.idTokenExpiresAt ? new Date(result.before.idTokenExpiresAt).toISOString() : 'N/A'}`,
+              silent
+            )
             if (result.after) {
               printIfNeeded('After:', silent)
-              printIfNeeded(`  Access Token expires: ${result.after.accessTokenExpiresAt ? new Date(result.after.accessTokenExpiresAt).toISOString() : 'N/A'}`, silent)
-              printIfNeeded(`  Refresh Token expires: ${result.after.refreshTokenExpiresAt ? new Date(result.after.refreshTokenExpiresAt).toISOString() : 'N/A'}`, silent)
-              printIfNeeded(`  ID Token expires: ${result.after.idTokenExpiresAt ? new Date(result.after.idTokenExpiresAt).toISOString() : 'N/A'}`, silent)
+              printIfNeeded(
+                `  Access Token expires: ${result.after.accessTokenExpiresAt ? new Date(result.after.accessTokenExpiresAt).toISOString() : 'N/A'}`,
+                silent
+              )
+              printIfNeeded(
+                `  Refresh Token expires: ${result.after.refreshTokenExpiresAt ? new Date(result.after.refreshTokenExpiresAt).toISOString() : 'N/A'}`,
+                silent
+              )
+              printIfNeeded(
+                `  ID Token expires: ${result.after.idTokenExpiresAt ? new Date(result.after.idTokenExpiresAt).toISOString() : 'N/A'}`,
+                silent
+              )
             }
             if (result.sanitizedLogs.length) {
               printIfNeeded('', silent)
@@ -402,7 +417,15 @@ async function execute(
             throw new CliError('Missing provider-id', EXIT_USAGE)
           }
 
-          const isolated = rest.includes('--isolated')
+          let isolated = false
+          for (const arg of rest.slice(1)) {
+            if (arg === '--isolated') {
+              isolated = true
+              continue
+            }
+            throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+          }
+
           if (isolated) {
             const snapshot = await runtime.services.providers.openIsolated(providerId)
             printIfNeeded(`Opened provider in isolated Codex: ${providerId}`, silent)
@@ -714,6 +737,26 @@ async function execute(
           const status = snapshot.localGatewayStatus ?? (await runtime.services.gateway.status())
           printIfNeeded('Local gateway stopped', silent)
           return { code: EXIT_OK, payload: toCliResult(status) }
+        }
+        case 'open': {
+          let isolated = false
+          for (const arg of rest) {
+            if (arg === '--isolated') {
+              isolated = true
+              continue
+            }
+            throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+          }
+
+          if (isolated) {
+            const snapshot = await runtime.services.codex.openLocalGatewayIsolated()
+            printIfNeeded('Opened local gateway in isolated Codex', silent)
+            return { code: EXIT_OK, payload: toCliResult(snapshot) }
+          }
+
+          const snapshot = await runtime.services.codex.openLocalGateway()
+          printIfNeeded('Opened local gateway in default Codex', silent)
+          return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         case 'key': {
           if (rest[0] !== 'rotate') {
