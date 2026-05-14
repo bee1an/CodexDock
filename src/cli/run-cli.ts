@@ -402,8 +402,15 @@ async function execute(
             throw new CliError('Missing provider-id', EXIT_USAGE)
           }
 
+          const isolated = rest.includes('--isolated')
+          if (isolated) {
+            const snapshot = await runtime.services.providers.openIsolated(providerId)
+            printIfNeeded(`Opened provider in isolated Codex: ${providerId}`, silent)
+            return { code: EXIT_OK, payload: toCliResult(snapshot) }
+          }
+
           const snapshot = await runtime.services.providers.open(providerId)
-          printIfNeeded(`Opened provider in isolated Codex: ${providerId}`, silent)
+          printIfNeeded(`Opened provider in default Codex: ${providerId}`, silent)
           return { code: EXIT_OK, payload: toCliResult(snapshot) }
         }
         default:

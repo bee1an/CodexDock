@@ -854,6 +854,10 @@ app.whenReady().then(async () => {
     await codexServices.providers.open(providerId)
     return refreshTrayTitle()
   })
+  ipcMain.handle('codex:open-provider-isolated-in-codex', async (_, providerId: string) => {
+    await codexServices.providers.openIsolated(providerId)
+    return refreshTrayTitle()
+  })
   ipcMain.handle('codex:open-local-gateway-in-codex', async () => {
     await codexServices.codex.openLocalGateway()
     return refreshTrayTitle()

@@ -102,6 +102,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:probe-provider-models', input),
   openProviderInCodex: (providerId: string) =>
     ipcRenderer.invoke('codex:open-provider-in-codex', providerId),
+  openProviderIsolatedInCodex: (providerId: string) =>
+    ipcRenderer.invoke('codex:open-provider-isolated-in-codex', providerId),
   openLocalGatewayInCodex: () => ipcRenderer.invoke('codex:open-local-gateway-in-codex'),
   openAccountInCodex: (accountId: string) =>
     ipcRenderer.invoke('codex:open-account-in-codex', accountId),

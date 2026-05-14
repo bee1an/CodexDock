@@ -1,7 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { join, relative, resolve, sep } from 'node:path'
 import { promises as fs } from 'node:fs'
-import { parse as parseToml } from '@iarna/toml'
+import { parse as parseToml, stringify as stringifyToml } from '@iarna/toml'
+
+import type { DefaultConfigBackupManager } from './codex-default-config-backup'
 
 import type { CodexAuthPayload } from './codex-auth'
 import type { PersistedCodexInstance, PersistedDefaultCodexInstance } from './codex-instances'
@@ -56,6 +58,10 @@ export interface CodexServicesInstanceRuntime {
   startNamedInstance(instanceId: string, workspacePath: string): Promise<CodexInstanceSummary>
   startAccountInstance(accountId: string, workspacePath: string): Promise<CodexInstanceSummary>
   startProviderInstance(providerId: string, workspacePath: string): Promise<CustomProviderSummary>
+  startDirectProviderInstance(
+    providerId: string,
+    workspacePath: string
+  ): Promise<CustomProviderSummary>
   syncLocalGatewayInstanceConfig(input: {
     baseUrl: string
     apiKey: string
@@ -72,7 +78,8 @@ export interface CodexServicesInstanceRuntime {
 
 export function createCodexServicesInstanceRuntime(
   context: CodexServicesRuntimeContext,
-  authRuntime: CodexServicesAuthRuntime
+  authRuntime: CodexServicesAuthRuntime,
+  backupManager: DefaultConfigBackupManager
 ): CodexServicesInstanceRuntime {
   const { store, instanceStore, providerStore, loginCoordinator } = context
   const { refreshAuthForUse, refreshStoredAuthGuarded } = authRuntime
@@ -485,6 +492,10 @@ export function createCodexServicesInstanceRuntime(
   ): Promise<CodexInstanceSummary> {
     await assertDefaultCodexLaunchAllowed(accountId)
 
+    if (await backupManager.isOverrideActive()) {
+      await backupManager.restoreBaseline()
+    }
+
     const defaultInstance = await instanceStore.getDefaultInstance()
     const targetAccountId = accountId ?? defaultInstance.bindAccountId
 
@@ -676,6 +687,88 @@ export function createCodexServicesInstanceRuntime(
     return providerStore.markUsed(providerId)
   }
 
+  async function startDirectProviderInstance(
+    providerId: string,
+    workspacePath: string
+  ): Promise<CustomProviderSummary> {
+    const provider = await providerStore.getResolvedProvider(providerId)
+    const { defaultCodexHome } = instanceStore.getDefaults()
+
+    await backupManager.captureBaselineIfNeeded()
+
+    const configPath = join(defaultCodexHome, 'config.toml')
+    let nextConfig: Record<string, unknown> = {}
+    try {
+      const raw = await fs.readFile(configPath, 'utf8')
+      nextConfig = raw.trim() ? (parseToml(raw) as Record<string, unknown>) : {}
+    } catch {
+      nextConfig = {}
+    }
+
+    const modelProviders =
+      nextConfig['model_providers'] && typeof nextConfig['model_providers'] === 'object'
+        ? { ...(nextConfig['model_providers'] as Record<string, unknown>) }
+        : {}
+    modelProviders['custom'] = {
+      name: provider.summary.name?.trim() || 'custom',
+      wire_api: 'responses',
+      requires_openai_auth: true,
+      base_url: provider.summary.baseUrl
+    }
+
+    const feature =
+      nextConfig['feature'] && typeof nextConfig['feature'] === 'object'
+        ? { ...(nextConfig['feature'] as Record<string, unknown>) }
+        : {}
+    feature['fast_mode'] = provider.summary.fastMode
+
+    nextConfig['model'] = provider.summary.model?.trim() || '5.4'
+    nextConfig['model_provider'] = 'custom'
+    nextConfig['model_providers'] = modelProviders
+    nextConfig['feature'] = feature
+
+    const tomlContent = stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])
+    parseToml(tomlContent)
+
+    await fs.mkdir(defaultCodexHome, { recursive: true })
+    const tmpConfig = `${configPath}.${process.pid}.${randomUUID()}.tmp`
+    try {
+      await fs.writeFile(tmpConfig, `${tomlContent}\n`, 'utf8')
+      await fs.rename(tmpConfig, configPath)
+    } catch (error) {
+      await fs.rm(tmpConfig, { force: true })
+      await backupManager.restoreBaseline()
+      throw error
+    }
+
+    try {
+      await writeProviderApiKeyToCodexHome(defaultCodexHome, provider.apiKey)
+    } catch (error) {
+      await backupManager.restoreBaseline()
+      throw error
+    }
+
+    await backupManager.markOverrideActive(providerId)
+
+    const defaultInstance = await instanceStore.getDefaultInstance()
+    const runningPid = await resolveManagedCodexPid(defaultCodexHome, defaultInstance.lastPid)
+    if (runningPid) {
+      await stopCodexProcess(runningPid)
+    }
+
+    const pid = await launchCodexDesktop({
+      workspacePath,
+      codexHome: defaultCodexHome,
+      extraArgs: defaultInstance.extraArgs,
+      preferAppBundle: false,
+      requireDesktopExecutable: false,
+      desktopExecutablePath: await getDesktopExecutablePathOverride()
+    })
+
+    await instanceStore.updateDefaultInstance({ lastPid: pid, touchLaunch: true })
+    return providerStore.markUsed(providerId)
+  }
+
   async function ensureLocalGatewayInstance(): Promise<PersistedCodexInstance> {
     const codexHome = localGatewayCodexHome()
     const existing = (await instanceStore.list()).find(
@@ -814,16 +907,13 @@ export function createCodexServicesInstanceRuntime(
       }
       case 'provider': {
         const providerId = requiredServiceTargetId(input.providerId, 'Provider id')
-        const provider = await startProviderInstance(providerId, input.workspacePath)
-        const { rootDir } = instanceStore.getDefaults()
-        const providerCodexHome = join(rootDir, `provider-${providerId}`)
-        const instance = (await instanceStore.list()).find(
-          (item) => resolve(item.codexHome) === resolve(providerCodexHome)
-        )
+        const provider = await startDirectProviderInstance(providerId, input.workspacePath)
+        const { defaultCodexHome } = instanceStore.getDefaults()
+        const defaultInstance = await instanceStore.getDefaultInstance()
         return {
           ok: true,
-          pid: instance?.lastPid,
-          codexHome: instance?.codexHome ?? providerCodexHome,
+          pid: defaultInstance.lastPid,
+          codexHome: defaultCodexHome,
           workspacePath: input.workspacePath,
           multi: false,
           target: {
@@ -1082,6 +1172,7 @@ export function createCodexServicesInstanceRuntime(
     startNamedInstance,
     startAccountInstance,
     startProviderInstance,
+    startDirectProviderInstance,
     syncLocalGatewayInstanceConfig,
     startLocalGatewayInstance,
     openFromService,

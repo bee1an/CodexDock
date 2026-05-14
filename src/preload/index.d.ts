@@ -91,6 +91,7 @@ interface CodexDesktopApi {
   removeProvider: (providerId: string) => Promise<AppSnapshot>
   probeProviderModels: (input: ProbeProviderModelsInput) => Promise<ProviderModelsProbeResult>
   openProviderInCodex: (providerId: string) => Promise<AppSnapshot>
+  openProviderIsolatedInCodex: (providerId: string) => Promise<AppSnapshot>
   openLocalGatewayInCodex: () => Promise<AppSnapshot>
   openAccountInCodex: (accountId: string) => Promise<AppSnapshot>
   openAccountInIsolatedCodex: (accountId: string) => Promise<AppSnapshot>

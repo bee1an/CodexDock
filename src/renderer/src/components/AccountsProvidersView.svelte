@@ -35,6 +35,7 @@
     input: ProbeProviderModelsInput
   ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
+  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void>
   export let startEditingProvider: (provider: CustomProviderSummary) => Promise<void>
   export let saveProvider: (provider: CustomProviderSummary) => Promise<void>
   export let cancelEditingProvider: () => void
@@ -333,6 +334,16 @@
                 {:else}
                   <span class="i-lucide-plug-zap h-4 w-4"></span>
                 {/if}
+              </AppButton>
+              <AppButton
+                variant="icon"
+                size="xs"
+                onclick={() => void openProviderIsolatedInCodex(provider.id)}
+                disabled={loginActionBusy || providerActionBusy(provider.id)}
+                ariaLabel={`${copy.openCustomProviderIsolated} · ${providerLabel(provider, copy)}`}
+                title={copy.openCustomProviderIsolated}
+              >
+                <span class="i-lucide-copy-plus h-4 w-4"></span>
               </AppButton>
               <AppButton
                 variant="icon"

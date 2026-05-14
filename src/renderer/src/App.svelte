@@ -857,6 +857,21 @@
     }
   }
 
+  const openProviderIsolatedInCodex = async (providerId: string): Promise<void> => {
+    if (providerOpeningId) {
+      return
+    }
+
+    providerOpeningId = providerId
+    try {
+      await runAction(`provider:open-isolated:${providerId}`, () =>
+        window.codexApp.openProviderIsolatedInCodex(providerId)
+      )
+    } finally {
+      providerOpeningId = ''
+    }
+  }
+
   const startLogin = async (method: LoginMethod): Promise<void> => {
     if (
       method === 'browser' &&
@@ -1816,6 +1831,7 @@
               {killingLocalGatewayPortOccupant}
               {killLocalGatewayPortOccupant}
               {openProviderInCodex}
+              {openProviderIsolatedInCodex}
               {reorderAccounts}
               {createGroup}
               {updateGroup}

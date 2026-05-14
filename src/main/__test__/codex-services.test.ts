@@ -875,7 +875,7 @@ describe('createCodexServices', () => {
     await expect(stat(join(isolatedHome!, 'worktrees'))).rejects.toBeTruthy()
   })
 
-  it('opens a custom provider in an isolated instance with provider auth and config', async () => {
+  it('opens a custom provider directly in the default codex home with provider auth and config', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
       userDataPath: env.userDataPath,
@@ -902,6 +902,49 @@ describe('createCodexServices', () => {
     expect(providerId).toBeTruthy()
 
     await services.providers.open(providerId!, env.workspacePath)
+
+    const defaultHome = join(process.env.HOME ?? '', '.codex')
+    await expect(readFile(join(defaultHome, 'auth.json'), 'utf8')).resolves.toContain(
+      '"OPENAI_API_KEY": "provider-secret"'
+    )
+    await expect(readFile(join(defaultHome, 'config.toml'), 'utf8')).resolves.toContain(
+      'model = "gpt-5.4"'
+    )
+    await expect(readFile(join(defaultHome, 'config.toml'), 'utf8')).resolves.toContain(
+      'model_provider = "custom"'
+    )
+    await expect(readFile(join(defaultHome, 'config.toml'), 'utf8')).resolves.toContain(
+      'base_url = "https://api.bee1an.us.kg/v1"'
+    )
+  })
+
+  it('opens a custom provider in an isolated instance with provider auth and config', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await writeFile(
+      join(process.env.HOME ?? '', '.codex', 'config.toml'),
+      'model = "gpt-5"\n',
+      'utf8'
+    )
+    await services.accounts.importCurrent()
+
+    const created = await services.providers.create({
+      name: 'Bee',
+      baseUrl: 'https://api.bee1an.us.kg/v1',
+      apiKey: 'provider-secret',
+      model: 'gpt-5.4',
+      fastMode: true
+    })
+    const providerId = created.providers[0]?.id
+    expect(providerId).toBeTruthy()
+
+    await services.providers.openIsolated(providerId!, env.workspacePath)
 
     const isolatedHome = [...mockedProcessState.pidHomes.values()].find(
       (value) => value && value !== join(process.env.HOME ?? '', '.codex')

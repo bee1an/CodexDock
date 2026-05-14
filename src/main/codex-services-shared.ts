@@ -413,6 +413,7 @@ export interface CodexServices {
     check(providerId: string): Promise<ProviderCheckReport>
     probeModels(input: ProbeProviderModelsInput): Promise<ProviderModelsProbeResult>
     open(providerId: string, workspacePath?: string): Promise<AppSnapshot>
+    openIsolated(providerId: string, workspacePath?: string): Promise<AppSnapshot>
   }
   doctor: {
     run(): Promise<DoctorReport>

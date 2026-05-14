@@ -42,6 +42,7 @@ import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
 import { createCodexCostUsageService } from './codex-cost-usage'
 import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
 import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
+import { DefaultConfigBackupManager } from './codex-default-config-backup'
 import {
   copyCodexSessionToProvider,
   listCodexSessionProjects,
@@ -100,7 +101,12 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   }
 
   const authRuntime = createCodexServicesAuthRuntime(context)
-  const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime)
+  const backupManager = new DefaultConfigBackupManager(
+    join(options.userDataPath, 'provider-override-state.json'),
+    instanceStore.getDefaults().defaultCodexHome,
+    options.platform
+  )
+  const instanceRuntime = createCodexServicesInstanceRuntime(context, authRuntime, backupManager)
   const costUsageService = createCodexCostUsageService({
     userDataPath: options.userDataPath,
     listInstances: () => instanceRuntime.listCodexInstances()
@@ -141,6 +147,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     startDefaultInstance,
     startNamedInstance,
     startProviderInstance,
+    startDirectProviderInstance,
     syncLocalGatewayInstanceConfig,
     startLocalGatewayInstance,
     openFromService,
@@ -551,6 +558,10 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       check: checkProvider,
       probeModels: probeProviderModels,
       open: async (providerId, workspacePath = options.defaultWorkspacePath) => {
+        await startDirectProviderInstance(providerId, workspacePath)
+        return getSnapshot()
+      },
+      openIsolated: async (providerId, workspacePath = options.defaultWorkspacePath) => {
         await startProviderInstance(providerId, workspacePath)
         return getSnapshot()
       }
