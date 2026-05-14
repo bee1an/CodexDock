@@ -15,6 +15,7 @@ import type {
   CopyCodexSkillResult,
   CreateCustomProviderInput,
   CreatePromptInput,
+  CreateSkillLibraryInput,
   CustomProviderDetail,
   CodexSessionDetail,
   CodexSessionProjectsResult,
@@ -33,6 +34,16 @@ import type {
   ProbeProviderModelsInput,
   ProviderModelsProbeResult,
   ReadCodexSessionDetailInput,
+  SkillLibraryCategoryList,
+  SkillLibraryCollectInput,
+  SkillLibraryCollectResult,
+  SkillLibraryDetail,
+  SkillLibraryExportResult,
+  SkillLibraryImportResult,
+  SkillLibraryInstallInput,
+  SkillLibraryInstallResult,
+  SkillLibrarySearchInput,
+  SkillLibrarySummary,
   LoginAttempt,
   LoginEvent,
   LoginMethod,
@@ -44,6 +55,7 @@ import type {
   UpdateAccountWakeScheduleInput,
   UpdateAccountTokensInput,
   UpdatePromptInput,
+  UpdateSkillLibraryInput,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
   UpdateCustomProviderInput
@@ -127,6 +139,19 @@ interface CodexDesktopApi {
   addPromptAttachment: (promptId: string, payload: PromptAttachmentPayload) => Promise<PromptDetail>
   removePromptAttachment: (promptId: string, fileName: string) => Promise<PromptDetail>
   readPromptAttachment: (promptId: string, fileName: string) => Promise<PromptAttachmentData>
+  listSkillLibrary: (input?: SkillLibrarySearchInput) => Promise<SkillLibrarySummary[]>
+  getSkillLibraryDetail: (skillId: string) => Promise<SkillLibraryDetail>
+  createSkillLibrary: (input: CreateSkillLibraryInput) => Promise<SkillLibraryDetail>
+  updateSkillLibrary: (skillId: string, input: UpdateSkillLibraryInput) => Promise<SkillLibraryDetail>
+  removeSkillLibrary: (skillId: string) => Promise<void>
+  listSkillLibraryCategories: () => Promise<SkillLibraryCategoryList>
+  createSkillLibraryCategory: (name: string) => Promise<SkillLibraryCategoryList>
+  renameSkillLibraryCategory: (oldName: string, newName: string) => Promise<SkillLibraryCategoryList>
+  removeSkillLibraryCategory: (name: string) => Promise<SkillLibraryCategoryList>
+  importSkillLibraryDir: (dirPath: string) => Promise<SkillLibraryImportResult>
+  exportSkillLibraryDir: (targetDir: string) => Promise<SkillLibraryExportResult>
+  collectSkillLibrary: (input: SkillLibraryCollectInput) => Promise<SkillLibraryCollectResult>
+  installSkillLibrary: (input: SkillLibraryInstallInput) => Promise<SkillLibraryInstallResult>
   getLocalGatewayStatus: () => Promise<LocalGatewayStatus>
   getLocalGatewayApiKey: () => Promise<string>
   getLocalGatewayPortOccupant: () => Promise<PortOccupant | null>

@@ -14,6 +14,9 @@ import type {
   PromptDetail,
   PromptSummary,
   ProviderCheckReport,
+  SkillLibraryCategoryList,
+  SkillLibraryDetail,
+  SkillLibrarySummary,
   TokenCostDetail
 } from '../shared/codex'
 import { serializeStatsDisplaySettings } from '../shared/codex'
@@ -436,6 +439,59 @@ export function printPromptDetail(detail: PromptDetail, quiet: boolean): void {
 }
 
 export function printPromptCategories(result: PromptCategoryList, quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!result.categories.length) {
+    console.log('No categories')
+    return
+  }
+
+  for (const category of result.categories) {
+    console.log(category)
+  }
+}
+
+export function printSkillLibraryList(skills: SkillLibrarySummary[], quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  if (!skills.length) {
+    console.log('No skills in library')
+    return
+  }
+
+  for (const skill of skills) {
+    const cats = skill.categories.length ? `  [${skill.categories.join(', ')}]` : ''
+    console.log(`${skill.id}  ${skill.name}${cats}`)
+  }
+}
+
+export function printSkillLibraryDetail(detail: SkillLibraryDetail, quiet: boolean): void {
+  if (quiet) {
+    return
+  }
+
+  console.log(`ID: ${detail.id}`)
+  console.log(`Name: ${detail.name}`)
+  if (detail.description) {
+    console.log(`Description: ${detail.description}`)
+  }
+  if (detail.categories.length) {
+    console.log(`Categories: ${detail.categories.join(', ')}`)
+  }
+  if (detail.files.length) {
+    console.log(`Files: ${detail.files.join(', ')}`)
+  }
+  console.log(`Created: ${detail.createdAt}`)
+  console.log(`Updated: ${detail.updatedAt}`)
+  console.log('---')
+  console.log(detail.content)
+}
+
+export function printSkillLibraryCategories(result: SkillLibraryCategoryList, quiet: boolean): void {
   if (quiet) {
     return
   }

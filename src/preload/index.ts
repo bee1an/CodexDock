@@ -15,6 +15,7 @@ import type {
   CopyCodexSkillResult,
   CreateCustomProviderInput,
   CreatePromptInput,
+  CreateSkillLibraryInput,
   CustomProviderDetail,
   CodexSessionDetail,
   CodexSessionProjectsResult,
@@ -33,8 +34,19 @@ import type {
   PromptSearchInput,
   PromptSummary,
   ReadCodexSessionDetailInput,
+  SkillLibraryCategoryList,
+  SkillLibraryCollectInput,
+  SkillLibraryCollectResult,
+  SkillLibraryDetail,
+  SkillLibraryExportResult,
+  SkillLibraryImportResult,
+  SkillLibraryInstallInput,
+  SkillLibraryInstallResult,
+  SkillLibrarySearchInput,
+  SkillLibrarySummary,
   UpdateCustomProviderInput,
   UpdatePromptInput,
+  UpdateSkillLibraryInput,
   LoginEvent,
   LoginMethod,
   PortOccupant,
@@ -165,6 +177,33 @@ const codexApp = {
     ipcRenderer.invoke('codex:prompt-attachment-remove', promptId, fileName),
   readPromptAttachment: (promptId: string, fileName: string): Promise<PromptAttachmentData> =>
     ipcRenderer.invoke('codex:prompt-attachment-read', promptId, fileName),
+  // Skill Library management
+  listSkillLibrary: (input?: SkillLibrarySearchInput): Promise<SkillLibrarySummary[]> =>
+    ipcRenderer.invoke('codex:skill-library-list', input),
+  getSkillLibraryDetail: (skillId: string): Promise<SkillLibraryDetail> =>
+    ipcRenderer.invoke('codex:skill-library-detail', skillId),
+  createSkillLibrary: (input: CreateSkillLibraryInput): Promise<SkillLibraryDetail> =>
+    ipcRenderer.invoke('codex:skill-library-create', input),
+  updateSkillLibrary: (skillId: string, input: UpdateSkillLibraryInput): Promise<SkillLibraryDetail> =>
+    ipcRenderer.invoke('codex:skill-library-update', skillId, input),
+  removeSkillLibrary: (skillId: string): Promise<void> =>
+    ipcRenderer.invoke('codex:skill-library-remove', skillId),
+  listSkillLibraryCategories: (): Promise<SkillLibraryCategoryList> =>
+    ipcRenderer.invoke('codex:skill-library-category-list'),
+  createSkillLibraryCategory: (name: string): Promise<SkillLibraryCategoryList> =>
+    ipcRenderer.invoke('codex:skill-library-category-create', name),
+  renameSkillLibraryCategory: (oldName: string, newName: string): Promise<SkillLibraryCategoryList> =>
+    ipcRenderer.invoke('codex:skill-library-category-rename', oldName, newName),
+  removeSkillLibraryCategory: (name: string): Promise<SkillLibraryCategoryList> =>
+    ipcRenderer.invoke('codex:skill-library-category-remove', name),
+  importSkillLibraryDir: (dirPath: string): Promise<SkillLibraryImportResult> =>
+    ipcRenderer.invoke('codex:skill-library-import-dir', dirPath),
+  exportSkillLibraryDir: (targetDir: string): Promise<SkillLibraryExportResult> =>
+    ipcRenderer.invoke('codex:skill-library-export-dir', targetDir),
+  collectSkillLibrary: (input: SkillLibraryCollectInput): Promise<SkillLibraryCollectResult> =>
+    ipcRenderer.invoke('codex:skill-library-collect', input),
+  installSkillLibrary: (input: SkillLibraryInstallInput): Promise<SkillLibraryInstallResult> =>
+    ipcRenderer.invoke('codex:skill-library-install', input),
   getLocalGatewayStatus: () => ipcRenderer.invoke('codex:get-local-gateway-status'),
   getLocalGatewayApiKey: (): Promise<string> =>
     ipcRenderer.invoke('codex:get-local-gateway-api-key'),

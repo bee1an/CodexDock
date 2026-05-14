@@ -66,7 +66,19 @@ import {
   type PromptImportResult,
   type PromptSearchInput,
   type PromptSummary,
-  type UpdatePromptInput
+  type UpdatePromptInput,
+  type CreateSkillLibraryInput,
+  type SkillLibraryCategoryList,
+  type SkillLibraryCollectInput,
+  type SkillLibraryCollectResult,
+  type SkillLibraryDetail,
+  type SkillLibraryExportResult,
+  type SkillLibraryImportResult,
+  type SkillLibraryInstallInput,
+  type SkillLibraryInstallResult,
+  type SkillLibrarySearchInput,
+  type SkillLibrarySummary,
+  type UpdateSkillLibraryInput
 } from '../shared/codex'
 import { isAccountHealthBlocking } from '../shared/codex'
 import type { CodexPlatformAdapter } from '../shared/codex-platform'
@@ -477,6 +489,21 @@ export interface CodexServices {
     list(): Promise<CodexSkillsResult>
     detail(instanceId: string, skillDirName: string): Promise<CodexSkillDetail>
     copy(input: CopyCodexSkillInput): Promise<CopyCodexSkillResult>
+  }
+  skillLibrary: {
+    list(input?: SkillLibrarySearchInput): Promise<SkillLibrarySummary[]>
+    detail(skillId: string): Promise<SkillLibraryDetail>
+    create(input: CreateSkillLibraryInput): Promise<SkillLibraryDetail>
+    update(skillId: string, input: UpdateSkillLibraryInput): Promise<SkillLibraryDetail>
+    remove(skillId: string): Promise<void>
+    listCategories(): Promise<SkillLibraryCategoryList>
+    createCategory(name: string): Promise<SkillLibraryCategoryList>
+    renameCategory(oldName: string, newName: string): Promise<SkillLibraryCategoryList>
+    removeCategory(name: string): Promise<SkillLibraryCategoryList>
+    importDir(dirPath: string): Promise<SkillLibraryImportResult>
+    exportDir(targetDir: string): Promise<SkillLibraryExportResult>
+    collect(input: SkillLibraryCollectInput): Promise<SkillLibraryCollectResult>
+    install(input: SkillLibraryInstallInput): Promise<SkillLibraryInstallResult>
   }
   prompt: {
     list(input?: PromptSearchInput): Promise<PromptSummary[]>

@@ -50,6 +50,7 @@ import {
 } from './codex-sessions'
 import { createCodexSkillService } from './codex-skills'
 import { createCodexPromptService } from './codex-prompts'
+import { createSkillLibraryService } from './skill-library'
 import { CodexLocalGatewayService } from './local-gateway'
 import { decodeJwtPayload } from '../shared/openai-auth'
 
@@ -110,6 +111,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   const promptService = createCodexPromptService(options.promptDataPath ?? options.userDataPath, {
     legacyUserDataPaths: options.legacyPromptDataPaths
   })
+  const skillLibraryService = createSkillLibraryService(options.userDataPath)
 
   const localGatewayService = new CodexLocalGatewayService({
     store,
@@ -788,6 +790,23 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       addAttachment: (promptId, payload) => promptService.addAttachment(promptId, payload),
       removeAttachment: (promptId, fileName) => promptService.removeAttachment(promptId, fileName),
       readAttachment: (promptId, fileName) => promptService.readAttachment(promptId, fileName)
+    },
+    skillLibrary: {
+      list: (input) => skillLibraryService.list(input),
+      detail: (skillId) => skillLibraryService.detail(skillId),
+      create: (input) => skillLibraryService.create(input),
+      update: (skillId, input) => skillLibraryService.update(skillId, input),
+      remove: (skillId) => skillLibraryService.remove(skillId),
+      listCategories: () => skillLibraryService.listCategories(),
+      createCategory: (name) => skillLibraryService.createCategory(name),
+      renameCategory: (oldName, newName) => skillLibraryService.renameCategory(oldName, newName),
+      removeCategory: (name) => skillLibraryService.removeCategory(name),
+      importDir: (dirPath) => skillLibraryService.importDir(dirPath),
+      exportDir: (targetDir) => skillLibraryService.exportDir(targetDir),
+      collect: async (input) =>
+        skillLibraryService.collect(input, await listCodexInstances()),
+      install: async (input) =>
+        skillLibraryService.install(input, await listCodexInstances())
     }
   }
 }

@@ -55,6 +55,7 @@
   import SessionsView from './SessionsView.svelte'
   import SettingsView from './SettingsView.svelte'
   import SkillsView from './SkillsView.svelte'
+  import SkillLibraryView from './SkillLibraryView.svelte'
   import PromptsView from './PromptsView.svelte'
   import { groupMemberCount as groupMemberCountForAccounts } from './accounts-panel-account'
   import {
@@ -195,6 +196,7 @@
     | 'stats'
     | 'sessions'
     | 'skills'
+    | 'skill-library'
     | 'prompts'
     | 'settings' = 'accounts'
   let activeGroupFilter = 'all'
@@ -492,6 +494,18 @@
         <AppButton
           variant="filter"
           size="sm"
+          selected={currentView === 'skill-library'}
+          ariaPressed={currentView === 'skill-library'}
+          onclick={() => {
+            currentView = 'skill-library'
+          }}
+        >
+          <span class="i-lucide-library h-3.5 w-3.5"></span>
+          <span>{copy.skillLibrary}</span>
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="sm"
           selected={currentView === 'prompts'}
           ariaPressed={currentView === 'prompts'}
           onclick={() => {
@@ -549,6 +563,22 @@
       {listCodexSkills}
       {readCodexSkillDetail}
       {copyCodexSkill}
+    />
+  {:else if currentView === 'skill-library'}
+    <SkillLibraryView
+      {copy}
+      instances={codexInstances}
+      listSkillLibrary={(input) => window.codexApp.listSkillLibrary(input)}
+      getSkillLibraryDetail={(id) => window.codexApp.getSkillLibraryDetail(id)}
+      createSkillLibrary={(input) => window.codexApp.createSkillLibrary(input)}
+      updateSkillLibrary={(id, input) => window.codexApp.updateSkillLibrary(id, input)}
+      removeSkillLibrary={(id) => window.codexApp.removeSkillLibrary(id)}
+      listSkillLibraryCategories={() => window.codexApp.listSkillLibraryCategories()}
+      createSkillLibraryCategory={(name) => window.codexApp.createSkillLibraryCategory(name)}
+      renameSkillLibraryCategory={(old, name) =>
+        window.codexApp.renameSkillLibraryCategory(old, name)}
+      removeSkillLibraryCategory={(name) => window.codexApp.removeSkillLibraryCategory(name)}
+      installSkillLibrary={(input) => window.codexApp.installSkillLibrary(input)}
     />
   {:else if currentView === 'prompts'}
     <PromptsView
