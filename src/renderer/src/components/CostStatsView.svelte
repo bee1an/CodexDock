@@ -102,7 +102,7 @@
 
   const formatCost = (value: number | null): string => {
     if (value === null) {
-      return '--'
+      return copy.costUnknown
     }
 
     if (value > 0 && value < 0.0001) {
@@ -175,6 +175,10 @@
     label: string
     tokens: number
     costUSD: number | null
+    sessionTokens: number
+    sessionCostUSD: number | null
+    isRunning: boolean
+    updatedAt: string
   }
 
   const createCostRollup = (): CostRollup => ({
@@ -438,9 +442,21 @@
               },
               afterLabel: (context) => {
                 const entry = chartDaily[context.dataIndex]
-                return trendMetric === 'tokens'
-                  ? copy.costReference(formatCost(entry?.costUSD ?? null))
-                  : `${copy.tokens}: ${formatTokens(entry?.totalTokens ?? 0)}`
+                if (!entry) return ''
+                const lines: string[] = []
+                if (trendMetric === 'tokens') {
+                  lines.push(`${copy.inputTokens}: ${formatTokens(entry.inputTokens)}`)
+                  lines.push(`${copy.outputTokens}: ${formatTokens(entry.outputTokens)}`)
+                  lines.push(copy.costReference(formatCost(entry.costUSD ?? null)))
+                } else {
+                  lines.push(`${copy.tokens}: ${formatTokens(entry.totalTokens)}`)
+                  lines.push(`${copy.inputTokens}: ${formatTokens(entry.inputTokens)}`)
+                  lines.push(`${copy.outputTokens}: ${formatTokens(entry.outputTokens)}`)
+                }
+                if (entry.modelsUsed.length) {
+                  lines.push(`${copy.trendTooltipModels}: ${entry.modelsUsed.length <= 3 ? entry.modelsUsed.join(', ') : `${entry.modelsUsed.slice(0, 3).join(', ')} +${entry.modelsUsed.length - 3}`}`)
+                }
+                return lines
               }
             }
           }
@@ -545,11 +561,20 @@
               title: (items) => items[0]?.label ?? '',
               label: (context) => {
                 const model = modelBreakdowns[context.dataIndex]
-                return `${copy.tokens}: ${formatTokens(model?.totalTokens ?? 0)}`
+                if (!model) return ''
+                const totalAllTokens = modelBreakdowns.reduce((sum, m) => sum + m.totalTokens, 0)
+                const tokenPct = totalAllTokens > 0 ? ((model.totalTokens / totalAllTokens) * 100).toFixed(1) : '0.0'
+                return `${copy.tokens}: ${formatTokens(model.totalTokens)} (${tokenPct}%)`
               },
               afterLabel: (context) => {
                 const model = modelBreakdowns[context.dataIndex]
-                return `${copy.cost}: ${formatCost(model?.costUSD ?? null)}`
+                if (!model) return ''
+                if (model.costUSD === null) {
+                  return `${copy.cost}: ${copy.costUnknown}`
+                }
+                const totalAllCost = modelBreakdowns.reduce((sum, m) => sum + (m.costUSD ?? 0), 0)
+                const costPct = totalAllCost > 0 ? ((model.costUSD / totalAllCost) * 100).toFixed(1) : '0.0'
+                return `${copy.cost}: ${formatCost(model.costUSD)} (${costPct}%)`
               }
             }
           }
@@ -655,11 +680,19 @@
               title: (items) => items[0]?.label ?? '',
               label: (context) => {
                 const item = instanceUsageRows[context.dataIndex]
-                return `${copy.tokens}: ${formatTokens(item?.tokens ?? 0)}`
+                if (!item) return ''
+                const totalAll = instanceUsageRows.reduce((sum, r) => sum + r.tokens, 0)
+                const pct = totalAll > 0 ? ((item.tokens / totalAll) * 100).toFixed(1) : '0.0'
+                return `30d ${copy.tokens}: ${formatTokens(item.tokens)} (${pct}%)`
               },
               afterLabel: (context) => {
                 const item = instanceUsageRows[context.dataIndex]
-                return copy.costReference(formatCost(item?.costUSD ?? null))
+                if (!item) return ''
+                const lines: string[] = []
+                lines.push(copy.costReference(formatCost(item.costUSD)))
+                lines.push(`${copy.today}: ${formatTokens(item.sessionTokens)} / ${formatCost(item.sessionCostUSD)}`)
+                lines.push(`${item.isRunning ? copy.instanceRunning : copy.instanceStopped} · ${formatUpdatedAt(item.updatedAt)}`)
+                return lines
               }
             }
           }
@@ -807,9 +840,32 @@
   }).map((entry) => ({
     label: entry.label,
     tokens: entry.last30DaysTokens,
-    costUSD: entry.last30DaysCostUSD
+    costUSD: entry.last30DaysCostUSD,
+    sessionTokens: entry.sessionTokens,
+    sessionCostUSD: entry.sessionCostUSD,
+    isRunning: entry.isRunning,
+    updatedAt: entry.updatedAt
   }))
   $: chartDaily = detail ? [...detail.daily] : []
+  $: todayEntry = chartDaily.length ? chartDaily[chartDaily.length - 1] : null
+  $: last30InputTokens = chartDaily.reduce((sum, e) => sum + e.inputTokens, 0)
+  $: last30OutputTokens = chartDaily.reduce((sum, e) => sum + e.outputTokens, 0)
+  $: dailyAvgTokens = chartDaily.length ? Math.round((selectedSummary?.last30DaysTokens ?? 0) / chartDaily.length) : 0
+  $: dailyAvgCost = chartDaily.length ? (() => {
+    const totalCost = chartDaily.reduce((sum, e) => sum + (e.costUSD ?? 0), 0)
+    const hasAnyCost = chartDaily.some(e => e.costUSD !== null)
+    return hasAnyCost ? totalCost / chartDaily.length : null
+  })() : null
+  $: peakDayEntry = chartDaily.length ? chartDaily.reduce((peak, e) => e.totalTokens > peak.totalTokens ? e : peak, chartDaily[0]) : null
+  $: allModelsUsed = [...new Set(chartDaily.flatMap(e => e.modelsUsed))]
+  $: costStatusLabel = (() => {
+    if (!chartDaily.length) return copy.costStatusNoCost
+    const hasKnown = chartDaily.some(e => e.costUSD !== null)
+    const hasUnknown = modelBreakdowns.some(m => m.costUSD === null)
+    if (!hasKnown) return copy.costStatusNoCost
+    if (hasUnknown) return copy.costStatusPartialUnknown
+    return copy.costStatusAllKnown
+  })()
   $: modelChartHeight = Math.max(280, modelBreakdowns.length * 38)
   $: instanceChartHeight = Math.max(280, instanceUsageRows.length * 38)
   $: trendChartSyncKey = [
@@ -1018,23 +1074,83 @@
         <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.dailyTrend}
+              {copy.statsDays}
             </p>
             <p class="text-sm font-medium text-carbon">{chartDaily.length}</p>
           </div>
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.modelBreakdown}
+              {copy.modelsUsedCount}
             </p>
-            <p class="text-sm font-medium text-carbon">{modelBreakdowns.length}</p>
+            <p class="text-sm font-medium text-carbon">{allModelsUsed.length}</p>
           </div>
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.instanceUsage}
+              {copy.dailyAvgTokens}
             </p>
-            <p class="text-sm font-medium text-carbon">{instanceUsageRows.length}</p>
+            <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(dailyAvgTokens)}</p>
+          </div>
+          <div class="grid gap-1">
+            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+              {copy.dailyAvgCost}
+            </p>
+            <p class="text-sm font-medium tabular-nums text-carbon">{formatCost(dailyAvgCost)}</p>
+          </div>
+          {#if peakDayEntry}
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                {copy.peakDay}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatDayLabel(peakDayEntry.date)}</p>
+            </div>
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                {copy.peakDayTokens}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(peakDayEntry.totalTokens)}</p>
+            </div>
+          {/if}
+          <div class="grid gap-1">
+            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+              {copy.costStatus}
+            </p>
+            <p class="text-sm font-medium text-carbon">{costStatusLabel}</p>
           </div>
         </div>
+
+        {#if todayEntry}
+          <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                {copy.today} {copy.inputTokens}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(todayEntry.inputTokens)}</p>
+            </div>
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                {copy.today} {copy.outputTokens}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(todayEntry.outputTokens)}</p>
+            </div>
+          </div>
+        {/if}
+
+        {#if chartDaily.length}
+          <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                30d {copy.inputTokens}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(last30InputTokens)}</p>
+            </div>
+            <div class="grid gap-1">
+              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
+                30d {copy.outputTokens}
+              </p>
+              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(last30OutputTokens)}</p>
+            </div>
+          </div>
+        {/if}
 
         {#if detailError}
           <div
@@ -1051,9 +1167,14 @@
           </div>
         {:else if !summaryHasData(selectedSummary)}
           <div
-            class="rounded-[0.45rem] border border-dashed border-arcticMist bg-snow/35 px-3 py-3 text-sm text-muted-strong"
+            class="grid gap-1.5 rounded-[0.45rem] border border-dashed border-arcticMist bg-snow/35 px-3 py-3 text-sm text-muted-strong"
           >
-            {copy.tokenStatsNoData}
+            <p class="font-medium">{copy.tokenStatsNoData}</p>
+            <ul class="grid gap-0.5 pl-3 text-xs opacity-80">
+              <li>· {copy.emptyReasonNoLogs}</li>
+              <li>· {copy.emptyReasonNoTokenCount}</li>
+              <li>· {copy.emptyReasonNoRecentUsage}</li>
+            </ul>
           </div>
         {/if}
 
@@ -1092,6 +1213,16 @@
         </div>
 
         {#if modelBreakdowns.length}
+          <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-strong">
+            {#if modelBreakdowns[0]}
+              {@const totalAllTokens = modelBreakdowns.reduce((sum, m) => sum + m.totalTokens, 0)}
+              {@const topPct = totalAllTokens > 0 ? ((modelBreakdowns[0].totalTokens / totalAllTokens) * 100).toFixed(1) : '0.0'}
+              <span class="font-medium">{copy.topModel}: {copy.topModelSummary(modelBreakdowns[0].modelName, `${topPct}%`)}</span>
+            {/if}
+            {#if modelBreakdowns.some(m => m.costUSD === null)}
+              <span class="text-warning">{copy.costUnknownModelsHint}</span>
+            {/if}
+          </div>
           <div class="stats-chart-shell mt-4 rounded-[0.35rem] border px-3 py-4 sm:px-4">
             <div class="stats-model-chart-canvas" style={`min-height: ${modelChartHeight}px`}>
               <canvas bind:this={modelCanvas} aria-label={copy.modelBreakdown}></canvas>
