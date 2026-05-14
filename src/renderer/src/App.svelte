@@ -828,6 +828,18 @@
     )
   }
 
+  const updateLocalGatewayPort = async (port: number): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-port', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          port
+        }
+      })
+    )
+  }
+
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
     window.codexApp.getProvider(providerId)
 
@@ -1812,6 +1824,7 @@
               {updateLocalGatewayModelMappings}
               {updateLocalGatewayAllowedGroups}
               {updateLocalGatewayAllowedAccounts}
+              {updateLocalGatewayPort}
               {localGatewayPortOccupant}
               {killingLocalGatewayPortOccupant}
               {killLocalGatewayPortOccupant}

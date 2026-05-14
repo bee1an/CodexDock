@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DndEvent as SortEvent } from 'svelte-dnd-action'
 
-	import type {
+  import type {
     AccountHealth,
     AccountRateLimits,
     AccountSummary,
@@ -130,7 +130,10 @@
   export let localGatewayAllowedGroupIds: string[] = []
   export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
-  export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
+  export let updateLocalGatewayAllowedAccounts: (
+    accountIds: string[]
+  ) => Promise<void> = async () => {}
+  export let updateLocalGatewayPort: (port: number) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
@@ -178,7 +181,10 @@
   export let theme: AppTheme = 'light'
   export let updateState: AppUpdateState
   export let updateLanguage: (language: AppLanguage) => void = () => {}
-  export let updateTheme: (theme: AppTheme, origin?: { x?: number; y?: number; target?: HTMLElement | null }) => void = () => {}
+  export let updateTheme: (
+    theme: AppTheme,
+    origin?: { x?: number; y?: number; target?: HTMLElement | null }
+  ) => void = () => {}
   export let updatePollingInterval: (minutes: number) => void = () => {}
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void = () => {}
   export let checkForUpdates: () => void = () => {}
@@ -655,6 +661,7 @@
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
+      updatePort={updateLocalGatewayPort}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
@@ -765,5 +772,4 @@
   .theme-view-toggle {
     position: relative;
   }
-
 </style>

@@ -37,10 +37,39 @@
   export let portOccupant: PortOccupant | null = null
   export let killingPortOccupant = false
   export let killPortOccupant: () => Promise<void> = async () => {}
+  export let updatePort: (port: number) => Promise<void> = async () => {}
 
   let allowedGroupsBusy = false
   let allowedAccountsBusy = false
   let showAccountPicker = false
+  let showPortEdit = false
+  let portDraft = ''
+  let portBusy = false
+
+  const savePort = async (): Promise<void> => {
+    const parsed = parseInt(portDraft, 10)
+    if (!parsed || parsed < 1 || parsed > 65535) return
+    if (parsed === Number(gatewayPort)) {
+      showPortEdit = false
+      return
+    }
+    portBusy = true
+    try {
+      await updatePort(parsed)
+      showPortEdit = false
+    } finally {
+      portBusy = false
+    }
+  }
+
+  const onPortKey = (event: KeyboardEvent): void => {
+    if (event.key === 'Enter') {
+      event.preventDefault()
+      void savePort()
+    } else if (event.key === 'Escape') {
+      showPortEdit = false
+    }
+  }
 
   const toggleAllowedGroup = async (groupId: string): Promise<void> => {
     if (allowedGroupsBusy) return
@@ -133,7 +162,9 @@
   const markCopied = (key: string): void => {
     copiedKey = key
     if (copiedTimer) clearTimeout(copiedTimer)
-    copiedTimer = setTimeout(() => { copiedKey = '' }, 1500)
+    copiedTimer = setTimeout(() => {
+      copiedKey = ''
+    }, 1500)
   }
 
   const copyText = async (value: string, key = 'url'): Promise<void> => {
@@ -412,7 +443,9 @@
           onclick={() => void startLocalGateway()}
           disabled={startDisabled}
           ariaLabel={copy.startLocalGateway}
-          title={hasAllowedEntities ? copy.startLocalGateway : copy.localGatewayAllowedGroupsRequired}
+          title={hasAllowedEntities
+            ? copy.startLocalGateway
+            : copy.localGatewayAllowedGroupsRequired}
         >
           {#if localGatewayBusy}
             <span
@@ -451,7 +484,11 @@
             aria-hidden="true"
           ></span>
           <span class="gateway-port-conflict-text min-w-0 break-words leading-relaxed">
-            {copy.localGatewayPortOccupied(Number(gatewayPort) || 0, portOccupant.command, portOccupant.pid)}
+            {copy.localGatewayPortOccupied(
+              Number(gatewayPort) || 0,
+              portOccupant.command,
+              portOccupant.pid
+            )}
           </span>
         </div>
         <AppButton
@@ -495,17 +532,51 @@
             </div>
           </div>
           <div class="flex flex-none items-center gap-1.5">
-            <span
-              class="gateway-config-badge inline-flex items-center rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-medium text-muted-strong"
-            >
-              Sub2API
-            </span>
-            <span
-              class="gateway-config-badge inline-flex items-center gap-1 rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-mono font-medium tabular-nums text-muted-strong"
-            >
-              <span class="i-lucide-radio-tower h-3 w-3" aria-hidden="true"></span>
-              {gatewayPort}
-            </span>
+            {#if showPortEdit}
+              <div class="flex items-center gap-1">
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  class="gateway-port-input w-[5rem] rounded-[0.28rem] border border-[var(--line-strong)] bg-transparent px-1.5 py-0.5 text-[10px] font-mono tabular-nums text-carbon outline-none focus:border-[var(--accent-deep)]"
+                  bind:value={portDraft}
+                  onkeydown={onPortKey}
+                  disabled={portBusy}
+                />
+                <AppButton
+                  variant="icon"
+                  size="xs"
+                  onclick={() => void savePort()}
+                  disabled={portBusy}
+                  ariaLabel="Save"
+                >
+                  <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
+                </AppButton>
+                <AppButton
+                  variant="icon"
+                  size="xs"
+                  onclick={() => {
+                    showPortEdit = false
+                  }}
+                  disabled={portBusy}
+                  ariaLabel="Cancel"
+                >
+                  <span class="i-lucide-x h-3 w-3" aria-hidden="true"></span>
+                </AppButton>
+              </div>
+            {:else}
+              <button
+                type="button"
+                class="gateway-config-badge inline-flex cursor-pointer items-center gap-1 rounded-[0.28rem] border px-1.5 py-0.5 text-[10px] font-mono font-medium tabular-nums text-muted-strong hover:text-carbon"
+                onclick={() => {
+                  showPortEdit = true
+                  portDraft = String(gatewayPort)
+                }}
+              >
+                <span class="i-lucide-radio-tower h-3 w-3" aria-hidden="true"></span>
+                {gatewayPort}
+              </button>
+            {/if}
           </div>
         </div>
 
@@ -601,9 +672,7 @@
         </div>
       </div>
 
-      <div
-        class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2"
-      >
+      <div class="gateway-metrics-grid grid grid-cols-2 gap-2 rounded-[0.45rem] border p-2">
         <div class="gateway-metric-card rounded-[0.45rem] border p-3">
           <div class="mb-2 flex items-center justify-between gap-2">
             <p class="truncate text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
@@ -717,11 +786,16 @@
           <AppButton
             variant="secondary"
             size="xs"
-            onclick={() => { showAccountPicker = !showAccountPicker }}
+            onclick={() => {
+              showAccountPicker = !showAccountPicker
+            }}
             ariaLabel={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
             title={showAccountPicker ? copy.closeDialog : copy.localGatewayAllowedTargetsAdd}
           >
-            <span class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`} aria-hidden="true"></span>
+            <span
+              class={`${showAccountPicker ? 'i-lucide-minus' : 'i-lucide-plus'} h-3 w-3`}
+              aria-hidden="true"
+            ></span>
           </AppButton>
         </div>
         {#if showAccountPicker}
