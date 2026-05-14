@@ -137,6 +137,13 @@
     }).format(date)
   }
 
+  const formatLocalDayKey = (date: Date): string => {
+    const year = date.getFullYear()
+    const month = String(date.getMonth() + 1).padStart(2, '0')
+    const day = String(date.getDate()).padStart(2, '0')
+    return `${year}-${month}-${day}`
+  }
+
   const formatInstanceName = (instanceId: string, instance?: CodexInstanceSummary): string => {
     if (instance?.isDefault || instanceId === '__default__') {
       return 'default'
@@ -454,7 +461,9 @@
                   lines.push(`${copy.outputTokens}: ${formatTokens(entry.outputTokens)}`)
                 }
                 if (entry.modelsUsed.length) {
-                  lines.push(`${copy.trendTooltipModels}: ${entry.modelsUsed.length <= 3 ? entry.modelsUsed.join(', ') : `${entry.modelsUsed.slice(0, 3).join(', ')} +${entry.modelsUsed.length - 3}`}`)
+                  lines.push(
+                    `${copy.trendTooltipModels}: ${entry.modelsUsed.length <= 3 ? entry.modelsUsed.join(', ') : `${entry.modelsUsed.slice(0, 3).join(', ')} +${entry.modelsUsed.length - 3}`}`
+                  )
                 }
                 return lines
               }
@@ -563,7 +572,10 @@
                 const model = modelBreakdowns[context.dataIndex]
                 if (!model) return ''
                 const totalAllTokens = modelBreakdowns.reduce((sum, m) => sum + m.totalTokens, 0)
-                const tokenPct = totalAllTokens > 0 ? ((model.totalTokens / totalAllTokens) * 100).toFixed(1) : '0.0'
+                const tokenPct =
+                  totalAllTokens > 0
+                    ? ((model.totalTokens / totalAllTokens) * 100).toFixed(1)
+                    : '0.0'
                 return `${copy.tokens}: ${formatTokens(model.totalTokens)} (${tokenPct}%)`
               },
               afterLabel: (context) => {
@@ -573,7 +585,8 @@
                   return `${copy.cost}: ${copy.costUnknown}`
                 }
                 const totalAllCost = modelBreakdowns.reduce((sum, m) => sum + (m.costUSD ?? 0), 0)
-                const costPct = totalAllCost > 0 ? ((model.costUSD / totalAllCost) * 100).toFixed(1) : '0.0'
+                const costPct =
+                  totalAllCost > 0 ? ((model.costUSD / totalAllCost) * 100).toFixed(1) : '0.0'
                 return `${copy.cost}: ${formatCost(model.costUSD)} (${costPct}%)`
               }
             }
@@ -683,15 +696,19 @@
                 if (!item) return ''
                 const totalAll = instanceUsageRows.reduce((sum, r) => sum + r.tokens, 0)
                 const pct = totalAll > 0 ? ((item.tokens / totalAll) * 100).toFixed(1) : '0.0'
-                return `30d ${copy.tokens}: ${formatTokens(item.tokens)} (${pct}%)`
+                return `${copy.last30Days} ${copy.tokens}: ${formatTokens(item.tokens)} (${pct}%)`
               },
               afterLabel: (context) => {
                 const item = instanceUsageRows[context.dataIndex]
                 if (!item) return ''
                 const lines: string[] = []
                 lines.push(copy.costReference(formatCost(item.costUSD)))
-                lines.push(`${copy.today}: ${formatTokens(item.sessionTokens)} / ${formatCost(item.sessionCostUSD)}`)
-                lines.push(`${item.isRunning ? copy.instanceRunning : copy.instanceStopped} · ${formatUpdatedAt(item.updatedAt)}`)
+                lines.push(
+                  `${copy.today}: ${formatTokens(item.sessionTokens)} / ${formatCost(item.sessionCostUSD)}`
+                )
+                lines.push(
+                  `${item.isRunning ? copy.instanceRunning : copy.instanceStopped} · ${formatUpdatedAt(item.updatedAt)}`
+                )
                 return lines
               }
             }
@@ -847,21 +864,30 @@
     updatedAt: entry.updatedAt
   }))
   $: chartDaily = detail ? [...detail.daily] : []
-  $: todayEntry = chartDaily.length ? chartDaily[chartDaily.length - 1] : null
+  $: todayEntry = (() => {
+    const today = formatLocalDayKey(new Date())
+    return chartDaily.find((e) => e.date === today) ?? null
+  })()
   $: last30InputTokens = chartDaily.reduce((sum, e) => sum + e.inputTokens, 0)
   $: last30OutputTokens = chartDaily.reduce((sum, e) => sum + e.outputTokens, 0)
-  $: dailyAvgTokens = chartDaily.length ? Math.round((selectedSummary?.last30DaysTokens ?? 0) / chartDaily.length) : 0
-  $: dailyAvgCost = chartDaily.length ? (() => {
-    const totalCost = chartDaily.reduce((sum, e) => sum + (e.costUSD ?? 0), 0)
-    const hasAnyCost = chartDaily.some(e => e.costUSD !== null)
-    return hasAnyCost ? totalCost / chartDaily.length : null
-  })() : null
-  $: peakDayEntry = chartDaily.length ? chartDaily.reduce((peak, e) => e.totalTokens > peak.totalTokens ? e : peak, chartDaily[0]) : null
-  $: allModelsUsed = [...new Set(chartDaily.flatMap(e => e.modelsUsed))]
+  $: dailyAvgTokens = chartDaily.length
+    ? Math.round((selectedSummary?.last30DaysTokens ?? 0) / 30)
+    : 0
+  $: dailyAvgCost = chartDaily.length
+    ? (() => {
+        const totalCost = chartDaily.reduce((sum, e) => sum + (e.costUSD ?? 0), 0)
+        const hasAnyCost = chartDaily.some((e) => e.costUSD !== null)
+        return hasAnyCost ? totalCost / 30 : null
+      })()
+    : null
+  $: peakDayEntry = chartDaily.length
+    ? chartDaily.reduce((peak, e) => (e.totalTokens > peak.totalTokens ? e : peak), chartDaily[0])
+    : null
+  $: allModelsUsed = [...new Set(chartDaily.flatMap((e) => e.modelsUsed))]
   $: costStatusLabel = (() => {
     if (!chartDaily.length) return copy.costStatusNoCost
-    const hasKnown = chartDaily.some(e => e.costUSD !== null)
-    const hasUnknown = modelBreakdowns.some(m => m.costUSD === null)
+    const hasKnown = chartDaily.some((e) => e.costUSD !== null)
+    const hasUnknown = modelBreakdowns.some((m) => m.costUSD === null)
     if (!hasKnown) return copy.costStatusNoCost
     if (hasUnknown) return copy.costStatusPartialUnknown
     return copy.costStatusAllKnown
@@ -1088,7 +1114,9 @@
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
               {copy.dailyAvgTokens}
             </p>
-            <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(dailyAvgTokens)}</p>
+            <p class="text-sm font-medium tabular-nums text-carbon">
+              {formatTokens(dailyAvgTokens)}
+            </p>
           </div>
           <div class="grid gap-1">
             <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
@@ -1101,13 +1129,17 @@
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
                 {copy.peakDay}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatDayLabel(peakDayEntry.date)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatDayLabel(peakDayEntry.date)}
+              </p>
             </div>
             <div class="grid gap-1">
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
                 {copy.peakDayTokens}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(peakDayEntry.totalTokens)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatTokens(peakDayEntry.totalTokens)}
+              </p>
             </div>
           {/if}
           <div class="grid gap-1">
@@ -1122,15 +1154,21 @@
           <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
             <div class="grid gap-1">
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.today} {copy.inputTokens}
+                {copy.today}
+                {copy.inputTokens}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(todayEntry.inputTokens)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatTokens(todayEntry.inputTokens)}
+              </p>
             </div>
             <div class="grid gap-1">
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.today} {copy.outputTokens}
+                {copy.today}
+                {copy.outputTokens}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(todayEntry.outputTokens)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatTokens(todayEntry.outputTokens)}
+              </p>
             </div>
           </div>
         {/if}
@@ -1139,15 +1177,21 @@
           <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
             <div class="grid gap-1">
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                30d {copy.inputTokens}
+                {copy.last30Days}
+                {copy.inputTokens}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(last30InputTokens)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatTokens(last30InputTokens)}
+              </p>
             </div>
             <div class="grid gap-1">
               <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                30d {copy.outputTokens}
+                {copy.last30Days}
+                {copy.outputTokens}
               </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">{formatTokens(last30OutputTokens)}</p>
+              <p class="text-sm font-medium tabular-nums text-carbon">
+                {formatTokens(last30OutputTokens)}
+              </p>
             </div>
           </div>
         {/if}
@@ -1213,13 +1257,23 @@
         </div>
 
         {#if modelBreakdowns.length}
-          <div class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-strong">
+          <div
+            class="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-strong"
+          >
             {#if modelBreakdowns[0]}
               {@const totalAllTokens = modelBreakdowns.reduce((sum, m) => sum + m.totalTokens, 0)}
-              {@const topPct = totalAllTokens > 0 ? ((modelBreakdowns[0].totalTokens / totalAllTokens) * 100).toFixed(1) : '0.0'}
-              <span class="font-medium">{copy.topModel}: {copy.topModelSummary(modelBreakdowns[0].modelName, `${topPct}%`)}</span>
+              {@const topPct =
+                totalAllTokens > 0
+                  ? ((modelBreakdowns[0].totalTokens / totalAllTokens) * 100).toFixed(1)
+                  : '0.0'}
+              <span class="font-medium"
+                >{copy.topModel}: {copy.topModelSummary(
+                  modelBreakdowns[0].modelName,
+                  `${topPct}%`
+                )}</span
+              >
             {/if}
-            {#if modelBreakdowns.some(m => m.costUSD === null)}
+            {#if modelBreakdowns.some((m) => m.costUSD === null)}
               <span class="text-warning">{copy.costUnknownModelsHint}</span>
             {/if}
           </div>
