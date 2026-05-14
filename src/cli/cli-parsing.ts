@@ -701,3 +701,91 @@ export function parseSessionInstanceOption(argv: string[]): string | undefined {
 
   return undefined
 }
+
+export interface SkillLibraryCliOptions {
+  name?: string
+  content?: string
+  file?: string
+  categories: string[]
+  clearCategories: boolean
+  query?: string
+  dir?: string
+  instanceIds: string[]
+  positionals: string[]
+}
+
+export function parseSkillLibraryOptions(argv: string[]): SkillLibraryCliOptions {
+  const options: SkillLibraryCliOptions = {
+    categories: [],
+    clearCategories: false,
+    instanceIds: [],
+    positionals: []
+  }
+
+  for (let index = 0; index < argv.length; index += 1) {
+    const arg = argv[index]
+    const value = argv[index + 1]
+
+    if (arg === '--name') {
+      if (!value) throw new CliError('Missing value for --name', EXIT_USAGE)
+      options.name = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--content') {
+      if (!value) throw new CliError('Missing value for --content', EXIT_USAGE)
+      options.content = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--file') {
+      if (!value) throw new CliError('Missing value for --file', EXIT_USAGE)
+      options.file = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--category') {
+      if (!value) throw new CliError('Missing value for --category', EXIT_USAGE)
+      options.categories.push(value)
+      index += 1
+      continue
+    }
+
+    if (arg === '--clear-categories') {
+      options.clearCategories = true
+      continue
+    }
+
+    if (arg === '--query') {
+      if (!value) throw new CliError('Missing value for --query', EXIT_USAGE)
+      options.query = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--dir') {
+      if (!value) throw new CliError('Missing value for --dir', EXIT_USAGE)
+      options.dir = value
+      index += 1
+      continue
+    }
+
+    if (arg === '--instance') {
+      if (!value) throw new CliError('Missing value for --instance', EXIT_USAGE)
+      options.instanceIds.push(value)
+      index += 1
+      continue
+    }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    options.positionals.push(arg)
+  }
+
+  return options
+}

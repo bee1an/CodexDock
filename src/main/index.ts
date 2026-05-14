@@ -1011,6 +1011,43 @@ app.whenReady().then(async () => {
     codexServices.prompt.readAttachment(promptId, fileName)
   )
 
+  // Skill Library management
+  ipcMain.handle('codex:skill-library-list', (_, input?) => codexServices.skillLibrary.list(input))
+  ipcMain.handle('codex:skill-library-detail', (_, skillId: string) =>
+    codexServices.skillLibrary.detail(skillId)
+  )
+  ipcMain.handle('codex:skill-library-create', (_, input) => codexServices.skillLibrary.create(input))
+  ipcMain.handle('codex:skill-library-update', (_, skillId: string, input) =>
+    codexServices.skillLibrary.update(skillId, input)
+  )
+  ipcMain.handle('codex:skill-library-remove', (_, skillId: string) =>
+    codexServices.skillLibrary.remove(skillId)
+  )
+  ipcMain.handle('codex:skill-library-category-list', () =>
+    codexServices.skillLibrary.listCategories()
+  )
+  ipcMain.handle('codex:skill-library-category-create', (_, name: string) =>
+    codexServices.skillLibrary.createCategory(name)
+  )
+  ipcMain.handle('codex:skill-library-category-rename', (_, oldName: string, newName: string) =>
+    codexServices.skillLibrary.renameCategory(oldName, newName)
+  )
+  ipcMain.handle('codex:skill-library-category-remove', (_, name: string) =>
+    codexServices.skillLibrary.removeCategory(name)
+  )
+  ipcMain.handle('codex:skill-library-import-dir', (_, dirPath: string) =>
+    codexServices.skillLibrary.importDir(dirPath)
+  )
+  ipcMain.handle('codex:skill-library-export-dir', (_, targetDir: string) =>
+    codexServices.skillLibrary.exportDir(targetDir)
+  )
+  ipcMain.handle('codex:skill-library-collect', (_, input) =>
+    codexServices.skillLibrary.collect(input)
+  )
+  ipcMain.handle('codex:skill-library-install', (_, input) =>
+    codexServices.skillLibrary.install(input)
+  )
+
   ipcMain.handle('codex:get-local-gateway-status', () => codexServices.gateway.status())
   ipcMain.handle('codex:get-local-gateway-api-key', () => codexServices.gateway.getApiKey())
   ipcMain.handle('codex:get-local-gateway-port-occupant', () =>

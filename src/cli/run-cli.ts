@@ -21,6 +21,7 @@ import {
   parseSessionInstanceOption,
   parseSessionListOptions,
   parseSettingsValue,
+  parseSkillLibraryOptions,
   parseUpdateTokensOptions
 } from './cli-parsing'
 import {
@@ -40,6 +41,9 @@ import {
   printSessions,
   printSettings,
   printGroups,
+  printSkillLibraryCategories,
+  printSkillLibraryDetail,
+  printSkillLibraryList,
   printTokenCost,
   printUsage,
   providerLabel,
@@ -1106,6 +1110,179 @@ async function execute(
         }
         default:
           throw new CliError('Unknown prompt command', EXIT_USAGE)
+      }
+    }
+    case 'skill-library': {
+      switch (subcommand) {
+        case 'list': {
+          const opts = parseSkillLibraryOptions(rest)
+          const skills = await runtime.services.skillLibrary.list({
+            query: opts.query,
+            category: opts.categories[0]
+          })
+          printSkillLibraryList(skills, silent)
+          return { code: EXIT_OK, payload: toCliResult(skills) }
+        }
+        case 'show': {
+          const skillId = rest[0]
+          if (!skillId) {
+            throw new CliError('Missing skill-id', EXIT_USAGE)
+          }
+          const detail = await runtime.services.skillLibrary.detail(skillId)
+          printSkillLibraryDetail(detail, silent)
+          return { code: EXIT_OK, payload: toCliResult(detail) }
+        }
+        case 'create': {
+          const opts = parseSkillLibraryOptions(rest)
+          if (!opts.name) {
+            throw new CliError('Missing --name', EXIT_USAGE)
+          }
+          let content = opts.content ?? ''
+          if (opts.file) {
+            content = await fs.readFile(opts.file, 'utf8')
+          }
+          if (!content && !opts.file) {
+            throw new CliError('Missing --content or --file', EXIT_USAGE)
+          }
+          const created = await runtime.services.skillLibrary.create({
+            name: opts.name,
+            content,
+            categories: opts.categories.length ? opts.categories : undefined
+          })
+          printIfNeeded(`Created skill: ${created.id}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(created) }
+        }
+        case 'update': {
+          const opts = parseSkillLibraryOptions(rest)
+          const skillId = opts.positionals[0]
+          if (!skillId) {
+            throw new CliError('Missing skill-id', EXIT_USAGE)
+          }
+          let content = opts.content
+          if (opts.file) {
+            content = await fs.readFile(opts.file, 'utf8')
+          }
+          const updated = await runtime.services.skillLibrary.update(skillId, {
+            name: opts.name,
+            content,
+            categories: opts.categories.length ? opts.categories : undefined,
+            clearCategories: opts.clearCategories
+          })
+          printIfNeeded(`Updated skill: ${updated.id}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(updated) }
+        }
+        case 'remove': {
+          const skillId = rest[0]
+          if (!skillId) {
+            throw new CliError('Missing skill-id', EXIT_USAGE)
+          }
+          await runtime.services.skillLibrary.remove(skillId)
+          printIfNeeded(`Removed skill: ${skillId}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(null) }
+        }
+        case 'category': {
+          const categoryCmd = rest[0]
+          switch (categoryCmd) {
+            case 'list': {
+              const result = await runtime.services.skillLibrary.listCategories()
+              printSkillLibraryCategories(result, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'create': {
+              const name = rest.slice(1).join(' ').trim()
+              if (!name) {
+                throw new CliError('Missing category name', EXIT_USAGE)
+              }
+              const result = await runtime.services.skillLibrary.createCategory(name)
+              printIfNeeded(`Created category: ${name}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'rename': {
+              const oldName = rest[1]
+              const newName = rest.slice(2).join(' ').trim()
+              if (!oldName || !newName) {
+                throw new CliError(
+                  'Usage: cdock skill-library category rename <old> <new>',
+                  EXIT_USAGE
+                )
+              }
+              const result = await runtime.services.skillLibrary.renameCategory(oldName, newName)
+              printIfNeeded(`Renamed category: ${oldName} -> ${newName}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            case 'remove': {
+              const name = rest.slice(1).join(' ').trim()
+              if (!name) {
+                throw new CliError('Missing category name', EXIT_USAGE)
+              }
+              const result = await runtime.services.skillLibrary.removeCategory(name)
+              printIfNeeded(`Removed category: ${name}`, silent)
+              return { code: EXIT_OK, payload: toCliResult(result) }
+            }
+            default:
+              throw new CliError('Unknown skill-library category command', EXIT_USAGE)
+          }
+        }
+        case 'import': {
+          const opts = parseSkillLibraryOptions(rest)
+          if (!opts.dir) {
+            throw new CliError('Usage: cdock skill-library import --dir <dir>', EXIT_USAGE)
+          }
+          const result = await runtime.services.skillLibrary.importDir(opts.dir)
+          printIfNeeded(`Imported ${result.imported}, skipped ${result.skipped}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'export': {
+          const opts = parseSkillLibraryOptions(rest)
+          if (!opts.dir) {
+            throw new CliError('Usage: cdock skill-library export --dir <dir>', EXIT_USAGE)
+          }
+          const result = await runtime.services.skillLibrary.exportDir(opts.dir)
+          printIfNeeded(`Exported ${result.exported} skills to ${result.outputPath}`, silent)
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'collect': {
+          const opts = parseSkillLibraryOptions(rest)
+          if (!opts.instanceIds.length) {
+            throw new CliError('Missing --instance', EXIT_USAGE)
+          }
+          if (!opts.positionals.length) {
+            throw new CliError(
+              'Usage: cdock skill-library collect --instance <id> <skill-dir-name...>',
+              EXIT_USAGE
+            )
+          }
+          const result = await runtime.services.skillLibrary.collect({
+            sourceInstanceId: opts.instanceIds[0],
+            sourceSkillDirNames: opts.positionals
+          })
+          printIfNeeded(
+            `Collected ${result.collected}, skipped ${result.skipped}`,
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'install': {
+          const opts = parseSkillLibraryOptions(rest)
+          const skillId = opts.positionals[0]
+          if (!skillId) {
+            throw new CliError('Missing skill-id', EXIT_USAGE)
+          }
+          if (!opts.instanceIds.length) {
+            throw new CliError('Missing --instance', EXIT_USAGE)
+          }
+          const result = await runtime.services.skillLibrary.install({
+            skillId,
+            targetInstanceIds: opts.instanceIds
+          })
+          printIfNeeded(
+            `Installed ${result.installed.length}, skipped ${result.skipped.length}, failed ${result.failed.length}`,
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        default:
+          throw new CliError('Unknown skill-library command', EXIT_USAGE)
       }
     }
     default:

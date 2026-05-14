@@ -1302,3 +1302,77 @@ export interface PromptAttachmentData {
   size: number
   dataBase64: string
 }
+
+// --- Skill Library 模块类型 ---
+
+export interface SkillLibrarySummary {
+  id: string
+  name: string
+  description: string
+  categories: string[]
+  createdAt: string
+  updatedAt: string
+}
+
+export interface SkillLibraryDetail extends SkillLibrarySummary {
+  content: string
+  files: string[]
+}
+
+export interface CreateSkillLibraryInput {
+  id?: string
+  name: string
+  description?: string
+  content: string
+  categories?: string[]
+}
+
+export interface UpdateSkillLibraryInput {
+  name?: string
+  description?: string
+  content?: string
+  categories?: string[]
+  clearCategories?: boolean
+}
+
+export interface SkillLibrarySearchInput {
+  query?: string
+  category?: string
+}
+
+export interface SkillLibraryCategoryList {
+  categories: string[]
+}
+
+export interface SkillLibraryImportResult {
+  imported: number
+  skipped: number
+  errors: string[]
+}
+
+export interface SkillLibraryExportResult {
+  exported: number
+  outputPath: string
+}
+
+export interface SkillLibraryInstallInput {
+  skillId: string
+  targetInstanceIds: string[]
+}
+
+export interface SkillLibraryInstallResult {
+  installed: Array<{ targetInstanceId: string; targetInstanceName: string }>
+  skipped: Array<{ targetInstanceId: string; targetInstanceName: string; reason: string }>
+  failed: Array<{ targetInstanceId: string; targetInstanceName: string; error: string }>
+}
+
+export interface SkillLibraryCollectInput {
+  sourceInstanceId: string
+  sourceSkillDirNames: string[]
+}
+
+export interface SkillLibraryCollectResult {
+  collected: number
+  skipped: number
+  errors: string[]
+}
