@@ -667,7 +667,6 @@
       {flipDurationMs}
       {loginActionBusy}
       {providerMutationBusy}
-      {editingProviderId}
       {providerDrafts}
       {openingProviderId}
       {providerActionBusy}
