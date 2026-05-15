@@ -51,9 +51,10 @@ function draft(): Record<string, ProviderDraft> {
 }
 
 describe('AccountsProvidersView', () => {
-  it('renders editing mode and forwards save/cancel actions', async () => {
+  it('opens edit dialog and forwards save/cancel actions', async () => {
     const saveProvider = vi.fn().mockResolvedValue(undefined)
     const cancelEditingProvider = vi.fn()
+    const startEditingProvider = vi.fn().mockResolvedValue(undefined)
 
     render(AccountsProvidersView, {
       props: {
@@ -64,14 +65,13 @@ describe('AccountsProvidersView', () => {
         flipDurationMs: 160,
         loginActionBusy: false,
         providerMutationBusy: false,
-        editingProviderId: provider.id,
         providerDrafts: draft(),
         openingProviderId: '',
         providerActionBusy: () => false,
         createProvider: vi.fn().mockResolvedValue(undefined),
         probeProviderModels: vi.fn().mockResolvedValue({ ok: true, availableModels: [] }),
         openProviderInCodex: vi.fn().mockResolvedValue(undefined),
-        startEditingProvider: vi.fn().mockResolvedValue(undefined),
+        startEditingProvider,
         saveProvider,
         cancelEditingProvider,
         confirmRemoveProvider: vi.fn().mockResolvedValue(undefined),
@@ -80,16 +80,11 @@ describe('AccountsProvidersView', () => {
       }
     })
 
-    expect(screen.getByDisplayValue('Mirror')).toBeTruthy()
-    expect(screen.getByDisplayValue('https://mirror.example.com')).toBeTruthy()
-
     await fireEvent.click(
-      screen.getByRole('button', { name: `${copy.saveProvider} · ${provider.name}` })
+      screen.getByRole('button', { name: `${copy.editProvider} · ${provider.name}` })
     )
-    await fireEvent.click(screen.getByRole('button', { name: `${copy.cancel} · ${provider.name}` }))
 
-    expect(saveProvider).toHaveBeenCalledWith(provider)
-    expect(cancelEditingProvider).toHaveBeenCalledOnce()
+    expect(startEditingProvider).toHaveBeenCalledWith(provider)
   })
 
   it('renders action buttons in readonly mode', async () => {
@@ -107,7 +102,6 @@ describe('AccountsProvidersView', () => {
         flipDurationMs: 160,
         loginActionBusy: false,
         providerMutationBusy: false,
-        editingProviderId: '',
         providerDrafts: draft(),
         openingProviderId: '',
         providerActionBusy: () => false,

@@ -18,7 +18,6 @@
   import AppButton from './AppButton.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
-  import Checkbox from './Checkbox.svelte'
 
   export let copy: LocalizedCopy
   export let providers: CustomProviderSummary[] = []
@@ -26,7 +25,6 @@
   export let flipDurationMs = 160
   export let loginActionBusy = false
   export let providerMutationBusy = false
-  export let editingProviderId = ''
   export let providerDrafts: Record<string, ProviderDraft> = {}
   export let openingProviderId = ''
   export let providerActionBusy: (providerId: string) => boolean = () => false
@@ -50,6 +48,8 @@
   let savingProviderId = ''
   let removingProviderId = ''
   let showCreateDialog = false
+  let showEditDialog = false
+  let editDialogProvider: CustomProviderSummary | null = null
 
   function isSortShadowProvider(provider: CustomProviderSummary): boolean {
     const sortable = provider as CustomProviderSummary & Record<string, unknown>
@@ -136,11 +136,26 @@
     }
   }
 
+  function openEditDialog(provider: CustomProviderSummary): void {
+    editDialogProvider = provider
+    showEditDialog = true
+    void startEditingProvider(provider)
+  }
+
+  function closeEditDialog(): void {
+    if (savingProviderId) return
+    showEditDialog = false
+    editDialogProvider = null
+    cancelEditingProvider()
+  }
+
   async function handleSaveProvider(provider: CustomProviderSummary): Promise<void> {
     if (savingProviderId) return
     savingProviderId = provider.id
     try {
       await saveProvider(provider)
+      showEditDialog = false
+      editDialogProvider = null
     } finally {
       savingProviderId = ''
     }
@@ -219,164 +234,100 @@
 
           <div class="flex min-w-0 items-center gap-3 overflow-visible">
             <div class="min-w-0 flex-1">
-              {#if editingProviderId === provider.id}
-                <div
-                  class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(160px,0.7fr)]"
-                >
-                  <AppInput
-                    bind:value={providerDrafts[provider.id].name}
-                    placeholder={copy.providerNamePlaceholder}
-                    disabled={loginActionBusy || providerMutationBusy}
-                  />
-                  <AppInput
-                    bind:value={providerDrafts[provider.id].baseUrl}
-                    placeholder={copy.providerBaseUrlPlaceholder}
-                    disabled={loginActionBusy || providerMutationBusy}
-                  />
-                  <AppInput
-                    bind:value={providerDrafts[provider.id].model}
-                    placeholder={copy.providerModelPlaceholder}
-                    disabled={loginActionBusy || providerMutationBusy}
-                  />
-                  <AppInput
-                    type="password"
-                    bind:value={providerDrafts[provider.id].apiKey}
-                    placeholder={copy.providerApiKeyPlaceholder}
-                    disabled={loginActionBusy || providerMutationBusy}
-                  />
+              <div class="grid min-w-0 gap-1.5">
+                <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
+                  <span
+                    class="theme-provider-status h-1.5 w-1.5 flex-none rounded-full bg-sky-500/55 ring-2 ring-sky-500/12"
+                  ></span>
+                  <p class="min-w-0 truncate text-sm font-medium text-carbon">
+                    {providerLabel(provider, copy)}
+                  </p>
+                  <span
+                    class="theme-provider-badge inline-flex flex-none items-center rounded-full border border-sky-500/16 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700"
+                  >
+                    {copy.providerBadge}
+                  </span>
+                  {#if provider.fastMode}
+                    <span
+                      class="theme-provider-fast-badge inline-flex flex-none items-center rounded-full border border-emerald-500/16 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
+                    >
+                      Fast
+                    </span>
+                  {/if}
                 </div>
-              {:else}
-                <div class="grid min-w-0 gap-1.5">
-                  <div class="flex min-w-0 items-center gap-1.5 overflow-hidden">
-                    <span
-                      class="theme-provider-status h-1.5 w-1.5 flex-none rounded-full bg-sky-500/55 ring-2 ring-sky-500/12"
-                    ></span>
-                    <p class="min-w-0 truncate text-sm font-medium text-carbon">
-                      {providerLabel(provider, copy)}
-                    </p>
-                    <span
-                      class="theme-provider-badge inline-flex flex-none items-center rounded-full border border-sky-500/16 bg-sky-500/10 px-2 py-0.5 text-[10px] font-medium text-sky-700"
-                    >
-                      {copy.providerBadge}
-                    </span>
-                    {#if provider.fastMode}
-                      <span
-                        class="theme-provider-fast-badge inline-flex flex-none items-center rounded-full border border-emerald-500/16 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-700"
-                      >
-                        Fast
-                      </span>
-                    {/if}
-                  </div>
-                  <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-                    <span
-                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
-                    >
-                      <span class="font-medium uppercase tracking-[0.08em]">API</span>
-                      <span>{provider.protocol ?? 'openai'}</span>
-                    </span>
-                    <span
-                      class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
-                    >
-                      <span class="font-medium uppercase tracking-[0.08em]">Model</span>
-                      <span>{provider.model}</span>
-                    </span>
-                    <span
-                      class="theme-provider-meta theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
-                    >
-                      <span class="font-medium uppercase tracking-[0.08em]">URL</span>
-                      <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
-                    </span>
-                  </div>
+                <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <span
+                    class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
+                  >
+                    <span class="font-medium uppercase tracking-[0.08em]">API</span>
+                    <span>{provider.protocol ?? 'openai'}</span>
+                  </span>
+                  <span
+                    class="theme-provider-meta theme-soft-panel inline-flex items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
+                  >
+                    <span class="font-medium uppercase tracking-[0.08em]">Model</span>
+                    <span>{provider.model}</span>
+                  </span>
+                  <span
+                    class="theme-provider-meta theme-soft-panel inline-flex min-w-0 items-center gap-1.5 rounded-full border border-[var(--soft-panel-border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] text-muted-strong"
+                  >
+                    <span class="font-medium uppercase tracking-[0.08em]">URL</span>
+                    <span class="max-w-[340px] truncate">{provider.baseUrl}</span>
+                  </span>
                 </div>
-              {/if}
+              </div>
             </div>
           </div>
 
           <div class="flex items-center justify-end gap-1">
-            {#if editingProviderId === provider.id}
-              <label
-                class="theme-provider-toggle mr-2 inline-flex items-center gap-2 rounded-[0.35rem] border border-[var(--card-border)] bg-[var(--panel-strong)] px-2.5 py-1.5 text-sm text-carbon"
-              >
-                <Checkbox
-                  bind:checked={providerDrafts[provider.id].fastMode}
-                  disabled={loginActionBusy || providerMutationBusy}
-                />
-                <span>{copy.providerFastMode}</span>
-              </label>
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={() => void handleSaveProvider(provider)}
-                disabled={loginActionBusy || providerMutationBusy}
-                ariaLabel={`${copy.saveProvider} · ${providerLabel(provider, copy)}`}
-                title={copy.saveProvider}
-              >
-                {#if savingProviderId === provider.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-check h-4 w-4"></span>
-                {/if}
-              </AppButton>
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={cancelEditingProvider}
-                disabled={loginActionBusy || providerMutationBusy}
-                ariaLabel={`${copy.cancel} · ${providerLabel(provider, copy)}`}
-                title={copy.cancel}
-              >
-                <span class="i-lucide-x h-4 w-4"></span>
-              </AppButton>
-            {:else}
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={() => void openProviderInCodex(provider.id)}
-                disabled={loginActionBusy || providerActionBusy(provider.id)}
-                ariaLabel={`${copy.openCustomProvider} · ${providerLabel(provider, copy)}`}
-                title={copy.openCustomProvider}
-              >
-                {#if openingProviderId === provider.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-plug-zap h-4 w-4"></span>
-                {/if}
-              </AppButton>
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={() => void openProviderIsolatedInCodex(provider.id)}
-                disabled={loginActionBusy || providerActionBusy(provider.id)}
-                ariaLabel={`${copy.openCustomProviderIsolated} · ${providerLabel(provider, copy)}`}
-                title={copy.openCustomProviderIsolated}
-              >
-                <span class="i-lucide-copy-plus h-4 w-4"></span>
-              </AppButton>
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={() => void startEditingProvider(provider)}
-                disabled={loginActionBusy || providerMutationBusy}
-                ariaLabel={`${copy.editProvider} · ${providerLabel(provider, copy)}`}
-                title={copy.editProvider}
-              >
-                <span class="i-lucide-pencil h-4 w-4"></span>
-              </AppButton>
-              <AppButton
-                variant="icon"
-                size="xs"
-                onclick={() => void handleRemoveProvider(provider)}
-                disabled={loginActionBusy || providerMutationBusy}
-                ariaLabel={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
-                title={copy.deleteProvider}
-              >
-                {#if removingProviderId === provider.id}
-                  <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-trash-2 h-4 w-4"></span>
-                {/if}
-              </AppButton>
-            {/if}
+            <AppButton
+              variant="icon"
+              size="xs"
+              onclick={() => void openProviderInCodex(provider.id)}
+              disabled={loginActionBusy || providerActionBusy(provider.id)}
+              ariaLabel={`${copy.openCustomProvider} · ${providerLabel(provider, copy)}`}
+              title={copy.openCustomProvider}
+            >
+              {#if openingProviderId === provider.id}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {:else}
+                <span class="i-lucide-plug-zap h-4 w-4"></span>
+              {/if}
+            </AppButton>
+            <AppButton
+              variant="icon"
+              size="xs"
+              onclick={() => void openProviderIsolatedInCodex(provider.id)}
+              disabled={loginActionBusy || providerActionBusy(provider.id)}
+              ariaLabel={`${copy.openCustomProviderIsolated} · ${providerLabel(provider, copy)}`}
+              title={copy.openCustomProviderIsolated}
+            >
+              <span class="i-lucide-copy-plus h-4 w-4"></span>
+            </AppButton>
+            <AppButton
+              variant="icon"
+              size="xs"
+              onclick={() => openEditDialog(provider)}
+              disabled={loginActionBusy || providerMutationBusy}
+              ariaLabel={`${copy.editProvider} · ${providerLabel(provider, copy)}`}
+              title={copy.editProvider}
+            >
+              <span class="i-lucide-pencil h-4 w-4"></span>
+            </AppButton>
+            <AppButton
+              variant="icon"
+              size="xs"
+              onclick={() => void handleRemoveProvider(provider)}
+              disabled={loginActionBusy || providerMutationBusy}
+              ariaLabel={`${copy.deleteProvider} · ${providerLabel(provider, copy)}`}
+              title={copy.deleteProvider}
+            >
+              {#if removingProviderId === provider.id}
+                <span class="i-lucide-loader-circle h-4 w-4 animate-spin"></span>
+              {:else}
+                <span class="i-lucide-trash-2 h-4 w-4"></span>
+              {/if}
+            </AppButton>
           </div>
 
           {#if providerIndex < sortableProviders.length - 1}
@@ -509,6 +460,74 @@
           aria-hidden="true"
         ></span>
         <span>{copy.createProvider}</span>
+      </AppButton>
+    </svelte:fragment>
+  </AppDialog>
+{/if}
+
+{#if showEditDialog && editDialogProvider && providerDrafts[editDialogProvider.id]}
+  <AppDialog
+    title={copy.editProvider}
+    description={copy.providerCreateDialogDescription}
+    closeLabel={copy.closeDialog}
+    showClose
+    scrollable
+    closeDisabled={!!savingProviderId}
+    maxWidthClass="max-w-2xl"
+    onclose={closeEditDialog}
+  >
+    <div class="grid gap-4">
+      <div class="grid gap-3 md:grid-cols-2" data-dialog-motion>
+        <AppInput
+          bind:value={providerDrafts[editDialogProvider.id].name}
+          placeholder={copy.providerNamePlaceholder}
+          disabled={!!savingProviderId}
+        />
+        <AppInput
+          bind:value={providerDrafts[editDialogProvider.id].baseUrl}
+          placeholder={copy.providerBaseUrlPlaceholder}
+          disabled={!!savingProviderId}
+        />
+        <AppInput
+          type="password"
+          bind:value={providerDrafts[editDialogProvider.id].apiKey}
+          placeholder={copy.providerApiKeyPlaceholder}
+          disabled={!!savingProviderId}
+        />
+        <AppInput
+          bind:value={providerDrafts[editDialogProvider.id].model}
+          placeholder={copy.providerModelPlaceholder}
+          disabled={!!savingProviderId}
+          onkeydown={(event) => {
+            if (event.key === 'Enter' && editDialogProvider) {
+              void handleSaveProvider(editDialogProvider)
+            }
+          }}
+        />
+      </div>
+    </div>
+
+    <svelte:fragment slot="footer">
+      <AppButton
+        variant="secondary"
+        size="sm"
+        onclick={closeEditDialog}
+        disabled={!!savingProviderId}
+      >
+        {copy.cancel}
+      </AppButton>
+      <AppButton
+        variant="primary"
+        size="sm"
+        onclick={() => editDialogProvider && void handleSaveProvider(editDialogProvider)}
+        disabled={!!savingProviderId ||
+          !providerDrafts[editDialogProvider.id].baseUrl.trim()}
+      >
+        <span
+          class={`${savingProviderId ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-check'} h-3.5 w-3.5`}
+          aria-hidden="true"
+        ></span>
+        <span>{copy.saveProvider}</span>
       </AppButton>
     </svelte:fragment>
   </AppDialog>
