@@ -61,7 +61,8 @@ function createPlatform(): CodexPlatformAdapter {
       value
     }),
     unprotect: (payload: ProtectedPayload): string => payload.value,
-    openExternal: vi.fn(async () => undefined)
+    openExternal: vi.fn(async () => undefined),
+    trashItem: vi.fn(async () => undefined)
   }
 }
 

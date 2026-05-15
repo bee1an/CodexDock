@@ -624,6 +624,7 @@ export function parsePromptOptions(argv: string[]): PromptCliOptions {
 
 export function parseSessionListOptions(argv: string[]): ListCodexSessionsInput {
   const input: ListCodexSessionsInput = {}
+  const positionals: string[] = []
 
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
@@ -681,12 +682,27 @@ export function parseSessionListOptions(argv: string[]): ListCodexSessionsInput 
     if (arg.startsWith('--')) {
       throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
     }
+
+    positionals.push(arg)
+  }
+
+  if (positionals.length) {
+    throw new CliError(
+      'Usage: cdock session list [--instance <id|default>] [--status active|archived] [--project <path>] [--query <text>] [--limit <n>]',
+      EXIT_USAGE
+    )
   }
 
   return input
 }
 
-export function parseSessionInstanceOption(argv: string[]): string | undefined {
+export function parseSessionRemoveOptions(argv: string[]): {
+  target: string
+  instanceId: string | undefined
+} {
+  let instanceId: string | undefined
+  const positionals: string[] = []
+
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index]
     const value = argv[index + 1]
@@ -695,11 +711,30 @@ export function parseSessionInstanceOption(argv: string[]): string | undefined {
       if (!value) {
         throw new CliError('Missing value for --instance', EXIT_USAGE)
       }
-      return value === 'default' ? '__default__' : value
+      instanceId = value === 'default' ? '__default__' : value
+      index += 1
+      continue
     }
+
+    if (arg.startsWith('--')) {
+      throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+    }
+
+    positionals.push(arg)
   }
 
-  return undefined
+  if (positionals.length === 0) {
+    throw new CliError('Missing session-id or file-path', EXIT_USAGE)
+  }
+
+  if (positionals.length > 1) {
+    throw new CliError(
+      'Too many arguments; expected exactly one session-id or file-path',
+      EXIT_USAGE
+    )
+  }
+
+  return { target: positionals[0], instanceId }
 }
 
 export interface SkillLibraryCliOptions {

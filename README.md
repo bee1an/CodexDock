@@ -59,6 +59,8 @@ cdock tag remove <tag-id>                   # Delete a tag
 cdock tag assign <account-id> <tag-id>      # Assign a tag to an account
 cdock tag unassign <account-id> <tag-id>    # Remove a tag from an account
 cdock session current                      # Show the current active Codex session
+cdock session list [--instance default]     # List local Codex history sessions
+cdock session remove <session-id|file-path> # Move a session log to system Trash
 cdock usage read [account-id]               # Read session and weekly usage limits
 cdock cost read [--refresh]                 # Read token cost statistics
 cdock login browser                        # Start browser-based login

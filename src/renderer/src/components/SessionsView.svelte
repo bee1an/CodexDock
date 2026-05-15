@@ -102,6 +102,7 @@
   let trashBusy = false
   let trashError = ''
   let trashNotice = ''
+  let trashProgress = { completed: 0, total: 0 }
   let copiedInstancesById: Record<string, CodexInstanceSummary> = {}
   let allKnownInstances: CodexInstanceSummary[] = []
   let sessionProviderContext: SessionProviderContext = {
@@ -625,9 +626,11 @@
     trashBusy = true
     trashError = ''
     trashNotice = ''
+    trashProgress = { completed: 0, total: trashTargetSessions.length }
 
     let successCount = 0
-    let failCount = 0
+    const failedSessions: CodexSessionSummary[] = []
+    const trashedPaths: string[] = []
 
     for (const session of trashTargetSessions) {
       try {
@@ -636,30 +639,30 @@
           filePath: session.filePath
         })
         successCount += 1
+        trashedPaths.push(session.filePath)
         selectedSessionKeys = selectedSessionKeys.filter((key) => key !== sessionKey(session))
       } catch (nextError) {
-        failCount += 1
+        failedSessions.push(session)
         trashError = nextError instanceof Error ? nextError.message : copy.sessionsTrashFailed
       }
+      trashProgress = { completed: trashProgress.completed + 1, total: trashTargetSessions.length }
     }
 
     trashBusy = false
 
-    if (successCount > 0 && failCount === 0) {
-      trashNotice =
-        successCount === 1
-          ? copy.sessionsTrashSuccess
-          : copy.sessionsBulkTrashSuccess(successCount)
+    if (selectedSummary && trashedPaths.includes(selectedSummary.filePath)) {
+      closeDetail()
+    }
 
-      const trashedPaths = new Set(trashTargetSessions.map((s) => s.filePath))
+    if (successCount > 0 && failedSessions.length === 0) {
+      trashNotice =
+        successCount === 1 ? copy.sessionsTrashSuccess : copy.sessionsBulkTrashSuccess(successCount)
       trashTargetSession = null
       trashTargetSessions = []
-
-      if (selectedSummary && trashedPaths.has(selectedSummary.filePath)) {
-        closeDetail()
-      }
-    } else if (failCount > 0 && successCount > 0) {
-      trashNotice = copy.sessionsBulkTrashFailureCount(failCount)
+    } else if (failedSessions.length > 0 && successCount > 0) {
+      trashNotice = copy.sessionsBulkTrashFailureCount(failedSessions.length)
+      trashTargetSessions = failedSessions
+      trashTargetSession = failedSessions[0]
     }
 
     try {
@@ -1534,8 +1537,13 @@
   {/if}
 
   {#if trashTargetSession}
-    <AppDialog open onclose={closeTrashSessionDialog}>
-      <div class="grid gap-4 p-5">
+    <AppDialog
+      ariaLabel={copy.sessionsTrashConfirmTitle}
+      closeDisabled={trashBusy}
+      maxWidthClass="max-w-lg"
+      onclose={closeTrashSessionDialog}
+    >
+      <div class="grid gap-4">
         <h2 class="text-base font-semibold text-carbon">{copy.sessionsTrashConfirmTitle}</h2>
         <p class="text-sm text-muted-strong">
           {trashTargetSessions.length > 1
@@ -1560,12 +1568,22 @@
         {/if}
 
         <div class="flex justify-end gap-2">
-          <AppButton variant="secondary" size="sm" onclick={closeTrashSessionDialog} disabled={trashBusy}>
-            {copy.sessionsBackToList}
+          <AppButton
+            variant="secondary"
+            size="sm"
+            onclick={closeTrashSessionDialog}
+            disabled={trashBusy}
+          >
+            {copy.cancel}
           </AppButton>
-          <AppButton variant="danger" size="sm" onclick={() => void confirmTrashSessions()} disabled={trashBusy}>
+          <AppButton
+            variant="danger"
+            size="sm"
+            onclick={() => void confirmTrashSessions()}
+            disabled={trashBusy}
+          >
             {trashBusy
-              ? copy.sessionsBulkTrashProgress(0, trashTargetSessions.length)
+              ? copy.sessionsBulkTrashProgress(trashProgress.completed, trashProgress.total)
               : copy.sessionsTrashConfirmAction}
           </AppButton>
         </div>
@@ -1581,8 +1599,10 @@
       <button
         class="ml-3 text-xs text-muted-strong hover:text-carbon"
         type="button"
-        onclick={() => { trashNotice = '' }}
-      >✕</button>
+        onclick={() => {
+          trashNotice = ''
+        }}>✕</button
+      >
     </div>
   {/if}
 </div>

@@ -239,7 +239,8 @@ export const messages = {
     promptsImageBuiltInHint: '内置分类，不可删除或重命名',
     sessions: '会话',
     sessionsTitle: 'Session 管理',
-    sessionsDescription: '按实例展示本地 Codex 历史会话，只读查看，不会修改原始日志。',
+    sessionsDescription:
+      '按实例展示本地 Codex 历史会话，可查看、复制或删除；删除会移入系统回收站。',
     sessionsReadFailed: '无法读取 Session',
     sessionsRefresh: '刷新 Session',
     sessionsAllInstances: '全部实例',
@@ -964,7 +965,8 @@ export const messages = {
     promptsImageBuiltInHint: 'Built-in category, cannot be removed or renamed',
     sessions: 'Sessions',
     sessionsTitle: 'Session management',
-    sessionsDescription: 'Read-only local Codex sessions grouped by instance.',
+    sessionsDescription:
+      'Local Codex sessions grouped by instance. You can view, copy, or delete them; deletion moves files to the system Trash.',
     sessionsReadFailed: 'Unable to read sessions',
     sessionsRefresh: 'Refresh sessions',
     sessionsAllInstances: 'All instances',

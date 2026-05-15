@@ -913,10 +913,6 @@ export async function trashCodexSession(
     statusForFile(instance, input.filePath)
   )
 
-  if (!platform.trashItem) {
-    throw new Error('Trash is not supported on this platform.')
-  }
-
   await platform.trashItem(input.filePath)
 
   return {

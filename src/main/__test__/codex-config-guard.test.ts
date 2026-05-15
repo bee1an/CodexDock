@@ -16,7 +16,8 @@ function createPlatform(): CodexPlatformAdapter {
     fetch: async () => new Response(),
     protect: (value: string): ProtectedPayload => ({ mode: 'plain', value }),
     unprotect: (payload: ProtectedPayload): string => payload.value,
-    openExternal: async () => undefined
+    openExternal: async () => undefined,
+    trashItem: async () => undefined
   }
 }
 

@@ -6,7 +6,9 @@ import type {
   AccountRateLimits,
   AppSettings,
   AppSnapshot,
+  CodexSessionsResult,
   CurrentSessionSummary,
+  ListCodexSessionsInput,
   LoginEvent,
   PortOccupant,
   TokenCostDetail
@@ -87,6 +89,8 @@ interface CliTestRuntime {
     }
     session: {
       current: ReturnType<typeof vi.fn>
+      list: ReturnType<typeof vi.fn>
+      trash: ReturnType<typeof vi.fn>
     }
     settings: {
       get: ReturnType<typeof vi.fn>
@@ -239,6 +243,44 @@ function createRuntime(): {
     email: 'one@example.com',
     storedAccountId: 'acct_1'
   }
+  const sessionListResult: CodexSessionsResult = {
+    sessions: [
+      {
+        id: 'session-default',
+        instanceId: '__default__',
+        instanceName: 'Default',
+        codexHome: '/Users/test/.codex',
+        filePath: '/Users/test/.codex/sessions/2026/05/14/default.jsonl',
+        modelProvider: 'openai',
+        projectPath: '/repo/default',
+        projectName: 'default',
+        createdAt: '2026-05-14T08:00:00.000Z',
+        updatedAt: '2026-05-14T08:05:00.000Z',
+        status: 'active',
+        title: 'Default session',
+        lastMessage: 'Default last message',
+        preview: 'Default session'
+      },
+      {
+        id: 'session-work',
+        instanceId: 'inst_1',
+        instanceName: 'Work',
+        codexHome: '/tmp/codex-instance-homes/work',
+        filePath: '/tmp/codex-instance-homes/work/sessions/2026/05/14/work.jsonl',
+        modelProvider: 'openai',
+        projectPath: '/repo/work',
+        projectName: 'work',
+        createdAt: '2026-05-14T09:00:00.000Z',
+        updatedAt: '2026-05-14T09:05:00.000Z',
+        status: 'active',
+        title: 'Work session',
+        lastMessage: 'Work last message',
+        preview: 'Work session'
+      }
+    ],
+    errorsByInstanceId: {},
+    scannedAt: '2026-05-14T10:00:00.000Z'
+  }
   const tokenCostDetail: TokenCostDetail = {
     instanceId: '__all__',
     codexHome: '/Users/test/.codex',
@@ -351,7 +393,25 @@ function createRuntime(): {
         }))
       },
       session: {
-        current: vi.fn(async () => currentSession)
+        current: vi.fn(async () => currentSession),
+        list: vi.fn(async (input?: ListCodexSessionsInput) => ({
+          ...sessionListResult,
+          sessions: sessionListResult.sessions.filter((session) => {
+            if (input?.instanceId && session.instanceId !== input.instanceId) {
+              return false
+            }
+            if (input?.status && session.status !== input.status) {
+              return false
+            }
+            return true
+          })
+        })),
+        trash: vi.fn(async ({ filePath }: { filePath: string }) => ({
+          session:
+            sessionListResult.sessions.find((session) => session.filePath === filePath) ??
+            sessionListResult.sessions[0],
+          trashedAt: '2026-05-14T10:05:00.000Z'
+        }))
       },
       settings: {
         get: vi.fn(async () => settings),
@@ -776,6 +836,93 @@ describe('runCli', () => {
     expect(plainOutput).toContain('Last 30 days:')
     expect(plainOutput).toContain('Warnings:')
     expect(plainOutput).toContain('Failed to read broken (/tmp/broken): boom')
+  })
+
+  it('covers session list and remove parsing', async () => {
+    const { runtime } = createRuntime()
+
+    await expect(
+      runCli(runtime as never, [
+        'session',
+        'list',
+        '--instance',
+        'default',
+        '--status',
+        'active',
+        '--limit',
+        '5',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.session.list).toHaveBeenCalledWith({
+      instanceId: '__default__',
+      status: 'active',
+      limit: 5
+    })
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        sessions: [
+          {
+            id: 'session-default'
+          }
+        ]
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, ['session', 'list', 'unexpected', '--json'])
+    ).resolves.toBe(2)
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: false,
+      error: {
+        code: 2,
+        message: expect.stringContaining('Usage: cdock session list')
+      }
+    })
+
+    logSpy.mockClear()
+    runtime.services.session.list.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'session',
+        'remove',
+        '--instance',
+        'inst_1',
+        'session-work',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.session.list).toHaveBeenCalledWith({ instanceId: 'inst_1' })
+    expect(runtime.services.session.trash).toHaveBeenCalledWith({
+      instanceId: 'inst_1',
+      filePath: '/tmp/codex-instance-homes/work/sessions/2026/05/14/work.jsonl'
+    })
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: true,
+      data: {
+        session: {
+          id: 'session-work'
+        }
+      },
+      error: null
+    })
+
+    logSpy.mockClear()
+    runtime.services.session.trash.mockClear()
+    await expect(
+      runCli(runtime as never, ['session', 'remove', 'session-work', 'extra', '--json'])
+    ).resolves.toBe(2)
+    expect(runtime.services.session.trash).not.toHaveBeenCalled()
+    expect(parseJsonLog(logSpy)).toMatchObject({
+      ok: false,
+      error: {
+        code: 2,
+        message: expect.stringContaining('Too many arguments')
+      }
+    })
   })
 
   it('covers local gateway commands', async () => {

@@ -18,8 +18,8 @@ import {
   parseInstanceOptions,
   parsePromptOptions,
   parseProviderOptions,
-  parseSessionInstanceOption,
   parseSessionListOptions,
+  parseSessionRemoveOptions,
   parseSettingsValue,
   parseSkillLibraryOptions,
   parseUpdateTokensOptions
@@ -592,12 +592,8 @@ async function execute(
           return { code: EXIT_OK, payload: toCliResult(result) }
         }
         case 'remove': {
-          const target = rest.find((arg) => !arg.startsWith('--'))
-          if (!target) {
-            throw new CliError('Missing session-id or file-path', EXIT_USAGE)
-          }
+          const { target, instanceId: instanceFlag } = parseSessionRemoveOptions(rest)
 
-          const instanceFlag = parseSessionInstanceOption(rest)
           const result = await runtime.services.session.list(
             instanceFlag ? { instanceId: instanceFlag } : undefined
           )
@@ -631,10 +627,7 @@ async function execute(
             instanceId: match.instanceId,
             filePath: match.filePath
           })
-          printIfNeeded(
-            `Moved session to Trash: ${trashResult.session.title.slice(0, 60)}`,
-            silent
-          )
+          printIfNeeded(`Moved session to Trash: ${trashResult.session.title.slice(0, 60)}`, silent)
           return { code: EXIT_OK, payload: toCliResult(trashResult) }
         }
         default:
