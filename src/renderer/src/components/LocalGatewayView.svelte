@@ -659,9 +659,9 @@
       aria-labelledby="local-gateway-groups-heading"
     >
       <div
-        class="gateway-mappings-header flex flex-wrap items-start justify-between gap-3 border-b px-3 py-2.5"
+        class="gateway-mappings-header flex flex-wrap items-center justify-between gap-3 border-b px-3 py-2.5"
       >
-        <div class="flex min-w-0 items-start gap-2">
+        <div class="flex min-w-0 items-center gap-2">
           <span
             class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
             aria-hidden="true"
@@ -684,6 +684,23 @@
             </p>
           </div>
         </div>
+        <AppButton
+          variant="secondary"
+          size="xs"
+          onclick={() => {
+            showMappingDialog = true
+          }}
+        >
+          <span class="i-lucide-arrow-left-right h-3.5 w-3.5" aria-hidden="true"></span>
+          <span>{copy.localGatewayModelMappingsManage}</span>
+          {#if modelMappings.length}
+            <span
+              class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+            >
+              {formatNumber(modelMappings.length)}
+            </span>
+          {/if}
+        </AppButton>
       </div>
 
       <div class="flex flex-col gap-2 p-3">
@@ -762,36 +779,6 @@
       </div>
     </section>
 
-    <div class="gateway-panel flex items-center gap-2 rounded-[0.45rem] border px-3 py-2.5">
-      <span
-        class="gateway-section-icon flex h-6 w-6 flex-none items-center justify-center rounded-[0.35rem] border"
-        aria-hidden="true"
-      >
-        <span class="i-lucide-arrow-left-right h-3.5 w-3.5"></span>
-      </span>
-      <div class="min-w-0 flex-1">
-        <div class="flex min-w-0 items-center gap-2">
-          <h3 class="text-[12px] font-semibold text-carbon">
-            {copy.localGatewayModelMappingsTitle}
-          </h3>
-          <span
-            class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
-          >
-            {formatNumber(modelMappings.length)}
-          </span>
-        </div>
-      </div>
-      <AppButton
-        variant="secondary"
-        size="xs"
-        onclick={() => {
-          showMappingDialog = true
-        }}
-      >
-        <span class="i-lucide-settings-2 h-3.5 w-3.5" aria-hidden="true"></span>
-        <span>{copy.localGatewayModelMappingsManage}</span>
-      </AppButton>
-    </div>
 
     <section
       class="gateway-panel gateway-logs-panel rounded-[0.45rem] border"
@@ -1052,22 +1039,22 @@
       {/if}
 
       {#if modelMappings.length}
-        <ul class="flex flex-col gap-1.5" data-dialog-motion>
+        <ul class="gateway-mapping-list flex flex-col divide-y" data-dialog-motion>
           {#each modelMappings as entry (entry.from)}
             <li
-              class="gateway-mapping-row flex items-center gap-2 rounded-[0.35rem] border px-2.5 py-1.5"
+              class="flex items-center gap-2 px-1 py-2"
             >
               <code
-                class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                class="min-w-0 flex-1 truncate font-mono text-[11px] text-carbon"
                 title={entry.from}
                 translate="no">{entry.from}</code
               >
               <span
-                class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
+                class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-faint"
                 aria-hidden="true"
               ></span>
               <code
-                class="min-w-0 flex-1 truncate font-mono text-[11px] font-semibold text-carbon"
+                class="min-w-0 flex-1 truncate font-mono text-[11px] text-carbon"
                 title={entry.to}
                 translate="no">{entry.to}</code
               >
@@ -1321,14 +1308,14 @@
     background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
   }
 
-  .gateway-mapping-row {
-    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 90%, var(--surface-soft));
-  }
-
   .gateway-mappings-header {
     border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
     background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  }
+
+  .gateway-mapping-list {
+    --tw-divide-opacity: 1;
+    border-color: color-mix(in srgb, var(--line-strong) 50%, transparent);
   }
 
   .gateway-method-get {
