@@ -39,6 +39,7 @@
     limitLabel,
     planLabel,
     planTagClass,
+    pollingOptions,
     progressWidth,
     weeklyResetTimeToneClass,
     type LocalizedCopy
@@ -115,9 +116,14 @@
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   export let tagVisibility: TagVisibilitySettings = {}
-  export let updateTagVisibility: (settings: TagVisibilitySettings) => Promise<void> = async () => {}
+  export let updateTagVisibility: (
+    settings: TagVisibilitySettings
+  ) => Promise<void> = async () => {}
+  export let usagePollingMinutes = 15
+  export let updatePollingInterval: (minutes: number) => void = () => {}
 
   let expandedAccountIds: string[] = []
+  let showPollingMenu = false
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
   let tokensLoadingAccountId = ''
   let tokensErrorByAccountId: Record<string, string> = {}
@@ -528,12 +534,19 @@
 
   function accountRefreshDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || usageLoading || accountHealthBlocked(account) || isLocalMockAccount(account)
+    return (
+      loginActionBusy ||
+      usageLoading ||
+      accountHealthBlocked(account) ||
+      isLocalMockAccount(account)
+    )
   }
 
   function wakeDialogDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return loginActionBusy || Boolean(wakingAccountId) || usageLoading || accountHealthBlocked(account)
+    return (
+      loginActionBusy || Boolean(wakingAccountId) || usageLoading || accountHealthBlocked(account)
+    )
   }
 
   function accountMoreActionsLabel(): string {
@@ -687,7 +700,9 @@
   }}
 />
 
-<div class="flex flex-none flex-wrap items-center gap-1.5 border-b border-[var(--card-border)] px-4 py-2">
+<div
+  class="flex flex-none flex-wrap items-center gap-1.5 border-b border-[var(--card-border)] px-4 py-2"
+>
   <AppButton
     variant="secondary"
     size="xs"
@@ -696,7 +711,9 @@
     ariaLabel={copy.callbackLogin}
     title={copy.callbackLogin}
   >
-    <span class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-3.5 w-3.5`}></span>
+    <span
+      class={`${loginStarting ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-log-in'} h-3.5 w-3.5`}
+    ></span>
     <span>{copy.callbackLogin}</span>
   </AppButton>
   <AppButton
@@ -768,7 +785,9 @@
           class="theme-tag-picker-surface z-[999] w-[200px] rounded-[1.1rem] p-1.5"
           style="background-color: var(--panel-strong); box-shadow: var(--elevation-2), 0 0 0 1px var(--line-strong);"
         >
-          <div class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]">
+          <div
+            class="px-2.5 pb-1.5 pt-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-[var(--ink-faint)]"
+          >
             {copy.tagVisibilityTitle}
           </div>
           <button
@@ -814,16 +833,58 @@
         </div>
       {/if}
     </div>
-    <AppButton
-      variant="secondary"
-      size="xs"
-      onclick={refreshAllRateLimits}
-      disabled={loginActionBusy || refreshingAllUsage}
-      ariaLabel={copy.refreshAllQuota}
-      title={copy.refreshAllQuota}
-    >
-      <span class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}></span>
-    </AppButton>
+    <div class="relative inline-flex items-center" use:floatingAnchor={{ id: 'polling-menu' }}>
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={refreshAllRateLimits}
+        disabled={loginActionBusy || refreshingAllUsage}
+        ariaLabel={copy.refreshAllQuota}
+        title={copy.refreshAllQuota}
+      >
+        <span
+          class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+        ></span>
+      </AppButton>
+      <button
+        class="inline-flex h-6 w-4 items-center justify-center rounded-r-[0.35rem] border-0 bg-transparent text-muted-strong transition-colors hover:text-carbon"
+        type="button"
+        aria-label={copy.pollingInterval}
+        title={copy.pollingInterval}
+        onclick={() => {
+          showPollingMenu = !showPollingMenu
+        }}
+      >
+        <span class="i-lucide-chevron-down h-3 w-3"></span>
+      </button>
+
+      {#if showPollingMenu}
+        <div
+          class="polling-menu theme-soft-panel absolute right-0 top-full z-50 mt-1 min-w-[8rem] rounded-[0.45rem] border border-[var(--card-border)] py-1 shadow-md"
+          use:portal
+          use:stopFloatingPointerPropagation
+        >
+          <p class="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-faint">
+            {copy.pollingInterval}
+          </p>
+          {#each pollingOptions as option (option)}
+            <button
+              class="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-xs text-carbon transition-colors hover:bg-[var(--surface-soft)]"
+              type="button"
+              onclick={() => {
+                updatePollingInterval(option)
+                showPollingMenu = false
+              }}
+            >
+              <span
+                class={`h-3 w-3 ${usagePollingMinutes === option ? 'i-lucide-check text-success' : ''}`}
+              ></span>
+              <span>{option} {copy.minutes}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <AppButton
       variant="secondary"
       size="xs"
@@ -1148,11 +1209,7 @@
           language,
           copy
         )}
-        {@const tokenBadge = accountTokenExpiryBadge(
-          account.accessTokenExpiresAt,
-          language,
-          copy
-        )}
+        {@const tokenBadge = accountTokenExpiryBadge(account.accessTokenExpiresAt, language, copy)}
         {@const assignableGroups = availableGroupsForAccount(groups, account)}
         <article
           class={`theme-account-row group grid items-center gap-3 px-2.5 py-2.5 md:grid-cols-[auto_auto_minmax(0,1fr)_auto_auto] ${accountRowTone(

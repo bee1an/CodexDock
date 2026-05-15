@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { DndEvent as SortEvent } from 'svelte-dnd-action'
 
-	import type {
+  import type {
     AccountHealth,
     AccountRateLimits,
     AccountSummary,
@@ -62,7 +62,7 @@
     createProviderDraft,
     type ProviderDraft
   } from './accounts-panel-provider'
-  import { providerLabel } from './app-view'
+  import { providerLabel, nextTheme, themeIconClass, themeTitle } from './app-view'
   import { cascadeIn, reveal } from './gsap-motion'
 
   const flipDurationMs = 160
@@ -130,7 +130,9 @@
   export let localGatewayAllowedGroupIds: string[] = []
   export let localGatewayAllowedAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
-  export let updateLocalGatewayAllowedAccounts: (accountIds: string[]) => Promise<void> = async () => {}
+  export let updateLocalGatewayAllowedAccounts: (
+    accountIds: string[]
+  ) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
@@ -178,7 +180,10 @@
   export let theme: AppTheme = 'light'
   export let updateState: AppUpdateState
   export let updateLanguage: (language: AppLanguage) => void = () => {}
-  export let updateTheme: (theme: AppTheme, origin?: { x?: number; y?: number; target?: HTMLElement | null }) => void = () => {}
+  export let updateTheme: (
+    theme: AppTheme,
+    origin?: { x?: number; y?: number; target?: HTMLElement | null }
+  ) => void = () => {}
   export let updatePollingInterval: (minutes: number) => void = () => {}
   export let updateCheckForUpdatesOnStartup: (enabled: boolean) => void = () => {}
   export let checkForUpdates: () => void = () => {}
@@ -514,6 +519,33 @@
           <span>{copy.settings}</span>
         </AppButton>
       </AppButtonGroup>
+
+      <div class="flex items-center gap-1">
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={(event) => {
+            const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+            const origin =
+              event.detail > 0 ? { x: event.clientX, y: event.clientY, target } : { target }
+            updateTheme(nextTheme(theme), origin)
+          }}
+          ariaLabel={copy.switchTheme(themeTitle(theme, copy))}
+        >
+          <span class={`${themeIconClass(theme)} h-3.5 w-3.5`}></span>
+        </AppButton>
+
+        {#if appMeta.githubUrl}
+          <AppButton
+            variant="secondary"
+            size="sm"
+            onclick={() => openExternalLink(appMeta.githubUrl ?? undefined)}
+            ariaLabel={copy.openGithub}
+          >
+            <span class="i-lucide-github h-3.5 w-3.5"></span>
+          </AppButton>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -578,11 +610,9 @@
       {appMeta}
       showLocalMockToggle={appMeta.isPackaged === false}
       {showCodexDesktopExecutablePath}
-      {updatePollingInterval}
       {updateCheckForUpdatesOnStartup}
       {updateShowLocalMockData}
       {updateLanguage}
-      {updateTheme}
       {updateCodexDesktopExecutablePath}
       {checkForUpdates}
       {downloadUpdate}
@@ -636,6 +666,8 @@
       {removeAccount}
       {removeAccounts}
       {exportSelectedAccounts}
+      usagePollingMinutes={appSettings.usagePollingMinutes}
+      {updatePollingInterval}
     />
   {:else if currentView === 'gateway'}
     <LocalGatewayView
@@ -765,5 +797,4 @@
   .theme-view-toggle {
     position: relative;
   }
-
 </style>
