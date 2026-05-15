@@ -286,6 +286,17 @@ describe('createSkillLibraryService', () => {
     expect(entries.sort()).toEqual(['export-a', 'export-b'])
   })
 
+  it('rejects export targets inside library storage', async () => {
+    const dir = await createTempDir()
+    const service = createSkillLibraryService(dir)
+
+    await service.create({ name: 'Export Guard', content: '---\nname: Export Guard\n---\nbody' })
+
+    await expect(service.exportDir(join(dir, 'skill-library', 'export'))).rejects.toThrow(
+      'outside Skill Library storage'
+    )
+  })
+
   it('installs skill to instance', async () => {
     const dir = await createTempDir()
     const service = createSkillLibraryService(dir)

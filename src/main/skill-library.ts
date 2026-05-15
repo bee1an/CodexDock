@@ -577,6 +577,14 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
   async function exportDir(targetDir: string): Promise<SkillLibraryExportResult> {
     await ensureDir()
     const resolvedTarget = resolve(targetDir)
+    const resolvedLibraryDir = resolve(libraryDir)
+    if (
+      resolvedTarget === resolvedLibraryDir ||
+      isPathInsideBase(resolvedLibraryDir, resolvedTarget)
+    ) {
+      throw new Error('Export target must be outside Skill Library storage.')
+    }
+
     await fs.mkdir(resolvedTarget, { recursive: true })
 
     const dirs = await listSkillDirs()
