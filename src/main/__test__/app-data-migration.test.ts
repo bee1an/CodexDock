@@ -29,7 +29,9 @@ describe('migrateLegacyElectronUserData', () => {
     await mkdir(join(legacyConfigPath, 'GPUCache'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'cost-usage'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'codex-instance-homes'), { recursive: true })
+    await mkdir(join(legacyConfigPath, 'skill-library'), { recursive: true })
     await writeFile(join(legacyConfigPath, 'codex-accounts.json'), '{}\n', 'utf8')
+    await writeFile(join(legacyConfigPath, 'skill-library', '.categories.json'), '[]\n', 'utf8')
     await writeFile(join(legacyConfigPath, 'Preferences'), '{"legacy":true}\n', 'utf8')
     await writeFile(join(legacyConfigPath, 'Session Storage', '000003.log'), 'session', 'utf8')
     await writeFile(join(legacyConfigPath, 'GPUCache', 'index'), 'gpu', 'utf8')
@@ -45,6 +47,9 @@ describe('migrateLegacyElectronUserData', () => {
     await expect(readFile(join(legacyConfigPath, 'codex-accounts.json'), 'utf8')).resolves.toBe(
       '{}\n'
     )
+    await expect(
+      readFile(join(legacyConfigPath, 'skill-library', '.categories.json'), 'utf8')
+    ).resolves.toBe('[]\n')
     await expect(readFile(join(defaultUserDataPath, 'Preferences'), 'utf8')).resolves.toBe(
       '{"legacy":true}\n'
     )

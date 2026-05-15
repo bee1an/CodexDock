@@ -61,6 +61,8 @@ cdock tag unassign <account-id> <tag-id>    # 从账号移除标签
 cdock session current                      # 查看当前活跃 Codex 会话
 cdock session list [--instance default]     # 列出本地 Codex 历史会话
 cdock session remove <session-id|file-path> # 将会话日志移入系统回收站
+cdock skill-library list                    # 列出本地技能库条目
+cdock skill-library install <skill-id> --instance <id> # 将技能库中的 Skill 安装到实例
 cdock usage read [account-id]               # 查看会话额度和周额度
 cdock cost read [--refresh]                 # 查看 token 消耗统计
 cdock login browser                        # 发起浏览器登录

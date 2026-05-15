@@ -42,7 +42,7 @@ function parseFrontmatter(content: string): {
   }
 
   const frontmatter = trimmed.slice(3, end).trim()
-  const body = trimmed.slice(end + 4).trim()
+  const body = trimmed.slice(end + 4).replace(/^\r?\n/u, '')
 
   const nameMatch = frontmatter.match(/^name:\s*(.+)$/mu)
   const descriptionMatch = frontmatter.match(/^description:\s*(.+)$/mu)
@@ -62,6 +62,19 @@ function fallbackDescription(body: string): string {
     }
   }
   return ''
+}
+
+function singleLineYamlValue(value: string): string {
+  return value.replace(/\r?\n/gu, ' ').trim()
+}
+
+function serializeSkillContent(meta: { name: string; description?: string }, body: string): string {
+  const lines = ['---', `name: ${singleLineYamlValue(meta.name)}`]
+  if (meta.description) {
+    lines.push(`description: ${singleLineYamlValue(meta.description)}`)
+  }
+  lines.push('---')
+  return lines.join('\n') + '\n' + body
 }
 
 function slugify(text: string): string {
@@ -88,6 +101,28 @@ async function isSymlink(filePath: string): Promise<boolean> {
 function isPathInsideBase(basePath: string, targetPath: string): boolean {
   const rel = relative(resolve(basePath), resolve(targetPath))
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+function normalizeDirName(name: string): string {
+  const normalized = name.trim()
+  if (
+    !normalized ||
+    normalized.includes('/') ||
+    normalized.includes('\\') ||
+    normalized.includes('..') ||
+    normalized.startsWith('.')
+  ) {
+    throw new Error(`Invalid directory name: "${name}"`)
+  }
+  return normalized
+}
+
+function normalizeSkillName(name: string): string {
+  const normalized = name.trim()
+  if (!normalized) {
+    throw new Error('Skill name is required.')
+  }
+  return normalized
 }
 
 interface SkillMeta {
@@ -159,15 +194,17 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
 
   async function writeCategories(categories: string[]): Promise<void> {
     await ensureDir()
-    await fs.writeFile(join(libraryDir, CATEGORIES_FILE), JSON.stringify(categories, null, 2), 'utf8')
+    await fs.writeFile(
+      join(libraryDir, CATEGORIES_FILE),
+      JSON.stringify(categories, null, 2),
+      'utf8'
+    )
   }
 
   async function listSkillDirs(): Promise<string[]> {
     try {
       const entries = await fs.readdir(libraryDir, { withFileTypes: true })
-      return entries
-        .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
-        .map((e) => e.name)
+      return entries.filter((e) => e.isDirectory() && !e.name.startsWith('.')).map((e) => e.name)
     } catch {
       return []
     }
@@ -200,9 +237,7 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
   async function listFiles(skillDir: string): Promise<string[]> {
     try {
       const entries = await fs.readdir(skillDir, { withFileTypes: true })
-      return entries
-        .filter((e) => e.isFile() && !e.name.startsWith('.'))
-        .map((e) => e.name)
+      return entries.filter((e) => e.isFile() && !e.name.startsWith('.')).map((e) => e.name)
     } catch {
       return []
     }
@@ -232,17 +267,13 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
 
     if (input?.category) {
       const cat = input.category.toLowerCase()
-      filtered = filtered.filter((s) =>
-        s.categories.some((c) => c.toLowerCase() === cat)
-      )
+      filtered = filtered.filter((s) => s.categories.some((c) => c.toLowerCase() === cat))
     }
 
     if (input?.query) {
       const q = input.query.toLowerCase()
       filtered = filtered.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.description.toLowerCase().includes(q)
+        (s) => s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q)
       )
     }
 
@@ -276,7 +307,8 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
 
   async function create(input: CreateSkillLibraryInput): Promise<SkillLibraryDetail> {
     await ensureDir()
-    const id = input.id || slugify(input.name)
+    const inputName = normalizeSkillName(input.name)
+    const id = slugify(input.id ?? inputName)
 
     let dirName = id
     let counter = 1
@@ -301,20 +333,29 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
       updatedAt: now
     }
 
-    await writeMeta(skillDir, meta)
-    await fs.writeFile(join(skillDir, SKILL_FILE), input.content, 'utf8')
+    const parsedInput = parseFrontmatter(input.content)
+    const content = serializeSkillContent(
+      {
+        name: inputName,
+        description: input.description ?? parsedInput.description
+      },
+      parsedInput.body
+    )
 
-    const { name, description, body } = parseFrontmatter(input.content)
+    await writeMeta(skillDir, meta)
+    await fs.writeFile(join(skillDir, SKILL_FILE), content, 'utf8')
+
+    const { name, description, body } = parseFrontmatter(content)
     const files = await listFiles(skillDir)
 
     return {
       id: meta.id,
-      name: name || input.name,
+      name: name || inputName,
       description: description || fallbackDescription(body),
       categories: meta.categories,
       createdAt: meta.createdAt,
       updatedAt: meta.updatedAt,
-      content: input.content,
+      content,
       files
     }
   }
@@ -338,6 +379,19 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
 
     if (input.content !== undefined) {
       await fs.writeFile(skillFile, input.content, 'utf8')
+    }
+
+    if (input.name !== undefined || input.description !== undefined) {
+      const currentContent = await fs.readFile(skillFile, 'utf8')
+      const parsed = parseFrontmatter(currentContent)
+      const newName =
+        input.name !== undefined ? normalizeSkillName(input.name) : (parsed.name ?? dirName)
+      const newDescription = input.description ?? parsed.description
+      const newContent = serializeSkillContent(
+        { name: newName, description: newDescription },
+        parsed.body
+      )
+      await fs.writeFile(skillFile, newContent, 'utf8')
     }
 
     if (input.clearCategories) {
@@ -476,9 +530,7 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
     return { imported, skipped, errors }
   }
 
-  async function importSingleSkillDir(
-    sourcePath: string
-  ): Promise<'imported' | 'skipped'> {
+  async function importSingleSkillDir(sourcePath: string): Promise<'imported' | 'skipped'> {
     if (await isSymlink(sourcePath)) {
       throw new Error('Symlink directories are not allowed.')
     }
@@ -560,17 +612,31 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
     const errors: string[] = []
 
     for (const skillDirName of input.sourceSkillDirNames) {
-      const sourcePath = join(instance.codexHome, 'skills', skillDirName)
+      let normalizedName: string
+      try {
+        normalizedName = normalizeDirName(skillDirName)
+      } catch {
+        errors.push(`${skillDirName}: invalid directory name.`)
+        continue
+      }
+
+      const skillsBase = join(instance.codexHome, 'skills')
+      const sourcePath = join(skillsBase, normalizedName)
+
+      if (!isPathInsideBase(skillsBase, sourcePath)) {
+        errors.push(`${normalizedName}: path escapes skills directory.`)
+        continue
+      }
 
       try {
         if (await isSymlink(sourcePath)) {
-          errors.push(`${skillDirName}: symlink, skipped.`)
+          errors.push(`${normalizedName}: symlink, skipped.`)
           continue
         }
 
         await fs.access(join(sourcePath, SKILL_FILE))
 
-        const existing = await findDirById(slugify(skillDirName))
+        const existing = await findDirById(slugify(normalizedName))
         if (existing) {
           skipped++
           continue
@@ -581,9 +647,9 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
         else skipped++
       } catch (err) {
         if (isMissingPathError(err)) {
-          errors.push(`${skillDirName}: SKILL.md not found.`)
+          errors.push(`${normalizedName}: SKILL.md not found.`)
         } else {
-          errors.push(`${skillDirName}: ${String(err instanceof Error ? err.message : err)}`)
+          errors.push(`${normalizedName}: ${String(err instanceof Error ? err.message : err)}`)
         }
       }
     }

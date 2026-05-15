@@ -61,6 +61,8 @@ cdock tag unassign <account-id> <tag-id>    # Remove a tag from an account
 cdock session current                      # Show the current active Codex session
 cdock session list [--instance default]     # List local Codex history sessions
 cdock session remove <session-id|file-path> # Move a session log to system Trash
+cdock skill-library list                    # List local Skill Library entries
+cdock skill-library install <skill-id> --instance <id> # Install a library skill to an instance
 cdock usage read [account-id]               # Read session and weekly usage limits
 cdock cost read [--refresh]                 # Read token cost statistics
 cdock login browser                        # Start browser-based login

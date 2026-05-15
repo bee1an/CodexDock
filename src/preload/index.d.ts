@@ -147,11 +147,17 @@ interface CodexDesktopApi {
   listSkillLibrary: (input?: SkillLibrarySearchInput) => Promise<SkillLibrarySummary[]>
   getSkillLibraryDetail: (skillId: string) => Promise<SkillLibraryDetail>
   createSkillLibrary: (input: CreateSkillLibraryInput) => Promise<SkillLibraryDetail>
-  updateSkillLibrary: (skillId: string, input: UpdateSkillLibraryInput) => Promise<SkillLibraryDetail>
+  updateSkillLibrary: (
+    skillId: string,
+    input: UpdateSkillLibraryInput
+  ) => Promise<SkillLibraryDetail>
   removeSkillLibrary: (skillId: string) => Promise<void>
   listSkillLibraryCategories: () => Promise<SkillLibraryCategoryList>
   createSkillLibraryCategory: (name: string) => Promise<SkillLibraryCategoryList>
-  renameSkillLibraryCategory: (oldName: string, newName: string) => Promise<SkillLibraryCategoryList>
+  renameSkillLibraryCategory: (
+    oldName: string,
+    newName: string
+  ) => Promise<SkillLibraryCategoryList>
   removeSkillLibraryCategory: (name: string) => Promise<SkillLibraryCategoryList>
   importSkillLibraryDir: (dirPath: string) => Promise<SkillLibraryImportResult>
   exportSkillLibraryDir: (targetDir: string) => Promise<SkillLibraryExportResult>

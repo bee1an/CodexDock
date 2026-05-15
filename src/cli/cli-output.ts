@@ -93,6 +93,19 @@ Usage:
   cdock prompt category remove <name> [--json]
   cdock prompt import (--file <md>|--dir <dir>) [--json]
   cdock prompt export --dir <dir> [--json]
+  cdock skill-library list [--query <text>] [--category <name>] [--json]
+  cdock skill-library show <skill-id> [--json]
+  cdock skill-library create --name <name> (--content <text>|--file <path>) [--category <name>...] [--json]
+  cdock skill-library update <skill-id> [--name <name>] [--content <text>|--file <path>] [--category <name>...] [--clear-categories] [--json]
+  cdock skill-library remove <skill-id> [--json]
+  cdock skill-library category list [--json]
+  cdock skill-library category create <name> [--json]
+  cdock skill-library category rename <old-name> <new-name> [--json]
+  cdock skill-library category remove <name> [--json]
+  cdock skill-library import --dir <dir> [--json]
+  cdock skill-library export --dir <dir> [--json]
+  cdock skill-library collect --instance <id> <skill-dir-name...> [--json]
+  cdock skill-library install <skill-id> --instance <id>... [--json]
 
 Global options:
   --json        Output { ok, data, error }
@@ -512,7 +525,10 @@ export function printSkillLibraryDetail(detail: SkillLibraryDetail, quiet: boole
   console.log(detail.content)
 }
 
-export function printSkillLibraryCategories(result: SkillLibraryCategoryList, quiet: boolean): void {
+export function printSkillLibraryCategories(
+  result: SkillLibraryCategoryList,
+  quiet: boolean
+): void {
   if (quiet) {
     return
   }

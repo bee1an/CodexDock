@@ -5,7 +5,11 @@
     CodexInstanceSummary,
     CreateSkillLibraryInput,
     SkillLibraryCategoryList,
+    SkillLibraryCollectInput,
+    SkillLibraryCollectResult,
     SkillLibraryDetail,
+    SkillLibraryExportResult,
+    SkillLibraryImportResult,
     SkillLibraryInstallInput,
     SkillLibraryInstallResult,
     SkillLibrarySearchInput,
@@ -39,6 +43,11 @@
   export let installSkillLibrary: (
     input: SkillLibraryInstallInput
   ) => Promise<SkillLibraryInstallResult>
+  export let importSkillLibraryDir: (dirPath: string) => Promise<SkillLibraryImportResult>
+  export let exportSkillLibraryDir: (targetDir: string) => Promise<SkillLibraryExportResult>
+  export let collectSkillLibrary: (
+    input: SkillLibraryCollectInput
+  ) => Promise<SkillLibraryCollectResult>
 
   let skills: SkillLibrarySummary[] = []
   let loading = false
@@ -72,7 +81,20 @@
   let categoryManagerOpen = false
   let newCategoryName = ''
   let renamingCategory = ''
+
+  // Delete confirmation
+  let deleteConfirmOpen = false
   let renameCategoryValue = ''
+
+  // Import/Export/Collect
+  let importExportMessage = ''
+  let collectOpen = false
+  let collectInstanceId = ''
+  let collectSkillNames = ''
+  let collectBusy = false
+  let mounted = false
+  let lastSearchQuery = ''
+  let lastSelectedCategory = ''
 
   async function loadSkills(): Promise<void> {
     loading = true
@@ -99,8 +121,9 @@
   }
 
   onMount(() => {
-    loadSkills()
-    loadCategories()
+    mounted = true
+    void loadSkills()
+    void loadCategories()
   })
 
   async function openDetail(skill: SkillLibrarySummary): Promise<void> {
@@ -125,7 +148,7 @@
     saving = true
     try {
       currentSkill = await updateSkillLibrary(currentSkill.id, {
-        name: editName || undefined,
+        name: editName.trim(),
         content: editContent,
         categories: editCategories.length ? editCategories : undefined,
         clearCategories: editCategories.length === 0
@@ -154,7 +177,7 @@
     saving = true
     try {
       await createSkillLibrary({
-        name: createName,
+        name: createName.trim(),
         content: createContent,
         categories: createCategories.length ? createCategories : undefined
       })
@@ -194,22 +217,100 @@
 
   async function handleCreateCategory(): Promise<void> {
     if (!newCategoryName.trim()) return
-    const result = await createSkillLibraryCategory(newCategoryName.trim())
-    categories = result.categories
-    newCategoryName = ''
+    try {
+      const result = await createSkillLibraryCategory(newCategoryName.trim())
+      categories = result.categories
+      newCategoryName = ''
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    }
   }
 
   async function handleRenameCategory(): Promise<void> {
     if (!renamingCategory || !renameCategoryValue.trim()) return
-    const result = await renameSkillLibraryCategory(renamingCategory, renameCategoryValue.trim())
-    categories = result.categories
-    renamingCategory = ''
-    renameCategoryValue = ''
+    try {
+      const oldName = renamingCategory
+      const nextName = renameCategoryValue.trim()
+      const result = await renameSkillLibraryCategory(oldName, nextName)
+      if (selectedCategory === oldName) selectedCategory = nextName
+      categories = result.categories
+      renamingCategory = ''
+      renameCategoryValue = ''
+      await loadSkills()
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    }
   }
 
   async function handleRemoveCategory(name: string): Promise<void> {
-    const result = await removeSkillLibraryCategory(name)
-    categories = result.categories
+    try {
+      const result = await removeSkillLibraryCategory(name)
+      if (selectedCategory === name) selectedCategory = ''
+      categories = result.categories
+      await loadSkills()
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    }
+  }
+
+  async function handleImport(): Promise<void> {
+    const dirPath = window.prompt(copy.skillLibraryImportPrompt)
+    if (!dirPath) return
+    importExportMessage = ''
+    try {
+      const result = await importSkillLibraryDir(dirPath)
+      importExportMessage = copy.skillLibraryImportResult(result.imported, result.skipped)
+      if (result.errors.length) {
+        importExportMessage += ` (${copy.skillLibraryErrorCount(result.errors.length)})`
+      }
+      await loadSkills()
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    }
+  }
+
+  async function handleExport(): Promise<void> {
+    const dirPath = window.prompt(copy.skillLibraryExportPrompt)
+    if (!dirPath) return
+    importExportMessage = ''
+    try {
+      const result = await exportSkillLibraryDir(dirPath)
+      importExportMessage = copy.skillLibraryExportResult(result.exported, result.outputPath)
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    }
+  }
+
+  function openCollect(): void {
+    collectInstanceId = instances[0]?.id ?? ''
+    collectSkillNames = ''
+    collectOpen = true
+    importExportMessage = ''
+  }
+
+  async function confirmCollect(): Promise<void> {
+    if (!collectInstanceId || !collectSkillNames.trim()) return
+    collectBusy = true
+    try {
+      const names = collectSkillNames
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+      const result = await collectSkillLibrary({
+        sourceInstanceId: collectInstanceId,
+        sourceSkillDirNames: names
+      })
+      importExportMessage = copy.skillLibraryCollectResult(result.collected, result.skipped)
+      if (result.errors.length) {
+        importExportMessage += ` (${copy.skillLibraryErrorCount(result.errors.length)})`
+      }
+      collectOpen = false
+      await loadSkills()
+    } catch (err) {
+      error = String(err instanceof Error ? err.message : err)
+    } finally {
+      collectBusy = false
+    }
   }
 
   function backToList(): void {
@@ -218,8 +319,25 @@
     createMode = false
   }
 
-  $: if (searchQuery !== undefined || selectedCategory !== undefined) {
-    loadSkills()
+  function toggleCreateCategory(category: string): void {
+    createCategories = createCategories.includes(category)
+      ? createCategories.filter((item) => item !== category)
+      : [...createCategories, category]
+  }
+
+  function toggleEditCategory(category: string): void {
+    editCategories = editCategories.includes(category)
+      ? editCategories.filter((item) => item !== category)
+      : [...editCategories, category]
+  }
+
+  $: if (
+    mounted &&
+    (searchQuery !== lastSearchQuery || selectedCategory !== lastSelectedCategory)
+  ) {
+    lastSearchQuery = searchQuery
+    lastSelectedCategory = selectedCategory
+    void loadSkills()
   }
 </script>
 
@@ -230,10 +348,30 @@
       <p class="text-xs text-neutral-500">{copy.skillLibraryDescription}</p>
     </div>
     <AppButtonGroup>
-      <AppButton size="sm" onclick={() => { createMode = true; currentSkill = null }}>
+      <AppButton
+        size="sm"
+        onclick={() => {
+          createMode = true
+          currentSkill = null
+        }}
+      >
         {copy.skillLibraryCreate}
       </AppButton>
-      <AppButton size="sm" onclick={() => { categoryManagerOpen = true }}>
+      <AppButton size="sm" onclick={handleImport}>
+        {copy.skillLibraryImport}
+      </AppButton>
+      <AppButton size="sm" onclick={handleExport}>
+        {copy.skillLibraryExport}
+      </AppButton>
+      <AppButton size="sm" onclick={openCollect}>
+        {copy.skillLibraryCollect}
+      </AppButton>
+      <AppButton
+        size="sm"
+        onclick={() => {
+          categoryManagerOpen = true
+        }}
+      >
         {copy.skillLibraryCategoryManager}
       </AppButton>
       <AppButton size="sm" onclick={loadSkills}>
@@ -243,6 +381,9 @@
   </div>
 
   {#if !currentSkill && !createMode}
+    {#if importExportMessage}
+      <p class="text-xs text-green-600">{importExportMessage}</p>
+    {/if}
     <div class="flex gap-2">
       <AppInput
         placeholder={copy.skillLibrarySearchPlaceholder}
@@ -254,7 +395,7 @@
         bind:value={selectedCategory}
       >
         <option value="">{copy.skillLibraryAllCategories}</option>
-        {#each categories as cat}
+        {#each categories as cat (cat)}
           <option value={cat}>{cat}</option>
         {/each}
       </select>
@@ -269,7 +410,7 @@
     {:else}
       <p class="text-xs text-neutral-500">{copy.skillLibraryCount(skills.length)}</p>
       <div class="flex flex-col gap-1" use:cascadeIn>
-        {#each skills as skill}
+        {#each skills as skill (skill.id)}
           <div
             class="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-700"
           >
@@ -305,8 +446,31 @@
         placeholder={copy.skillLibraryContentPlaceholder}
         bind:value={createContent}
       ></textarea>
+      {#if categories.length}
+        <div class="grid gap-1">
+          <span class="text-xs font-medium text-neutral-500">
+            {copy.skillLibraryCategorySelection}
+          </span>
+          <div class="flex flex-wrap gap-2">
+            {#each categories as cat (cat)}
+              <label class="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={createCategories.includes(cat)}
+                  onchange={() => toggleCreateCategory(cat)}
+                />
+                {cat}
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
       <AppButtonGroup>
-        <AppButton size="sm" onclick={handleCreate} disabled={!createName || !createContent || saving}>
+        <AppButton
+          size="sm"
+          onclick={handleCreate}
+          disabled={!createName.trim() || !createContent || saving}
+        >
           {copy.skillLibrarySave}
         </AppButton>
         <AppButton size="sm" variant="ghost" onclick={backToList}>
@@ -334,11 +498,20 @@
           {#if currentSkill.files.length}
             <p class="text-xs text-neutral-400">Files: {currentSkill.files.join(', ')}</p>
           {/if}
-          <pre class="mt-2 max-h-96 overflow-auto rounded bg-neutral-100 p-2 font-mono text-xs dark:bg-neutral-800">{currentSkill.content}</pre>
+          <pre
+            class="mt-2 max-h-96 overflow-auto rounded bg-neutral-100 p-2 font-mono text-xs dark:bg-neutral-800">{currentSkill.content}</pre>
           <AppButtonGroup>
             <AppButton size="sm" onclick={startEdit}>{copy.skillLibraryEdit}</AppButton>
-            <AppButton size="sm" onclick={() => openInstall(currentSkill!)}>{copy.skillLibraryInstall}</AppButton>
-            <AppButton size="sm" variant="danger" onclick={deleteSkill}>{copy.skillLibraryDelete}</AppButton>
+            <AppButton size="sm" onclick={() => openInstall(currentSkill!)}
+              >{copy.skillLibraryInstall}</AppButton
+            >
+            <AppButton
+              size="sm"
+              variant="danger"
+              onclick={() => {
+                deleteConfirmOpen = true
+              }}>{copy.skillLibraryDelete}</AppButton
+            >
           </AppButtonGroup>
         </div>
       {:else}
@@ -347,11 +520,36 @@
           class="min-h-48 w-full rounded border border-neutral-300 p-2 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-800"
           bind:value={editContent}
         ></textarea>
+        {#if categories.length}
+          <div class="grid gap-1">
+            <span class="text-xs font-medium text-neutral-500">
+              {copy.skillLibraryCategorySelection}
+            </span>
+            <div class="flex flex-wrap gap-2">
+              {#each categories as cat (cat)}
+                <label class="flex items-center gap-1 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={editCategories.includes(cat)}
+                    onchange={() => toggleEditCategory(cat)}
+                  />
+                  {cat}
+                </label>
+              {/each}
+            </div>
+          </div>
+        {/if}
         <AppButtonGroup>
-          <AppButton size="sm" onclick={saveEdit} disabled={saving}>
+          <AppButton size="sm" onclick={saveEdit} disabled={!editName.trim() || saving}>
             {copy.skillLibrarySave}
           </AppButton>
-          <AppButton size="sm" variant="ghost" onclick={() => { editMode = false }}>
+          <AppButton
+            size="sm"
+            variant="ghost"
+            onclick={() => {
+              editMode = false
+            }}
+          >
             {copy.skillLibraryCancel}
           </AppButton>
         </AppButtonGroup>
@@ -364,8 +562,9 @@
 {#if installOpen}
   <AppDialog
     title={copy.skillLibraryInstallTitle}
-    open={installOpen}
-    onclose={() => { installOpen = false }}
+    onclose={() => {
+      installOpen = false
+    }}
   >
     {#if installSkill}
       <p class="text-xs">{copy.skillLibraryInstallDescription(installSkill.name)}</p>
@@ -373,7 +572,7 @@
 
     {#if !installResult}
       <div class="mt-2 flex flex-col gap-1">
-        {#each instances as instance}
+        {#each instances as instance (instance.id)}
           <label class="flex items-center gap-2 text-xs">
             <input
               type="checkbox"
@@ -404,10 +603,14 @@
     {:else}
       <div class="mt-2 flex flex-col gap-1 text-xs">
         {#if installResult.installed.length}
-          <p class="text-green-600">{copy.skillLibraryInstallSuccess(installResult.installed.length)}</p>
+          <p class="text-green-600">
+            {copy.skillLibraryInstallSuccess(installResult.installed.length)}
+          </p>
         {/if}
         {#if installResult.skipped.length}
-          <p class="text-yellow-600">{copy.skillLibraryInstallSkipped(installResult.skipped.length)}</p>
+          <p class="text-yellow-600">
+            {copy.skillLibraryInstallSkipped(installResult.skipped.length)}
+          </p>
         {/if}
         {#if installResult.failed.length}
           <p class="text-red-600">{copy.skillLibraryInstallFailed(installResult.failed.length)}</p>
@@ -421,8 +624,9 @@
 {#if categoryManagerOpen}
   <AppDialog
     title={copy.skillLibraryCategoryManager}
-    open={categoryManagerOpen}
-    onclose={() => { categoryManagerOpen = false }}
+    onclose={() => {
+      categoryManagerOpen = false
+    }}
   >
     <div class="flex flex-col gap-2">
       <div class="flex gap-2">
@@ -435,7 +639,7 @@
           {copy.skillLibraryCategoryCreate}
         </AppButton>
       </div>
-      {#each categories as cat}
+      {#each categories as cat (cat)}
         <div class="flex items-center justify-between text-xs">
           {#if renamingCategory === cat}
             <AppInput bind:value={renameCategoryValue} class="flex-1 mr-2" />
@@ -448,7 +652,10 @@
               <AppButton
                 size="sm"
                 variant="ghost"
-                onclick={() => { renamingCategory = cat; renameCategoryValue = cat }}
+                onclick={() => {
+                  renamingCategory = cat
+                  renameCategoryValue = cat
+                }}
               >
                 {copy.skillLibraryCategoryRename}
               </AppButton>
@@ -459,6 +666,79 @@
           {/if}
         </div>
       {/each}
+    </div>
+  </AppDialog>
+{/if}
+
+<!-- Delete Confirmation Dialog -->
+{#if deleteConfirmOpen && currentSkill}
+  <AppDialog
+    title={copy.skillLibraryDelete}
+    onclose={() => {
+      deleteConfirmOpen = false
+    }}
+  >
+    <p class="text-xs">{copy.skillLibraryDeleteConfirm(currentSkill.name)}</p>
+    <div class="mt-3 flex gap-2">
+      <AppButton
+        size="sm"
+        variant="danger"
+        onclick={() => {
+          deleteConfirmOpen = false
+          deleteSkill()
+        }}
+      >
+        {copy.skillLibraryDelete}
+      </AppButton>
+      <AppButton
+        size="sm"
+        variant="ghost"
+        onclick={() => {
+          deleteConfirmOpen = false
+        }}
+      >
+        {copy.skillLibraryCancel}
+      </AppButton>
+    </div>
+  </AppDialog>
+{/if}
+
+<!-- Collect Dialog -->
+{#if collectOpen}
+  <AppDialog
+    title={copy.skillLibraryCollect}
+    onclose={() => {
+      collectOpen = false
+    }}
+  >
+    <div class="flex flex-col gap-2">
+      <label class="text-xs font-medium" for="skill-library-collect-instance">
+        {copy.skillLibraryCollectInstance}
+      </label>
+      <select
+        id="skill-library-collect-instance"
+        class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-800"
+        bind:value={collectInstanceId}
+      >
+        {#each instances as instance (instance.id)}
+          <option value={instance.id}>{instance.name || instance.id}</option>
+        {/each}
+      </select>
+      <label class="text-xs font-medium" for="skill-library-collect-names">
+        {copy.skillLibraryCollectNames}
+      </label>
+      <AppInput
+        id="skill-library-collect-names"
+        placeholder={copy.skillLibraryCollectPlaceholder}
+        bind:value={collectSkillNames}
+      />
+      <AppButton
+        size="sm"
+        onclick={confirmCollect}
+        disabled={!collectInstanceId || !collectSkillNames.trim() || collectBusy}
+      >
+        {copy.skillLibraryCollect}
+      </AppButton>
     </div>
   </AppDialog>
 {/if}

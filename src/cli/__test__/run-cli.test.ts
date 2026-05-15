@@ -132,6 +132,21 @@ interface CliTestRuntime {
         stop: ReturnType<typeof vi.fn>
       }
     }
+    skillLibrary: {
+      list: ReturnType<typeof vi.fn>
+      detail: ReturnType<typeof vi.fn>
+      create: ReturnType<typeof vi.fn>
+      update: ReturnType<typeof vi.fn>
+      remove: ReturnType<typeof vi.fn>
+      listCategories: ReturnType<typeof vi.fn>
+      createCategory: ReturnType<typeof vi.fn>
+      renameCategory: ReturnType<typeof vi.fn>
+      removeCategory: ReturnType<typeof vi.fn>
+      importDir: ReturnType<typeof vi.fn>
+      exportDir: ReturnType<typeof vi.fn>
+      collect: ReturnType<typeof vi.fn>
+      install: ReturnType<typeof vi.fn>
+    }
     getSnapshot: ReturnType<typeof vi.fn>
   }
 }
@@ -518,6 +533,61 @@ function createRuntime(): {
           stop: vi.fn(async () => snapshot.codexInstances[1])
         }
       },
+      skillLibrary: {
+        list: vi.fn(async () => [
+          {
+            id: 'test-skill',
+            name: 'Test Skill',
+            description: 'A test skill',
+            categories: ['dev'],
+            createdAt: '2026-05-14T00:00:00.000Z',
+            updatedAt: '2026-05-14T00:00:00.000Z'
+          }
+        ]),
+        detail: vi.fn(async () => ({
+          id: 'test-skill',
+          name: 'Test Skill',
+          description: 'A test skill',
+          categories: ['dev'],
+          createdAt: '2026-05-14T00:00:00.000Z',
+          updatedAt: '2026-05-14T00:00:00.000Z',
+          content: '---\nname: Test Skill\n---\nbody',
+          files: ['SKILL.md']
+        })),
+        create: vi.fn(async () => ({
+          id: 'new-skill',
+          name: 'New Skill',
+          description: '',
+          categories: [],
+          createdAt: '2026-05-14T00:00:00.000Z',
+          updatedAt: '2026-05-14T00:00:00.000Z',
+          content: '---\nname: New Skill\n---\nbody',
+          files: ['SKILL.md']
+        })),
+        update: vi.fn(async () => ({
+          id: 'test-skill',
+          name: 'Updated Skill',
+          description: '',
+          categories: [],
+          createdAt: '2026-05-14T00:00:00.000Z',
+          updatedAt: '2026-05-14T00:00:00.000Z',
+          content: '---\nname: Updated Skill\n---\nnew body',
+          files: ['SKILL.md']
+        })),
+        remove: vi.fn(async () => undefined),
+        listCategories: vi.fn(async () => ({ categories: ['dev', 'tools'] })),
+        createCategory: vi.fn(async () => ({ categories: ['dev', 'tools', 'new'] })),
+        renameCategory: vi.fn(async () => ({ categories: ['dev', 'utilities'] })),
+        removeCategory: vi.fn(async () => ({ categories: ['dev'] })),
+        importDir: vi.fn(async () => ({ imported: 2, skipped: 0, errors: [] })),
+        exportDir: vi.fn(async () => ({ exported: 3, outputPath: '/tmp/export' })),
+        collect: vi.fn(async () => ({ collected: 1, skipped: 0, errors: [] })),
+        install: vi.fn(async () => ({
+          installed: [{ targetInstanceId: 'inst_1', targetInstanceName: 'Work' }],
+          skipped: [],
+          failed: []
+        }))
+      },
       getSnapshot: vi.fn(async () => snapshot)
     }
   }
@@ -551,6 +621,7 @@ describe('runCli', () => {
 
     expect(code).toBe(0)
     expect(String(logSpy.mock.calls[0][0])).toContain('Usage:')
+    expect(String(logSpy.mock.calls[0][0])).toContain('cdock skill-library list')
   })
 
   it('covers the account commands', async () => {
@@ -978,9 +1049,9 @@ describe('runCli', () => {
     })
 
     logSpy.mockClear()
-    await expect(runCli(runtime as never, ['gateway', 'open', '--isolated', '--json'])).resolves.toBe(
-      0
-    )
+    await expect(
+      runCli(runtime as never, ['gateway', 'open', '--isolated', '--json'])
+    ).resolves.toBe(0)
     expect(runtime.services.codex.openLocalGatewayIsolated).toHaveBeenCalledTimes(1)
 
     logSpy.mockClear()
@@ -1405,6 +1476,160 @@ describe('runCli', () => {
         code: 1,
         message: 'Command timed out after 0.01 seconds'
       }
+    })
+  })
+
+  describe('skill-library', () => {
+    it('lists skills', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, ['skill-library', 'list', '--json'])
+      expect(code).toBe(0)
+      const result = parseJsonLog(logSpy) as { ok: boolean; data: unknown[] }
+      expect(result.ok).toBe(true)
+      expect(result.data).toHaveLength(1)
+    })
+
+    it('shows skill detail', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, ['skill-library', 'show', 'test-skill', '--json'])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.detail).toHaveBeenCalledWith('test-skill')
+    })
+
+    it('creates a skill', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'create',
+        '--name',
+        'New Skill',
+        '--content',
+        'body',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.create).toHaveBeenCalledWith({
+        name: 'New Skill',
+        content: 'body',
+        categories: undefined
+      })
+    })
+
+    it('updates a skill', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'update',
+        'test-skill',
+        '--name',
+        'Updated',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.update).toHaveBeenCalledWith('test-skill', {
+        name: 'Updated',
+        content: undefined,
+        categories: undefined,
+        clearCategories: false
+      })
+    })
+
+    it('removes a skill', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'remove',
+        'test-skill',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.remove).toHaveBeenCalledWith('test-skill')
+    })
+
+    it('lists categories', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, ['skill-library', 'category', 'list', '--json'])
+      expect(code).toBe(0)
+      const result = parseJsonLog(logSpy) as { ok: boolean; data: { categories: string[] } }
+      expect(result.data.categories).toEqual(['dev', 'tools'])
+    })
+
+    it('imports a directory', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'import',
+        '--dir',
+        '/tmp/skills',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.importDir).toHaveBeenCalledWith('/tmp/skills')
+    })
+
+    it('exports to a directory', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'export',
+        '--dir',
+        '/tmp/export',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.exportDir).toHaveBeenCalledWith('/tmp/export')
+    })
+
+    it('collects from instance', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'collect',
+        '--instance',
+        'inst_1',
+        'my-skill',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.collect).toHaveBeenCalledWith({
+        sourceInstanceId: 'inst_1',
+        sourceSkillDirNames: ['my-skill']
+      })
+    })
+
+    it('installs to instance', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'install',
+        'test-skill',
+        '--instance',
+        'inst_1',
+        '--json'
+      ])
+      expect(code).toBe(0)
+      expect(runtime.services.skillLibrary.install).toHaveBeenCalledWith({
+        skillId: 'test-skill',
+        targetInstanceIds: ['inst_1']
+      })
+    })
+
+    it('errors on missing skill-id for show', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, ['skill-library', 'show', '--json'])
+      expect(code).toBe(2)
+    })
+
+    it('errors on missing --name for create', async () => {
+      const { runtime } = createRuntime()
+      const code = await runCli(runtime as never, [
+        'skill-library',
+        'create',
+        '--content',
+        'body',
+        '--json'
+      ])
+      expect(code).toBe(2)
     })
   })
 })

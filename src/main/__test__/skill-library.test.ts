@@ -38,6 +38,24 @@ describe('createSkillLibraryService', () => {
     expect(list[0].id).toBe('my-skill')
   })
 
+  it('persists name and description when creating from plain body content', async () => {
+    const dir = await createTempDir()
+    const service = createSkillLibraryService(dir)
+
+    const created = await service.create({
+      name: 'Plain Skill',
+      description: 'Created from body only',
+      content: 'Use this body as the skill instructions.'
+    })
+    expect(created.content).toContain('name: Plain Skill')
+    expect(created.content).toContain('description: Created from body only')
+
+    const detail = await service.detail('plain-skill')
+    expect(detail.name).toBe('Plain Skill')
+    expect(detail.description).toBe('Created from body only')
+    expect(detail.content).toContain('Use this body as the skill instructions.')
+  })
+
   it('generates unique ids on conflict', async () => {
     const dir = await createTempDir()
     const service = createSkillLibraryService(dir)
@@ -80,6 +98,20 @@ describe('createSkillLibraryService', () => {
       content: '---\nname: Update Me\n---\nnew content'
     })
     expect(updated.content).toContain('new content')
+  })
+
+  it('updates skill name in SKILL.md frontmatter', async () => {
+    const dir = await createTempDir()
+    const service = createSkillLibraryService(dir)
+
+    await service.create({ name: 'Old Name', content: 'Body' })
+    const updated = await service.update('old-name', { name: 'New Name' })
+
+    expect(updated.name).toBe('New Name')
+    expect(updated.content).toContain('name: New Name')
+
+    const reloaded = await service.detail('old-name')
+    expect(reloaded.name).toBe('New Name')
   })
 
   it('updates skill categories', async () => {
@@ -338,5 +370,20 @@ describe('createSkillLibraryService', () => {
     const list = await service.list()
     expect(list).toHaveLength(1)
     expect(list[0].name).toBe('Collected')
+  })
+
+  it('rejects unsafe collect directory names', async () => {
+    const dir = await createTempDir()
+    const service = createSkillLibraryService(dir)
+
+    const instanceHome = await createTempDir()
+    const instances = [{ id: 'inst-1', name: 'Instance 1', codexHome: instanceHome }]
+    const result = await service.collect(
+      { sourceInstanceId: 'inst-1', sourceSkillDirNames: ['../outside'] },
+      instances
+    )
+
+    expect(result.collected).toBe(0)
+    expect(result.errors[0]).toContain('invalid directory name')
   })
 })

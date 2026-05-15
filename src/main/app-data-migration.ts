@@ -9,7 +9,8 @@ const codexDockConfigEntries = new Set([
   'codex-providers.json',
   'codex-instance-homes',
   'cost-usage',
-  'prompts'
+  'prompts',
+  'skill-library'
 ])
 
 export interface LegacyElectronUserDataMigrationResult {

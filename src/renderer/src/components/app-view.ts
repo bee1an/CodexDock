@@ -188,6 +188,7 @@ export const messages = {
     skillLibraryCategoryRemoveConfirm: (name: string) =>
       `删除分类 "${name}"？所有技能中的该分类标签会被移除。`,
     skillLibraryCategoryPlaceholder: '分类名称',
+    skillLibraryCategorySelection: '分类',
     skillLibraryInstall: '安装到实例',
     skillLibraryInstallTitle: '安装技能',
     skillLibraryInstallDescription: (name: string) => `将 "${name}" 安装到选定实例`,
@@ -199,6 +200,18 @@ export const messages = {
     skillLibraryCollect: '从实例收集',
     skillLibraryImport: '导入',
     skillLibraryExport: '导出',
+    skillLibraryImportPrompt: '输入要导入的 Skill 目录路径',
+    skillLibraryExportPrompt: '输入导出目标目录路径',
+    skillLibraryImportResult: (imported: number, skipped: number) =>
+      `已导入 ${imported} 个，跳过 ${skipped} 个`,
+    skillLibraryExportResult: (exported: number, outputPath: string) =>
+      `已导出 ${exported} 个 Skill 到 ${outputPath}`,
+    skillLibraryCollectResult: (collected: number, skipped: number) =>
+      `已收集 ${collected} 个，跳过 ${skipped} 个`,
+    skillLibraryErrorCount: (count: number) => `${count} 个错误`,
+    skillLibraryCollectInstance: '实例',
+    skillLibraryCollectNames: 'Skill 目录名（逗号分隔）',
+    skillLibraryCollectPlaceholder: 'skill-a, skill-b',
     prompts: 'Prompts',
     promptsTitle: 'Prompt 管理',
     promptsDescription: '管理本地保存的 Prompt 模板，支持分类、搜索和导入导出。',
@@ -910,6 +923,7 @@ export const messages = {
     skillLibraryCategoryRemoveConfirm: (name: string) =>
       `Remove category "${name}"? It will be removed from all skills.`,
     skillLibraryCategoryPlaceholder: 'Category name',
+    skillLibraryCategorySelection: 'Categories',
     skillLibraryInstall: 'Install to instance',
     skillLibraryInstallTitle: 'Install skill',
     skillLibraryInstallDescription: (name: string) => `Install "${name}" to selected instances`,
@@ -924,6 +938,18 @@ export const messages = {
     skillLibraryCollect: 'Collect from instance',
     skillLibraryImport: 'Import',
     skillLibraryExport: 'Export',
+    skillLibraryImportPrompt: 'Enter the skill directory path to import',
+    skillLibraryExportPrompt: 'Enter the target directory path for export',
+    skillLibraryImportResult: (imported: number, skipped: number) =>
+      `Imported ${imported}, skipped ${skipped}`,
+    skillLibraryExportResult: (exported: number, outputPath: string) =>
+      `Exported ${exported} skills to ${outputPath}`,
+    skillLibraryCollectResult: (collected: number, skipped: number) =>
+      `Collected ${collected}, skipped ${skipped}`,
+    skillLibraryErrorCount: (count: number) => `${count} error${count === 1 ? '' : 's'}`,
+    skillLibraryCollectInstance: 'Instance',
+    skillLibraryCollectNames: 'Skill directory names (comma-separated)',
+    skillLibraryCollectPlaceholder: 'skill-a, skill-b',
     prompts: 'Prompts',
     promptsTitle: 'Prompt management',
     promptsDescription:

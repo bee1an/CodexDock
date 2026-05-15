@@ -192,7 +192,10 @@ const codexApp = {
     ipcRenderer.invoke('codex:skill-library-detail', skillId),
   createSkillLibrary: (input: CreateSkillLibraryInput): Promise<SkillLibraryDetail> =>
     ipcRenderer.invoke('codex:skill-library-create', input),
-  updateSkillLibrary: (skillId: string, input: UpdateSkillLibraryInput): Promise<SkillLibraryDetail> =>
+  updateSkillLibrary: (
+    skillId: string,
+    input: UpdateSkillLibraryInput
+  ): Promise<SkillLibraryDetail> =>
     ipcRenderer.invoke('codex:skill-library-update', skillId, input),
   removeSkillLibrary: (skillId: string): Promise<void> =>
     ipcRenderer.invoke('codex:skill-library-remove', skillId),
@@ -200,7 +203,10 @@ const codexApp = {
     ipcRenderer.invoke('codex:skill-library-category-list'),
   createSkillLibraryCategory: (name: string): Promise<SkillLibraryCategoryList> =>
     ipcRenderer.invoke('codex:skill-library-category-create', name),
-  renameSkillLibraryCategory: (oldName: string, newName: string): Promise<SkillLibraryCategoryList> =>
+  renameSkillLibraryCategory: (
+    oldName: string,
+    newName: string
+  ): Promise<SkillLibraryCategoryList> =>
     ipcRenderer.invoke('codex:skill-library-category-rename', oldName, newName),
   removeSkillLibraryCategory: (name: string): Promise<SkillLibraryCategoryList> =>
     ipcRenderer.invoke('codex:skill-library-category-remove', name),

@@ -1127,7 +1127,7 @@ async function execute(
         }
         case 'create': {
           const opts = parseSkillLibraryOptions(rest)
-          if (!opts.name) {
+          if (!opts.name?.trim()) {
             throw new CliError('Missing --name', EXIT_USAGE)
           }
           let content = opts.content ?? ''
@@ -1138,7 +1138,7 @@ async function execute(
             throw new CliError('Missing --content or --file', EXIT_USAGE)
           }
           const created = await runtime.services.skillLibrary.create({
-            name: opts.name,
+            name: opts.name.trim(),
             content,
             categories: opts.categories.length ? opts.categories : undefined
           })
@@ -1155,8 +1155,12 @@ async function execute(
           if (opts.file) {
             content = await fs.readFile(opts.file, 'utf8')
           }
+          const nextName = opts.name !== undefined ? opts.name.trim() : undefined
+          if (opts.name !== undefined && !nextName) {
+            throw new CliError('Missing value for --name', EXIT_USAGE)
+          }
           const updated = await runtime.services.skillLibrary.update(skillId, {
-            name: opts.name,
+            name: nextName,
             content,
             categories: opts.categories.length ? opts.categories : undefined,
             clearCategories: opts.clearCategories
@@ -1249,10 +1253,7 @@ async function execute(
             sourceInstanceId: opts.instanceIds[0],
             sourceSkillDirNames: opts.positionals
           })
-          printIfNeeded(
-            `Collected ${result.collected}, skipped ${result.skipped}`,
-            silent
-          )
+          printIfNeeded(`Collected ${result.collected}, skipped ${result.skipped}`, silent)
           return { code: EXIT_OK, payload: toCliResult(result) }
         }
         case 'install': {

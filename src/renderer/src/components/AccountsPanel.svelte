@@ -595,6 +595,9 @@
         window.codexApp.renameSkillLibraryCategory(old, name)}
       removeSkillLibraryCategory={(name) => window.codexApp.removeSkillLibraryCategory(name)}
       installSkillLibrary={(input) => window.codexApp.installSkillLibrary(input)}
+      importSkillLibraryDir={(dirPath) => window.codexApp.importSkillLibraryDir(dirPath)}
+      exportSkillLibraryDir={(targetDir) => window.codexApp.exportSkillLibraryDir(targetDir)}
+      collectSkillLibrary={(input) => window.codexApp.collectSkillLibrary(input)}
     />
   {:else if currentView === 'prompts'}
     <PromptsView
