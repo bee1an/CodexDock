@@ -39,8 +39,6 @@
     TokenCostReadOptions,
     TokenCostSummary,
     ReadCodexSessionDetailInput,
-    TrashCodexSessionInput,
-    TrashCodexSessionResult,
     UpdateAccountHealthInput,
     UpdateCustomProviderInput
   } from '../../../shared/codex'
@@ -57,7 +55,6 @@
   import SessionsView from './SessionsView.svelte'
   import SettingsView from './SettingsView.svelte'
   import SkillsView from './SkillsView.svelte'
-  import SkillLibraryView from './SkillLibraryView.svelte'
   import PromptsView from './PromptsView.svelte'
   import { groupMemberCount as groupMemberCountForAccounts } from './accounts-panel-account'
   import {
@@ -65,7 +62,7 @@
     createProviderDraft,
     type ProviderDraft
   } from './accounts-panel-provider'
-  import { providerLabel } from './app-view'
+  import { providerLabel, nextTheme, themeIconClass, themeTitle } from './app-view'
   import { cascadeIn, reveal } from './gsap-motion'
 
   const flipDurationMs = 160
@@ -119,7 +116,6 @@
     input: ProbeProviderModelsInput
   ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
-  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void> = async () => {}
   export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
   export let reorderProviders: (providerIds: string[]) => Promise<void>
   export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
@@ -128,7 +124,6 @@
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
   export let openLocalGatewayInCodex: () => Promise<void>
-  export let openLocalGatewayIsolatedInCodex: () => Promise<void>
   export let updateLocalGatewayModelMappings: (
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
@@ -138,11 +133,6 @@
   export let updateLocalGatewayAllowedAccounts: (
     accountIds: string[]
   ) => Promise<void> = async () => {}
-  export let localGatewayAllowedProviderIds: string[] = []
-  export let updateLocalGatewayAllowedProviders: (
-    providerIds: string[]
-  ) => Promise<void> = async () => {}
-  export let updateLocalGatewayPort: (port: number) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
@@ -171,7 +161,6 @@
   export let copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
-  export let trashCodexSession: (input: TrashCodexSessionInput) => Promise<TrashCodexSessionResult>
   export let listCodexSkills: () => Promise<CodexSkillsResult>
   export let readCodexSkillDetail: (
     instanceId: string,
@@ -211,7 +200,6 @@
     | 'stats'
     | 'sessions'
     | 'skills'
-    | 'skill-library'
     | 'prompts'
     | 'settings' = 'accounts'
   let activeGroupFilter = 'all'
@@ -509,18 +497,6 @@
         <AppButton
           variant="filter"
           size="sm"
-          selected={currentView === 'skill-library'}
-          ariaPressed={currentView === 'skill-library'}
-          onclick={() => {
-            currentView = 'skill-library'
-          }}
-        >
-          <span class="i-lucide-library h-3.5 w-3.5"></span>
-          <span>{copy.skillLibrary}</span>
-        </AppButton>
-        <AppButton
-          variant="filter"
-          size="sm"
           selected={currentView === 'prompts'}
           ariaPressed={currentView === 'prompts'}
           onclick={() => {
@@ -543,6 +519,33 @@
           <span>{copy.settings}</span>
         </AppButton>
       </AppButtonGroup>
+
+      <div class="flex items-center gap-1">
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={(event) => {
+            const target = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+            const origin =
+              event.detail > 0 ? { x: event.clientX, y: event.clientY, target } : { target }
+            updateTheme(nextTheme(theme), origin)
+          }}
+          ariaLabel={copy.switchTheme(themeTitle(theme, copy))}
+        >
+          <span class={`${themeIconClass(theme)} h-3.5 w-3.5`}></span>
+        </AppButton>
+
+        {#if appMeta.githubUrl}
+          <AppButton
+            variant="secondary"
+            size="sm"
+            onclick={() => openExternalLink(appMeta.githubUrl ?? undefined)}
+            ariaLabel={copy.openGithub}
+          >
+            <span class="i-lucide-github h-3.5 w-3.5"></span>
+          </AppButton>
+        {/if}
+      </div>
     </div>
   </div>
 
@@ -570,7 +573,6 @@
       {listCodexSessions}
       {readCodexSessionDetail}
       {copyCodexSessionToProvider}
-      {trashCodexSession}
     />
   {:else if currentView === 'skills'}
     <SkillsView
@@ -579,25 +581,6 @@
       {listCodexSkills}
       {readCodexSkillDetail}
       {copyCodexSkill}
-    />
-  {:else if currentView === 'skill-library'}
-    <SkillLibraryView
-      {copy}
-      instances={codexInstances}
-      listSkillLibrary={(input) => window.codexApp.listSkillLibrary(input)}
-      getSkillLibraryDetail={(id) => window.codexApp.getSkillLibraryDetail(id)}
-      createSkillLibrary={(input) => window.codexApp.createSkillLibrary(input)}
-      updateSkillLibrary={(id, input) => window.codexApp.updateSkillLibrary(id, input)}
-      removeSkillLibrary={(id) => window.codexApp.removeSkillLibrary(id)}
-      listSkillLibraryCategories={() => window.codexApp.listSkillLibraryCategories()}
-      createSkillLibraryCategory={(name) => window.codexApp.createSkillLibraryCategory(name)}
-      renameSkillLibraryCategory={(old, name) =>
-        window.codexApp.renameSkillLibraryCategory(old, name)}
-      removeSkillLibraryCategory={(name) => window.codexApp.removeSkillLibraryCategory(name)}
-      installSkillLibrary={(input) => window.codexApp.installSkillLibrary(input)}
-      importSkillLibraryDir={(dirPath) => window.codexApp.importSkillLibraryDir(dirPath)}
-      exportSkillLibraryDir={(targetDir) => window.codexApp.exportSkillLibraryDir(targetDir)}
-      collectSkillLibrary={(input) => window.codexApp.collectSkillLibrary(input)}
     />
   {:else if currentView === 'prompts'}
     <PromptsView
@@ -627,11 +610,9 @@
       {appMeta}
       showLocalMockToggle={appMeta.isPackaged === false}
       {showCodexDesktopExecutablePath}
-      {updatePollingInterval}
       {updateCheckForUpdatesOnStartup}
       {updateShowLocalMockData}
       {updateLanguage}
-      {updateTheme}
       {updateCodexDesktopExecutablePath}
       {checkForUpdates}
       {downloadUpdate}
@@ -685,6 +666,8 @@
       {removeAccount}
       {removeAccounts}
       {exportSelectedAccounts}
+      usagePollingMinutes={appSettings.usagePollingMinutes}
+      {updatePollingInterval}
     />
   {:else if currentView === 'gateway'}
     <LocalGatewayView
@@ -697,18 +680,13 @@
       allowedAccountIds={localGatewayAllowedAccountIds}
       {groups}
       {accounts}
-      {providers}
-      allowedProviderIds={localGatewayAllowedProviderIds}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
       {openLocalGatewayInCodex}
-      {openLocalGatewayIsolatedInCodex}
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
-      updateAllowedProviders={updateLocalGatewayAllowedProviders}
-      updatePort={updateLocalGatewayPort}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
@@ -728,7 +706,6 @@
       {createProvider}
       {probeProviderModels}
       {openProviderInCodex}
-      {openProviderIsolatedInCodex}
       {startEditingProvider}
       {saveProvider}
       {cancelEditingProvider}

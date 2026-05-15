@@ -39,6 +39,7 @@
     limitLabel,
     planLabel,
     planTagClass,
+    pollingOptions,
     progressWidth,
     weeklyResetTimeToneClass,
     type LocalizedCopy
@@ -118,8 +119,11 @@
   export let updateTagVisibility: (
     settings: TagVisibilitySettings
   ) => Promise<void> = async () => {}
+  export let usagePollingMinutes = 15
+  export let updatePollingInterval: (minutes: number) => void = () => {}
 
   let expandedAccountIds: string[] = []
+  let showPollingMenu = false
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
   let tokensLoadingAccountId = ''
   let tokensErrorByAccountId: Record<string, string> = {}
@@ -829,18 +833,58 @@
         </div>
       {/if}
     </div>
-    <AppButton
-      variant="secondary"
-      size="xs"
-      onclick={refreshAllRateLimits}
-      disabled={loginActionBusy || refreshingAllUsage}
-      ariaLabel={copy.refreshAllQuota}
-      title={copy.refreshAllQuota}
-    >
-      <span
-        class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
-      ></span>
-    </AppButton>
+    <div class="relative inline-flex items-center" use:floatingAnchor={{ id: 'polling-menu' }}>
+      <AppButton
+        variant="secondary"
+        size="xs"
+        onclick={refreshAllRateLimits}
+        disabled={loginActionBusy || refreshingAllUsage}
+        ariaLabel={copy.refreshAllQuota}
+        title={copy.refreshAllQuota}
+      >
+        <span
+          class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+        ></span>
+      </AppButton>
+      <button
+        class="inline-flex h-6 w-4 items-center justify-center rounded-r-[0.35rem] border-0 bg-transparent text-muted-strong transition-colors hover:text-carbon"
+        type="button"
+        aria-label={copy.pollingInterval}
+        title={copy.pollingInterval}
+        onclick={() => {
+          showPollingMenu = !showPollingMenu
+        }}
+      >
+        <span class="i-lucide-chevron-down h-3 w-3"></span>
+      </button>
+
+      {#if showPollingMenu}
+        <div
+          class="polling-menu theme-soft-panel absolute right-0 top-full z-50 mt-1 min-w-[8rem] rounded-[0.45rem] border border-[var(--card-border)] py-1 shadow-md"
+          use:portal
+          use:stopFloatingPointerPropagation
+        >
+          <p class="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-faint">
+            {copy.pollingInterval}
+          </p>
+          {#each pollingOptions as option (option)}
+            <button
+              class="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-xs text-carbon transition-colors hover:bg-[var(--surface-soft)]"
+              type="button"
+              onclick={() => {
+                updatePollingInterval(option)
+                showPollingMenu = false
+              }}
+            >
+              <span
+                class={`h-3 w-3 ${usagePollingMinutes === option ? 'i-lucide-check text-success' : ''}`}
+              ></span>
+              <span>{option} {copy.minutes}</span>
+            </button>
+          {/each}
+        </div>
+      {/if}
+    </div>
     <AppButton
       variant="secondary"
       size="xs"
@@ -1842,6 +1886,26 @@
   .accounts-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: var(--scrollbar-thin-thumb) transparent;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+    background-color: var(--scrollbar-thin-thumb);
+  }
+
+  .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thin-thumb-hover);
   }
 
   .theme-account-divider {
