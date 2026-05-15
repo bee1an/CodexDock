@@ -1986,7 +1986,7 @@ export class CodexLocalGatewayService {
       return false
     }
     return (
-      (account.groupIds.length === 0 && allowed.accountIds.has(account.id)) ||
+      allowed.accountIds.has(account.id) ||
       account.groupIds.some((groupId) => allowed.groupIds.has(groupId))
     )
   }

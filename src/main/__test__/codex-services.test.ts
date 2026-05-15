@@ -1266,9 +1266,13 @@ describe('createCodexServices', () => {
     })
   })
 
-  it('does not route local gateway traffic through account allowlist entries once the account belongs to a group', async () => {
+  it('routes local gateway traffic through an individually allowed account even when the account belongs to a group', async () => {
     const env = await createEnvironment()
     const platform = createPlatform()
+    platform.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+      return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+    })
     const services = createCodexServices({
       userDataPath: env.userDataPath,
       defaultWorkspacePath: env.workspacePath,
@@ -1276,12 +1280,19 @@ describe('createCodexServices', () => {
     })
     const port = await getFreePort()
 
-    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
-    await services.accounts.importCurrent()
-    let snapshot = await services.groups.create('Team')
-    const account = snapshot.accounts[0]
+    let snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-a',
+        email: 'a@example.com',
+        primaryUsedPercent: 10,
+        secondaryUsedPercent: 10
+      })
+    )
+    snapshot = await services.groups.create('Team')
+    const account = snapshot.accounts.find((item) => item.email === 'a@example.com')
     const group = snapshot.groups[0]
-    snapshot = await services.accounts.updateGroups(account.id, [group.id])
+    expect(account).toBeTruthy()
+    snapshot = await services.accounts.updateGroups(account!.id, [group.id])
 
     await services.settings.update({
       localGateway: {
@@ -1307,11 +1318,14 @@ describe('createCodexServices', () => {
         },
         body: JSON.stringify({ model: 'gpt-5.4', messages: [] })
       })
-      const payload = (await response.json()) as { error?: { code?: string } }
+      await response.json()
 
-      expect(response.status).toBe(503)
-      expect(payload.error?.code).toBe('no_account')
-      expect(platform.fetch).not.toHaveBeenCalled()
+      expect(response.status).toBe(200)
+      expect(platform.fetch).toHaveBeenCalledOnce()
+      expect(
+        new Headers((platform.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]?.headers)
+          .get('chatgpt-account-id')
+      ).toBe('acct-a')
     } finally {
       await services.gateway.stop()
     }
