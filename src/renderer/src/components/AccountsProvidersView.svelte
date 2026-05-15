@@ -402,7 +402,7 @@
             !newProviderApiKey.trim()}
         >
           <span
-            class={`${probingModels ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-list-search'} h-3.5 w-3.5`}
+            class={`${probingModels ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-search'} h-3.5 w-3.5`}
             aria-hidden="true"
           ></span>
           <span>{probingModels ? copy.providerModelProbeLoading : copy.providerModelProbe}</span>
@@ -534,31 +534,6 @@
 {/if}
 
 <style>
-  .provider-list-panel {
-    scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
-  }
-
-  .provider-list-panel::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .provider-list-panel::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .provider-list-panel::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: padding-box;
-    background-color: color-mix(in srgb, var(--ink-faint) 38%, transparent);
-  }
-
-  .provider-list-panel::-webkit-scrollbar-thumb:hover {
-    background-color: color-mix(in srgb, var(--ink-soft-strong) 46%, transparent);
-  }
-
   .theme-provider-divider {
     height: 1px;
     background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);

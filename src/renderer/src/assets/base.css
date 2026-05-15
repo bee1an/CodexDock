@@ -126,7 +126,7 @@
   --dialog-bg: var(--color-snow);
   --dialog-border: color-mix(in srgb, var(--line-strong) 58%, transparent);
   --dialog-shadow: 0 28px 84px -40px rgba(0, 0, 0, 0.48), 0 12px 32px -24px rgba(0, 0, 0, 0.36);
-  --dialog-inset-glow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 86%, transparent), inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 42%, transparent);
+  --dialog-inset-glow: inset 0 0 0 1px color-mix(in srgb, var(--line-strong) 42%, transparent);
   --dialog-close-bg: white;
   --dialog-close-hover-bg: rgba(0, 0, 0, 0.045);
 
@@ -351,10 +351,10 @@ body {
 
   /* Backdrop / Dialog */
   --backdrop: color-mix(in srgb, black 76%, transparent);
-  --dialog-bg: linear-gradient(180deg, color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft)), color-mix(in srgb, var(--panel-strong) 78%, var(--color-fog)));
+  --dialog-bg: #1a1a1a;
   --dialog-border: color-mix(in srgb, var(--color-arctic-mist) 78%, white 22%);
   --dialog-shadow: 0 36px 132px rgba(0, 0, 0, 0.94), 0 18px 58px rgba(0, 0, 0, 0.72);
-  --dialog-inset-glow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
+  --dialog-inset-glow: inset 0 0 0 1px color-mix(in srgb, var(--color-arctic-mist) 58%, transparent);
   --dialog-close-bg: color-mix(in srgb, var(--panel-strong) 76%, transparent);
   --dialog-close-hover-bg: color-mix(in srgb, var(--surface-soft) 62%, transparent);
 
@@ -441,4 +441,27 @@ body {
   --control-shadow: 0 1px 2px rgba(0,0,0,0.8);
   --input-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
   --pressed-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thin-thumb) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thin-thumb);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: var(--scrollbar-thin-thumb-hover);
 }

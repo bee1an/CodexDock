@@ -39,6 +39,8 @@
     TokenCostReadOptions,
     TokenCostSummary,
     ReadCodexSessionDetailInput,
+    TrashCodexSessionInput,
+    TrashCodexSessionResult,
     UpdateAccountHealthInput,
     UpdateCustomProviderInput
   } from '../../../shared/codex'
@@ -55,7 +57,7 @@
   import SessionsView from './SessionsView.svelte'
   import SettingsView from './SettingsView.svelte'
   import SkillsView from './SkillsView.svelte'
-  import PromptsView from './PromptsView.svelte'
+  import StashView from './StashView.svelte'
   import { groupMemberCount as groupMemberCountForAccounts } from './accounts-panel-account'
   import {
     buildProviderUpdateInput,
@@ -116,6 +118,7 @@
     input: ProbeProviderModelsInput
   ) => Promise<ProviderModelsProbeResult>
   export let openProviderInCodex: (providerId: string) => Promise<void>
+  export let openProviderIsolatedInCodex: (providerId: string) => Promise<void> = async () => {}
   export let getProvider: (providerId: string) => Promise<CustomProviderDetail>
   export let reorderProviders: (providerIds: string[]) => Promise<void>
   export let updateProvider: (providerId: string, input: UpdateCustomProviderInput) => Promise<void>
@@ -124,18 +127,24 @@
   export let stopLocalGateway: () => Promise<void>
   export let rotateLocalGatewayKey: () => Promise<void>
   export let openLocalGatewayInCodex: () => Promise<void>
+  export let openLocalGatewayIsolatedInCodex: () => Promise<void> = async () => {}
   export let updateLocalGatewayModelMappings: (
     mappings: LocalGatewayModelMapping[]
   ) => Promise<void> = async () => {}
   export let localGatewayAllowedGroupIds: string[] = []
   export let localGatewayAllowedAccountIds: string[] = []
+  export let localGatewayAllowedProviderIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedAccounts: (
     accountIds: string[]
   ) => Promise<void> = async () => {}
+  export let updateLocalGatewayAllowedProviders: (
+    providerIds: string[]
+  ) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
+  export let updateLocalGatewayPort: (port: number) => Promise<void> = async () => {}
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
   export let createGroup: (name: string) => Promise<void>
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
@@ -161,6 +170,9 @@
   export let copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
+  export let trashCodexSession: (
+    input: TrashCodexSessionInput
+  ) => Promise<TrashCodexSessionResult>
   export let listCodexSkills: () => Promise<CodexSkillsResult>
   export let readCodexSkillDetail: (
     instanceId: string,
@@ -200,13 +212,12 @@
     | 'stats'
     | 'sessions'
     | 'skills'
-    | 'prompts'
+    | 'stash'
     | 'settings' = 'accounts'
   let activeGroupFilter = 'all'
   let groupMutationBusy = false
   let showGroupManagerDialog = false
   let selectedAccountIds: string[] = []
-  let accountWorkbenchExpanded = false
   let sortableProviders: CustomProviderSummary[] = []
   let providerSortInteractionActive = false
   let providerMutationBusy = false
@@ -497,14 +508,14 @@
         <AppButton
           variant="filter"
           size="sm"
-          selected={currentView === 'prompts'}
-          ariaPressed={currentView === 'prompts'}
+          selected={currentView === 'stash'}
+          ariaPressed={currentView === 'stash'}
           onclick={() => {
-            currentView = 'prompts'
+            currentView = 'stash'
           }}
         >
-          <span class="i-lucide-file-text h-3.5 w-3.5"></span>
-          <span>{copy.prompts}</span>
+          <span class="i-lucide-archive h-3.5 w-3.5"></span>
+          <span>{copy.stash}</span>
         </AppButton>
         <AppButton
           variant="filter"
@@ -573,6 +584,7 @@
       {listCodexSessions}
       {readCodexSessionDetail}
       {copyCodexSessionToProvider}
+      {trashCodexSession}
     />
   {:else if currentView === 'skills'}
     <SkillsView
@@ -582,9 +594,25 @@
       {readCodexSkillDetail}
       {copyCodexSkill}
     />
-  {:else if currentView === 'prompts'}
-    <PromptsView
+  {:else if currentView === 'stash'}
+    <StashView
       {copy}
+      instances={codexInstances}
+      listSkillLibrary={(input) => window.codexApp.listSkillLibrary(input)}
+      getSkillLibraryDetail={(id) => window.codexApp.getSkillLibraryDetail(id)}
+      createSkillLibrary={(input) => window.codexApp.createSkillLibrary(input)}
+      updateSkillLibrary={(id, input) => window.codexApp.updateSkillLibrary(id, input)}
+      removeSkillLibrary={(id) => window.codexApp.removeSkillLibrary(id)}
+      listSkillLibraryCategories={() => window.codexApp.listSkillLibraryCategories()}
+      createSkillLibraryCategory={(name) => window.codexApp.createSkillLibraryCategory(name)}
+      renameSkillLibraryCategory={(old, name) => window.codexApp.renameSkillLibraryCategory(old, name)}
+      removeSkillLibraryCategory={(name) => window.codexApp.removeSkillLibraryCategory(name)}
+      installSkillLibrary={(input) => window.codexApp.installSkillLibrary(input)}
+      {listCodexSkills}
+      importSkillLibraryDirWithDialog={() => window.codexApp.importSkillLibraryDirWithDialog()}
+      exportSkillLibraryDirWithDialog={() => window.codexApp.exportSkillLibraryDirWithDialog()}
+      collectSkillLibrary={(input) => window.codexApp.collectSkillLibrary(input)}
+      readSkillLibraryFile={(skillId, filePath) => window.codexApp.readSkillLibraryFile(skillId, filePath)}
       listPrompts={(input) => window.codexApp.listPrompts(input)}
       getPromptDetail={(id) => window.codexApp.getPromptDetail(id)}
       createPrompt={(input) => window.codexApp.createPrompt(input)}
@@ -604,7 +632,6 @@
     <SettingsView
       {copy}
       {language}
-      {theme}
       settings={appSettings}
       {updateState}
       {appMeta}
@@ -617,13 +644,11 @@
       {checkForUpdates}
       {downloadUpdate}
       {installUpdate}
-      {openExternalLink}
     />
   {:else if currentView === 'accounts'}
     <AccountsListView
       bind:activeGroupFilter
       bind:selectedAccountIds
-      bind:accountWorkbenchExpanded
       {copy}
       {language}
       {accounts}
@@ -678,18 +703,23 @@
       modelMappings={localGatewayModelMappings}
       allowedGroupIds={localGatewayAllowedGroupIds}
       allowedAccountIds={localGatewayAllowedAccountIds}
+      allowedProviderIds={localGatewayAllowedProviderIds}
       {groups}
       {accounts}
+      {providers}
       {startLocalGateway}
       {stopLocalGateway}
       {rotateLocalGatewayKey}
       {openLocalGatewayInCodex}
+      {openLocalGatewayIsolatedInCodex}
       updateModelMappings={updateLocalGatewayModelMappings}
       updateAllowedGroups={updateLocalGatewayAllowedGroups}
       updateAllowedAccounts={updateLocalGatewayAllowedAccounts}
+      updateAllowedProviders={updateLocalGatewayAllowedProviders}
       portOccupant={localGatewayPortOccupant}
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
+      updatePort={updateLocalGatewayPort}
     />
   {:else if currentView === 'providers'}
     <AccountsProvidersView
@@ -705,6 +735,7 @@
       {createProvider}
       {probeProviderModels}
       {openProviderInCodex}
+      {openProviderIsolatedInCodex}
       {startEditingProvider}
       {saveProvider}
       {cancelEditingProvider}

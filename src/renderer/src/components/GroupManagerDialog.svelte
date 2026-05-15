@@ -76,28 +76,17 @@
 </script>
 
 {#if open}
-  <AppDialog ariaLabel={copy.groupManagerTitle} maxWidthClass="max-w-xl" onclose={handleClose}>
-    <div class="flex flex-col gap-4">
-      <div class="flex items-start justify-between gap-3">
-        <div class="min-w-0">
-          <h2 class="text-[15px] font-semibold text-carbon">{copy.groupManagerTitle}</h2>
-          <p class="mt-1 text-[11px] leading-4 text-muted-strong">
-            {copy.groupManagerHint}
-          </p>
-        </div>
-        <AppButton
-          variant="icon"
-          size="xs"
-          class="flex-none"
-          onclick={handleClose}
-          ariaLabel={copy.close}
-          title={copy.close}
-        >
-          <span class="i-lucide-x h-4 w-4" aria-hidden="true"></span>
-        </AppButton>
-      </div>
-
-      <div class="flex flex-wrap items-center gap-2">
+  <AppDialog
+    title={copy.groupManagerTitle}
+    description={copy.groupManagerHint}
+    closeLabel={copy.close}
+    showClose
+    maxWidthClass="max-w-xl"
+    panelClass="group-manager-dialog"
+    onclose={handleClose}
+  >
+    <div class="group-manager-content flex flex-col gap-4">
+      <div class="group-create-row grid items-center gap-2">
         <AppInput
           class="min-w-[200px] flex-1"
           placeholder={copy.newGroupPlaceholder}
@@ -113,7 +102,7 @@
         <AppButton
           variant="primary"
           size="sm"
-          class="min-w-[108px]"
+          class="group-create-button min-w-[108px]"
           onclick={() => void handleCreate()}
           disabled={disabled || !draftName.trim()}
         >
@@ -127,14 +116,12 @@
       </div>
 
       {#if groups.length}
-        <ul class="flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1">
+        <ul class="group-list flex max-h-[320px] flex-col gap-1.5 overflow-y-auto pr-1">
           {#each groups as group (group.id)}
-            <li
-              class="group-row flex flex-wrap items-center gap-2 rounded-[0.45rem] border border-[var(--card-border)] bg-[var(--surface-soft)] px-3 py-2"
-            >
+            <li class="group-row grid items-center gap-2 rounded-[0.55rem] border px-3 py-2.5">
               {#if editingId === group.id}
                 <AppInput
-                  class="min-w-[180px] flex-1"
+                  class="group-edit-input min-w-[180px]"
                   bind:value={editingName}
                   {disabled}
                   onkeydown={(event) => {
@@ -159,11 +146,11 @@
                   {copy.cancel}
                 </AppButton>
               {:else}
-                <span class="min-w-0 flex-1 truncate text-[13px] font-medium text-carbon">
+                <span class="group-name min-w-0 truncate text-[13px] font-semibold text-carbon">
                   {group.name}
                 </span>
                 <span
-                  class="inline-flex flex-none items-center rounded-full bg-[var(--surface-soft)] px-2 py-0.5 text-[10px] font-medium text-muted-strong"
+                  class="group-member-pill inline-flex flex-none items-center rounded-full px-2 py-0.5 text-[10px] font-medium text-muted-strong"
                 >
                   {copy.groupMemberCount(groupAccountCount(group.id))}
                 </span>
@@ -194,9 +181,7 @@
           {/each}
         </ul>
       {:else}
-        <div
-          class="rounded-[0.45rem] border border-dashed border-[var(--empty-border)] bg-[var(--surface-soft)] px-4 py-6 text-center"
-        >
+        <div class="group-empty-state rounded-[0.55rem] border border-dashed px-4 py-6 text-center">
           <p class="text-[12px] text-muted-strong">{copy.noGroups}</p>
         </div>
       {/if}
@@ -209,11 +194,55 @@
 {/if}
 
 <style>
+  :global(.group-manager-dialog) {
+    background: var(--dialog-bg) !important;
+  }
+
+  .group-create-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .group-list {
+    margin: 0;
+    padding: 0 0.25rem 0 0;
+    list-style: none;
+  }
+
   .group-row {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    border-color: color-mix(in srgb, var(--line-strong) 56%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 86%, var(--surface-soft));
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
     transition: background-color 140ms ease;
   }
 
   .group-row:hover {
-    background: color-mix(in srgb, var(--surface-soft) 70%, transparent);
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--surface-hover) 58%, var(--panel-strong));
+  }
+
+  .group-member-pill {
+    border: 1px solid color-mix(in srgb, var(--line-strong) 48%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 76%, transparent);
+  }
+
+  :global(.group-edit-input) {
+    grid-column: 1 / span 2;
+  }
+
+  .group-empty-state {
+    border-color: var(--empty-border);
+    background: color-mix(in srgb, var(--surface-soft) 46%, transparent);
+  }
+
+  @media (max-width: 520px) {
+    .group-create-row,
+    .group-row {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .group-row :global(.app-button) {
+      width: 100%;
+    }
   }
 </style>

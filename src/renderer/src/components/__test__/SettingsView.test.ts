@@ -26,7 +26,6 @@ describe('SettingsView', () => {
       props: {
         copy,
         language: 'zh-CN',
-        theme: 'light',
         showCodexDesktopExecutablePath: false,
         settings: {
           usagePollingMinutes: 15,
@@ -47,20 +46,20 @@ describe('SettingsView', () => {
           version: '0.4.6',
           githubUrl: 'https://github.com/bee1an/CodexDock'
         },
-        updatePollingInterval: vi.fn(),
         updateCheckForUpdatesOnStartup: vi.fn(),
         updateShowLocalMockData: vi.fn(),
         updateLanguage: vi.fn(),
-        updateTheme: vi.fn(),
         updateCodexDesktopExecutablePath: vi.fn().mockResolvedValue(undefined),
         showLocalMockToggle: false,
         checkForUpdates: vi.fn(),
         downloadUpdate: vi.fn().mockResolvedValue(undefined),
-        installUpdate: vi.fn().mockResolvedValue(undefined),
-        openExternalLink: vi.fn()
+        installUpdate: vi.fn().mockResolvedValue(undefined)
       }
     })
 
-    expect(screen.getByText(copy.pollingInterval)).toBeTruthy()
+    expect(screen.getByText(copy.generalSettings)).toBeTruthy()
+    expect(screen.getByText(copy.switchLanguage)).toBeTruthy()
+    expect(screen.getByText(copy.autoCheckUpdates)).toBeTruthy()
+    expect(screen.queryByText(copy.pollingInterval)).toBeNull()
   })
 })

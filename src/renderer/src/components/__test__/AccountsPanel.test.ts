@@ -99,6 +99,16 @@ vi.mock('chart.js', () => {
   }
 })
 
+Object.defineProperty(Element.prototype, 'animate', {
+  configurable: true,
+  value: vi.fn(() => ({
+    cancel: vi.fn(),
+    finished: Promise.resolve(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn()
+  }))
+})
+
 import AccountsPanel from '../AccountsPanel.svelte'
 import { messages } from '../app-view'
 
@@ -146,6 +156,27 @@ function renderAccountsPanel(
       updateSummary: '',
       updateActionLabel: null,
       runUpdateAction: vi.fn(),
+      appMeta: {
+        version: '0.4.6',
+        githubUrl: 'https://github.com/bee1an/CodexDock',
+        isPackaged: true
+      },
+      appSettings: {
+        usagePollingMinutes: 15,
+        statusBarAccountIds: [],
+        language: 'zh-CN',
+        theme: 'light',
+        checkForUpdatesOnStartup: true,
+        codexDesktopExecutablePath: '',
+        showLocalMockData: true
+      },
+      theme: 'light',
+      updateState: {
+        status: 'idle',
+        delivery: 'auto',
+        currentVersion: '0.4.6',
+        supported: true
+      },
       language: 'zh-CN',
       accounts,
       codexInstances: [],
@@ -175,6 +206,7 @@ function renderAccountsPanel(
       openAccountInIsolatedCodex: vi.fn(),
       openWakeDialog: vi.fn(),
       openProviderInCodex: vi.fn().mockResolvedValue(undefined),
+      openProviderIsolatedInCodex: vi.fn().mockResolvedValue(undefined),
       getProvider: vi.fn().mockResolvedValue({
         id: 'provider-1',
         name: 'Mirror',
@@ -188,6 +220,31 @@ function renderAccountsPanel(
       reorderProviders: vi.fn().mockResolvedValue(undefined),
       updateProvider: vi.fn().mockResolvedValue(undefined),
       removeProvider: vi.fn().mockResolvedValue(undefined),
+      localGatewayStatus: {
+        running: false,
+        baseUrl: 'http://127.0.0.1:11456',
+        apiKeyPreview: '',
+        logs: []
+      },
+      localGatewayBusy: false,
+      localGatewayApiKey: '',
+      localGatewayModelMappings: [],
+      localGatewayAllowedGroupIds: [],
+      localGatewayAllowedAccountIds: [],
+      localGatewayAllowedProviderIds: [],
+      startLocalGateway: vi.fn().mockResolvedValue(undefined),
+      stopLocalGateway: vi.fn().mockResolvedValue(undefined),
+      rotateLocalGatewayKey: vi.fn().mockResolvedValue(undefined),
+      openLocalGatewayInCodex: vi.fn().mockResolvedValue(undefined),
+      openLocalGatewayIsolatedInCodex: vi.fn().mockResolvedValue(undefined),
+      updateLocalGatewayModelMappings: vi.fn().mockResolvedValue(undefined),
+      updateLocalGatewayAllowedGroups: vi.fn().mockResolvedValue(undefined),
+      updateLocalGatewayAllowedAccounts: vi.fn().mockResolvedValue(undefined),
+      updateLocalGatewayAllowedProviders: vi.fn().mockResolvedValue(undefined),
+      updateLocalGatewayPort: vi.fn().mockResolvedValue(undefined),
+      localGatewayPortOccupant: null,
+      killingLocalGatewayPortOccupant: false,
+      killLocalGatewayPortOccupant: vi.fn().mockResolvedValue(undefined),
       reorderAccounts: vi.fn().mockResolvedValue(undefined),
       createGroup: vi.fn().mockResolvedValue(undefined),
       updateGroup: vi.fn().mockResolvedValue(undefined),
@@ -227,8 +284,18 @@ function renderAccountsPanel(
         messages: []
       }),
       copyCodexSessionToProvider: vi.fn().mockResolvedValue({}),
+      trashCodexSession: vi.fn().mockResolvedValue({ trashed: 0 }),
       startLogin: vi.fn(),
       importCurrent: vi.fn(),
+      updateLanguage: vi.fn(),
+      updateTheme: vi.fn(),
+      updatePollingInterval: vi.fn(),
+      updateCheckForUpdatesOnStartup: vi.fn(),
+      checkForUpdates: vi.fn(),
+      downloadUpdate: vi.fn().mockResolvedValue(undefined),
+      installUpdate: vi.fn().mockResolvedValue(undefined),
+      openExternalLink: vi.fn(),
+      updateCodexDesktopExecutablePath: vi.fn().mockResolvedValue(undefined),
       ...overrideProps
     }
   })
@@ -245,12 +312,15 @@ describe('AccountsPanel', () => {
     chartConfigs.length = 0
   })
 
-  it('在切换 tabs 后保持账户筛选、选择和工作台展开状态', async () => {
+  it('在切换 tabs 后保持账户筛选和选择状态', async () => {
     renderAccountsPanel()
 
-    await fireEvent.click(screen.getByRole('button', { name: copy.showFiltersAndBulkActions }))
     await fireEvent.click(screen.getByRole('button', { name: '重点 · 1' }))
-    await fireEvent.click(screen.getByRole('button', { name: copy.selectAllVisibleAccounts }))
+    await fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: `${copy.selectAccount} · grouped@example.com`
+      })
+    )
 
     expect(
       (
@@ -264,7 +334,6 @@ describe('AccountsPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: copy.providerCount(0) }))
     await fireEvent.click(screen.getByRole('button', { name: copy.accountCount(accounts.length) }))
 
-    expect(screen.getByRole('button', { name: copy.hideFiltersAndBulkActions })).toBeTruthy()
     expect(
       (
         screen.getByRole('checkbox', {
@@ -273,6 +342,46 @@ describe('AccountsPanel', () => {
       ).checked
     ).toBe(true)
     expect(screen.queryByText('ungrouped@example.com')).toBeNull()
+  })
+
+  it('本地网关页透传 Provider 列表并允许选择运行回退 Provider', async () => {
+    Object.defineProperty(window, 'codexApp', {
+      configurable: true,
+      value: {
+        getLocalGatewayStatus: vi.fn().mockResolvedValue({
+          running: false,
+          baseUrl: 'http://127.0.0.1:11456',
+          apiKeyPreview: '',
+          logs: []
+        }),
+        getLocalGatewayApiKey: vi.fn().mockResolvedValue('')
+      }
+    })
+
+    const updateLocalGatewayAllowedProviders = vi.fn().mockResolvedValue(undefined)
+    renderAccountsPanel({
+      providers: [
+        {
+          id: 'provider-1',
+          name: 'Mirror',
+          baseUrl: 'https://mirror.example.com',
+          model: 'gpt-5.4',
+          fastMode: false,
+          createdAt: '2026-04-21T00:00:00.000Z',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      ],
+      updateLocalGatewayAllowedProviders
+    })
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGateway }))
+
+    expect(screen.getByText(`${copy.localGatewayAllowedProvidersTitle}:`)).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayAddProvider }))
+    await fireEvent.click(screen.getByRole('button', { name: 'Mirror' }))
+
+    expect(updateLocalGatewayAllowedProviders).toHaveBeenCalledWith(['provider-1'])
   })
 
   it('账户组变更在忙碌期间只允许串行执行一次', async () => {

@@ -137,11 +137,11 @@ describe('AccountsListView', () => {
   it('filters visible accounts by group chip', async () => {
     renderAccountsListView()
 
-    await fireEvent.click(screen.getByRole('button', { name: copy.showFiltersAndBulkActions }))
     await fireEvent.click(screen.getByRole('button', { name: '重点 · 1' }))
 
     expect(screen.getByText('grouped@example.com')).toBeTruthy()
     expect(screen.queryByText('ungrouped@example.com')).toBeNull()
+    expect(screen.queryByRole('button', { name: copy.selectAllVisibleAccounts })).toBeNull()
   })
 
   it('exports the currently selected visible accounts', async () => {
@@ -151,9 +151,12 @@ describe('AccountsListView', () => {
       exportSelectedAccounts
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: copy.showFiltersAndBulkActions }))
     await fireEvent.click(screen.getByRole('button', { name: '重点 · 1' }))
-    await fireEvent.click(screen.getByRole('button', { name: copy.selectAllVisibleAccounts }))
+    await fireEvent.click(
+      screen.getByRole('checkbox', {
+        name: `${copy.selectAccount} · grouped@example.com`
+      })
+    )
     await fireEvent.click(screen.getByRole('button', { name: copy.exportSelectedAccounts }))
 
     expect(exportSelectedAccounts).toHaveBeenCalledWith(['acct-1'])

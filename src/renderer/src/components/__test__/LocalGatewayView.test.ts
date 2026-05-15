@@ -24,8 +24,8 @@ function installCodexAppMock(): void {
   })
 }
 
-function renderGateway(props = {}): void {
-  render(LocalGatewayView, {
+function renderGateway(props = {}): ReturnType<typeof render> {
+  return render(LocalGatewayView, {
     props: {
       copy,
       localGatewayStatus: status,
@@ -158,11 +158,11 @@ describe('LocalGatewayView', () => {
     await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith(['account-1']))
   })
 
-  it('hides accounts that already belong to a group from gateway account choices', async () => {
+  it('allows choosing grouped accounts individually when their group is not selected', async () => {
     const updateAllowedAccounts = vi.fn().mockResolvedValue(undefined)
     renderGateway({
       allowedGroupIds: [],
-      allowedAccountIds: ['grouped-account'],
+      allowedAccountIds: [],
       groups: [{ id: 'group-1', name: '默认组', createdAt: '2026-01-01T00:00:00.000Z' }],
       accounts: [
         {
@@ -188,11 +188,56 @@ describe('LocalGatewayView', () => {
     })
 
     await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayAllowedTargetsAdd }))
-    await fireEvent.click(screen.getByRole('button', { name: 'standalone@example.com' }))
+
+    expect(screen.getByText('grouped@example.com')).toBeTruthy()
+    expect(screen.getByText('standalone@example.com')).toBeTruthy()
+    await fireEvent.click(screen.getByRole('button', { name: 'grouped@example.com' }))
+
+    await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith(['grouped-account']))
+  })
+
+  it('hides member accounts when their group is selected and drops duplicate account targets', async () => {
+    const updateAllowedGroups = vi.fn().mockResolvedValue(undefined)
+    const updateAllowedAccounts = vi.fn().mockResolvedValue(undefined)
+    const groupedAccount = {
+      id: 'grouped-account',
+      email: 'grouped@example.com',
+      name: 'Grouped',
+      accountId: 'acct-grouped',
+      groupIds: ['group-1'],
+      createdAt: '2026-01-01T00:00:00.000Z',
+      updatedAt: '2026-01-01T00:00:00.000Z'
+    }
+
+    const view = renderGateway({
+      allowedGroupIds: [],
+      allowedAccountIds: ['grouped-account'],
+      groups: [{ id: 'group-1', name: '默认组', createdAt: '2026-01-01T00:00:00.000Z' }],
+      accounts: [groupedAccount],
+      updateAllowedGroups,
+      updateAllowedAccounts
+    })
+
+    expect(screen.getByText('grouped@example.com')).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayAllowedTargetsAdd }))
+    await fireEvent.click(screen.getByRole('button', { name: '默认组' }))
+
+    await waitFor(() => expect(updateAllowedGroups).toHaveBeenCalledWith(['group-1']))
+    await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith([]))
+
+    view.unmount()
+
+    renderGateway({
+      allowedGroupIds: ['group-1'],
+      allowedAccountIds: ['grouped-account'],
+      groups: [{ id: 'group-1', name: '默认组', createdAt: '2026-01-01T00:00:00.000Z' }],
+      accounts: [groupedAccount],
+      updateAllowedGroups,
+      updateAllowedAccounts
+    })
 
     expect(screen.queryByText('grouped@example.com')).toBeNull()
-    expect(screen.getByText('standalone@example.com')).toBeTruthy()
-    await waitFor(() => expect(updateAllowedAccounts).toHaveBeenCalledWith(['standalone-account']))
   })
 
   it('shows details for non-200 request logs', async () => {

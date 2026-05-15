@@ -2294,17 +2294,15 @@
   :global(.theme-surface[role='dialog']),
   :global(.wake-dialog-panel) {
     border-radius: 0.75rem !important;
-    border-color: color-mix(in srgb, var(--line-strong) 58%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft)) !important;
-    box-shadow:
-      0 28px 84px -40px rgba(0, 0, 0, 0.48),
-      0 12px 32px -24px rgba(0, 0, 0, 0.36) !important;
+    border-color: var(--line-strong) !important;
+    background: var(--dialog-bg) !important;
+    box-shadow: var(--dialog-shadow) !important;
   }
 
   :global(.theme-import-method-card) {
-    border-color: var(--card-border) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft)) !important;
-    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 56%, transparent);
+    border-color: var(--line-strong) !important;
+    background: var(--surface-soft) !important;
+    box-shadow: none;
     transition:
       background-color 140ms ease,
       border-color 140ms ease,
@@ -2313,11 +2311,9 @@
 
   :global(.theme-import-method-card:hover),
   :global(.theme-import-method-card:focus-visible) {
-    border-color: var(--line-strong) !important;
-    background: var(--surface-soft) !important;
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 76%, transparent),
-      0 0 0 1px color-mix(in srgb, var(--line-strong) 34%, transparent);
+    border-color: var(--color-carbon) !important;
+    background: var(--surface-hover) !important;
+    box-shadow: none;
   }
 
   :global(.wake-dialog-backdrop) {

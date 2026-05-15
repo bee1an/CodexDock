@@ -1,6 +1,6 @@
 <script lang="ts">
   import { flip } from 'svelte/animate'
-  import { onDestroy, onMount } from 'svelte'
+  import { onMount } from 'svelte'
   import { fly, slide } from 'svelte/transition'
   import {
     dragHandle,
@@ -49,7 +49,6 @@
     availableGroupsForAccount,
     filterChipLabel,
     normalizeSelectedAccountIds,
-    groupFilterLabel,
     ungroupedFilterId,
     visibleAccountsForFilter
   } from './accounts-panel-account'
@@ -94,7 +93,6 @@
   export let activateBestAccount: () => void = () => {}
   export let activeGroupFilter = 'all'
   export let selectedAccountIds: string[] = []
-  export let accountWorkbenchExpanded = false
   export let openingAccountId = ''
   export let openingIsolatedAccountId = ''
   export let wakingAccountId = ''
@@ -124,6 +122,7 @@
 
   let expandedAccountIds: string[] = []
   let showPollingMenu = false
+  let pollingMenuAnchorRect: DOMRect | null = null
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
   let tokensLoadingAccountId = ''
   let tokensErrorByAccountId: Record<string, string> = {}
@@ -194,11 +193,6 @@
   let removingSelection = false
   let removingGroupLink = ''
   let updatingHealthAccountId = ''
-  let accountWorkbenchRendered = accountWorkbenchExpanded
-  let accountWorkbenchPanelOpen = accountWorkbenchExpanded
-  let lastAccountWorkbenchExpanded = accountWorkbenchExpanded
-  let accountWorkbenchCloseTimer: number | null = null
-  let accountWorkbenchOpenFrame: number | null = null
 
   $: if (
     activeGroupFilter !== 'all' &&
@@ -222,20 +216,10 @@
     sortableAccounts = visibleAccounts
   }
 
-  $: if (accountWorkbenchExpanded !== lastAccountWorkbenchExpanded) {
-    lastAccountWorkbenchExpanded = accountWorkbenchExpanded
-    if (accountWorkbenchExpanded) {
-      openAccountWorkbenchPanel()
-    } else {
-      closeAccountWorkbenchPanel()
-    }
-  }
-
   $: selectedVisibleCount = selectedAccountIds.length
   $: allVisibleSelected =
     visibleAccounts.length > 0 && selectedVisibleCount === visibleAccounts.length
   $: showAccountFilterTools = accounts.length > 0 || groups.length > 0
-  $: showAccountSelectionTools = visibleAccounts.length > 0 || selectedVisibleCount > 0
   $: if (
     usageErrorPopoverAccountId &&
     !accounts.some((account) => account.id === usageErrorPopoverAccountId)
@@ -297,6 +281,7 @@
     closeAccountActionMenu()
     closeAccountGroupMenu()
     closeUsageErrorPopover()
+    closePollingMenu()
     tagVisibilityMenuAnchorRect =
       (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() ?? null
     tagVisibilityMenuOpen = true
@@ -305,6 +290,34 @@
   function closeTagVisibilityMenu(): void {
     tagVisibilityMenuOpen = false
     tagVisibilityMenuAnchorRect = null
+  }
+
+  function togglePollingMenu(event: MouseEvent): void {
+    event.stopPropagation()
+
+    if (showPollingMenu) {
+      closePollingMenu()
+      return
+    }
+
+    const trigger = event.currentTarget as HTMLElement | null
+    if (!trigger) {
+      return
+    }
+
+    closeAccountActionMenu()
+    closeAccountGroupMenu()
+    closeUsageErrorPopover()
+    closeTagVisibilityMenu()
+    pollingMenuAnchorRect =
+      trigger.closest<HTMLElement>('[data-polling-menu-trigger]')?.getBoundingClientRect() ??
+      trigger.getBoundingClientRect()
+    showPollingMenu = true
+  }
+
+  function closePollingMenu(): void {
+    showPollingMenu = false
+    pollingMenuAnchorRect = null
   }
 
   function toggleTagSetting(key: keyof TagVisibilitySettings): void {
@@ -420,57 +433,6 @@
     selectedAccountIds = selectedAccountIds.filter(
       (selectedAccountId) => selectedAccountId !== accountId
     )
-  }
-
-  function panelCloseDurationMs(): number {
-    if (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      return 0
-    }
-
-    return (
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--panel-close-dur')
-      ) || 350
-    )
-  }
-
-  function clearAccountWorkbenchMotionTimers(): void {
-    if (accountWorkbenchCloseTimer != null) {
-      window.clearTimeout(accountWorkbenchCloseTimer)
-      accountWorkbenchCloseTimer = null
-    }
-    if (accountWorkbenchOpenFrame != null) {
-      window.cancelAnimationFrame(accountWorkbenchOpenFrame)
-      accountWorkbenchOpenFrame = null
-    }
-  }
-
-  function openAccountWorkbenchPanel(): void {
-    clearAccountWorkbenchMotionTimers()
-    accountWorkbenchRendered = true
-    accountWorkbenchPanelOpen = false
-    accountWorkbenchOpenFrame = window.requestAnimationFrame(() => {
-      accountWorkbenchOpenFrame = null
-      accountWorkbenchPanelOpen = true
-    })
-  }
-
-  function closeAccountWorkbenchPanel(): void {
-    if (!accountWorkbenchRendered) {
-      accountWorkbenchPanelOpen = false
-      return
-    }
-
-    clearAccountWorkbenchMotionTimers()
-    accountWorkbenchPanelOpen = false
-    accountWorkbenchCloseTimer = window.setTimeout(() => {
-      accountWorkbenchCloseTimer = null
-      accountWorkbenchRendered = false
-    }, panelCloseDurationMs())
   }
 
   async function exportCurrentSelection(): Promise<void> {
@@ -670,6 +632,7 @@
         closeAccountGroupMenu()
         closeUsageErrorPopover()
         closeTagVisibilityMenu()
+        closePollingMenu()
       }
     }
     const handleScroll = (): void => {
@@ -677,6 +640,7 @@
       closeAccountGroupMenu()
       closeUsageErrorPopover()
       closeTagVisibilityMenu()
+      closePollingMenu()
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)
@@ -687,8 +651,6 @@
       window.removeEventListener('scroll', handleScroll, true)
     }
   })
-
-  onDestroy(clearAccountWorkbenchMotionTimers)
 </script>
 
 <svelte:window
@@ -697,6 +659,7 @@
     closeAccountGroupMenu()
     closeUsageErrorPopover()
     closeTagVisibilityMenu()
+    closePollingMenu()
   }}
 />
 
@@ -833,36 +796,42 @@
         </div>
       {/if}
     </div>
-    <div class="relative inline-flex items-center" use:floatingAnchor={{ id: 'polling-menu' }}>
+    <AppButton
+      variant="secondary"
+      size="xs"
+      onclick={refreshAllRateLimits}
+      disabled={loginActionBusy || refreshingAllUsage}
+      ariaLabel={copy.refreshAllQuota}
+      title={copy.refreshAllQuota}
+    >
+      <span
+        class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+      ></span>
+    </AppButton>
+    <div class="relative inline-flex" data-polling-menu-trigger="">
       <AppButton
         variant="secondary"
         size="xs"
-        onclick={refreshAllRateLimits}
-        disabled={loginActionBusy || refreshingAllUsage}
-        ariaLabel={copy.refreshAllQuota}
-        title={copy.refreshAllQuota}
-      >
-        <span
-          class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
-        ></span>
-      </AppButton>
-      <button
-        class="inline-flex h-6 w-4 items-center justify-center rounded-r-[0.35rem] border-0 bg-transparent text-muted-strong transition-colors hover:text-carbon"
-        type="button"
-        aria-label={copy.pollingInterval}
+        onclick={togglePollingMenu}
+        ariaLabel={copy.pollingInterval}
         title={copy.pollingInterval}
-        onclick={() => {
-          showPollingMenu = !showPollingMenu
-        }}
       >
-        <span class="i-lucide-chevron-down h-3 w-3"></span>
-      </button>
+        <span class="i-lucide-timer h-3.5 w-3.5"></span>
+      </AppButton>
 
       {#if showPollingMenu}
         <div
-          class="polling-menu theme-soft-panel absolute right-0 top-full z-50 mt-1 min-w-[8rem] rounded-[0.45rem] border border-[var(--card-border)] py-1 shadow-md"
           use:portal
+          use:floatingAnchor={{
+            anchorRect: pollingMenuAnchorRect,
+            minWidth: 128,
+            matchAnchorWidth: false,
+            align: 'end'
+          }}
           use:stopFloatingPointerPropagation
+          data-floating-root=""
+          transition:fly={{ y: -6, duration: 200 }}
+          class="polling-menu theme-soft-panel z-[999] min-w-[8rem] rounded-[0.45rem] border border-[var(--card-border)] py-1 shadow-md"
         >
           <p class="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-faint">
             {copy.pollingInterval}
@@ -873,7 +842,7 @@
               type="button"
               onclick={() => {
                 updatePollingInterval(option)
-                showPollingMenu = false
+                closePollingMenu()
               }}
             >
               <span
@@ -898,219 +867,130 @@
   </div>
 </div>
 
-<div class="theme-workbench-toolbar border-b border-[var(--workbench-border)] px-4 py-1.5">
-  <button
-    class="theme-workbench-toggle flex w-full items-center justify-between gap-3 rounded-[0.35rem] border-0 bg-transparent px-1.5 py-1 text-left transition-colors duration-140 hover:bg-[var(--workbench-toggle-hover-bg)]"
-    type="button"
-    aria-expanded={accountWorkbenchExpanded}
-    aria-controls="account-workbench-panel"
-    aria-label={accountWorkbenchExpanded
-      ? copy.hideFiltersAndBulkActions
-      : copy.showFiltersAndBulkActions}
-    title={accountWorkbenchExpanded
-      ? copy.hideFiltersAndBulkActions
-      : copy.showFiltersAndBulkActions}
-    onclick={() => {
-      accountWorkbenchExpanded = !accountWorkbenchExpanded
-    }}
-  >
-    <div class="min-w-0 flex flex-wrap items-center gap-2">
-      <span class="i-lucide-sliders-horizontal h-3.5 w-3.5 flex-none text-muted-strong"></span>
-      <span class="text-[10px] font-medium uppercase tracking-[0.12em] text-faint">
-        {copy.filtersAndBulkActions}
-      </span>
-    </div>
-
-    {#if !accountWorkbenchExpanded && (selectedVisibleCount || activeGroupFilter !== 'all')}
-      <span
-        class="theme-workbench-collapsed-summary ml-auto flex min-w-0 flex-wrap items-center justify-end gap-1.5"
+{#if showAccountFilterTools}
+  <div class="border-b border-[var(--workbench-border)] px-4 py-2">
+    <div class="flex items-center justify-between gap-2">
+      <div class="flex flex-wrap gap-1.5">
+        <AppButton
+          variant="filter"
+          size="xs"
+          selected={activeGroupFilter === 'all'}
+          ariaPressed={activeGroupFilter === 'all'}
+          onclick={() => {
+            activeGroupFilter = 'all'
+          }}
+        >
+          {filterChipLabel(accounts, 'all', groups, copy)}
+        </AppButton>
+        <AppButton
+          variant="filter"
+          size="xs"
+          selected={activeGroupFilter === ungroupedFilterId}
+          ariaPressed={activeGroupFilter === ungroupedFilterId}
+          onclick={() => {
+            activeGroupFilter = ungroupedFilterId
+          }}
+        >
+          {filterChipLabel(accounts, ungroupedFilterId, groups, copy)}
+        </AppButton>
+        {#each groups as group (group.id)}
+          <AppButton
+            variant="filter"
+            size="xs"
+            selected={activeGroupFilter === group.id}
+            ariaPressed={activeGroupFilter === group.id}
+            onclick={() => {
+              activeGroupFilter = group.id
+            }}
+          >
+            {filterChipLabel(accounts, group.id, groups, copy)}
+          </AppButton>
+        {/each}
+      </div>
+      <AppButton
+        variant="secondary"
+        size="xs"
+        class="gap-1.5"
+        onclick={openGroupManager}
+        disabled={loginActionBusy || groupMutationBusy}
+        ariaLabel={copy.manageGroups}
       >
-        {#if selectedVisibleCount}
-          <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
-          >
-            <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
-            <span class="truncate">{copy.selectedAccountCount(selectedVisibleCount)}</span>
-          </span>
-        {/if}
-
-        {#if activeGroupFilter !== 'all'}
-          <span
-            class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium leading-none text-carbon"
-          >
-            <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
-            <span class="max-w-[12rem] truncate"
-              >{groupFilterLabel(activeGroupFilter, groups, copy)}</span
-            >
-          </span>
-        {/if}
-      </span>
-    {/if}
-
-    <span
-      class={`theme-workbench-chevron inline-flex h-6 w-6 items-center justify-center rounded-[0.35rem] border border-[var(--chevron-border)] bg-[var(--chevron-bg)] text-[var(--chevron-color)] transition-[transform,background-color,color] duration-180 ${
-        accountWorkbenchExpanded ? 'rotate-180' : ''
-      }`}
-    >
-      <span class="i-lucide-chevron-down h-4 w-4"></span>
-    </span>
-  </button>
-
-  {#if accountWorkbenchRendered}
-    <div
-      id="account-workbench-panel"
-      class="t-panel-slide grid gap-2 px-2 pb-2 pt-1"
-      data-open={accountWorkbenchPanelOpen ? 'true' : 'false'}
-      style="--panel-translate-y: 12px;"
-    >
-      {#if showAccountFilterTools}
-        <div class="grid gap-1.5">
-          <div class="flex items-center justify-between gap-2">
-            <p class="text-[10px] font-medium uppercase tracking-[0.08em] text-faint">
-              {copy.filterByGroup}
-            </p>
-            <AppButton
-              variant="secondary"
-              size="xs"
-              class="gap-1.5"
-              onclick={openGroupManager}
-              disabled={loginActionBusy || groupMutationBusy}
-              ariaLabel={copy.manageGroups}
-            >
-              <span class="i-lucide-settings-2 h-3.5 w-3.5"></span>
-              <span>{copy.manageGroups}</span>
-            </AppButton>
-          </div>
-          <div class="flex flex-wrap gap-1.5">
-            <AppButton
-              variant="filter"
-              size="xs"
-              selected={activeGroupFilter === 'all'}
-              ariaPressed={activeGroupFilter === 'all'}
-              onclick={() => {
-                activeGroupFilter = 'all'
-              }}
-            >
-              {filterChipLabel(accounts, 'all', groups, copy)}
-            </AppButton>
-            <AppButton
-              variant="filter"
-              size="xs"
-              selected={activeGroupFilter === ungroupedFilterId}
-              ariaPressed={activeGroupFilter === ungroupedFilterId}
-              onclick={() => {
-                activeGroupFilter = ungroupedFilterId
-              }}
-            >
-              {filterChipLabel(accounts, ungroupedFilterId, groups, copy)}
-            </AppButton>
-            {#each groups as group (group.id)}
-              <AppButton
-                variant="filter"
-                size="xs"
-                selected={activeGroupFilter === group.id}
-                ariaPressed={activeGroupFilter === group.id}
-                onclick={() => {
-                  activeGroupFilter = group.id
-                }}
-              >
-                {filterChipLabel(accounts, group.id, groups, copy)}
-              </AppButton>
-            {/each}
-          </div>
-        </div>
-      {/if}
-
-      {#if showAccountSelectionTools}
-        <div
-          class={`theme-selection-toolbar flex flex-wrap items-center justify-between gap-2 border-t border-[var(--card-border)] pt-3 ${
-            selectedVisibleCount ? 'theme-selection-toolbar-active' : 'theme-selection-toolbar-idle'
-          }`}
-        >
-          <div class="flex min-w-0 flex-wrap items-center gap-1.5">
-            {#if selectedVisibleCount}
-              <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium text-carbon"
-              >
-                <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
-                <span>{copy.selectedAccountCount(selectedVisibleCount)}</span>
-              </span>
-            {/if}
-
-            {#if activeGroupFilter !== 'all'}
-              <span
-                class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium text-carbon"
-              >
-                <span class="i-lucide-tags h-3 w-3 text-muted-strong"></span>
-                <span>{groupFilterLabel(activeGroupFilter, groups, copy)}</span>
-              </span>
-            {/if}
-          </div>
-
-          <div class="flex flex-wrap items-center justify-end gap-1.5">
-            {#if visibleAccounts.length && !allVisibleSelected}
-              <AppButton
-                variant="secondary"
-                size="xs"
-                class="min-w-[108px]"
-                onclick={selectAllVisibleAccounts}
-                disabled={loginActionBusy || !visibleAccounts.length}
-              >
-                <span class="i-lucide-check-check h-3.5 w-3.5"></span>
-                <span>{copy.selectAllVisibleAccounts}</span>
-              </AppButton>
-            {/if}
-
-            {#if selectedVisibleCount}
-              <AppButton
-                variant="secondary"
-                size="xs"
-                class="min-w-[96px]"
-                onclick={clearSelectedAccounts}
-                disabled={loginActionBusy}
-              >
-                <span class="i-lucide-eraser h-3.5 w-3.5"></span>
-                <span>{copy.clearSelectedAccounts}</span>
-              </AppButton>
-
-              <AppButton
-                variant="secondary"
-                size="xs"
-                class="min-w-[104px]"
-                onclick={() => void exportCurrentSelection()}
-                disabled={loginActionBusy}
-              >
-                <span class="i-lucide-download h-3.5 w-3.5"></span>
-                <span>{copy.exportSelectedAccounts}</span>
-              </AppButton>
-
-              <AppButton
-                variant="danger"
-                size="xs"
-                class="min-w-[104px]"
-                onclick={() => void removeCurrentSelection()}
-                disabled={loginActionBusy || removingSelection}
-              >
-                {#if removingSelection}
-                  <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
-                {:else}
-                  <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
-                {/if}
-                <span>{copy.deleteSelectedAccounts}</span>
-              </AppButton>
-            {/if}
-          </div>
-        </div>
-      {:else if !showAccountFilterTools}
-        <div
-          class="theme-workbench-empty rounded-[0.85rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-3 py-3 text-[12px] text-muted-strong"
-        >
-          {copy.emptyFilterTools}
-        </div>
-      {/if}
+        <span class="i-lucide-settings-2 h-3.5 w-3.5"></span>
+        <span>{copy.manageGroups}</span>
+      </AppButton>
     </div>
-  {/if}
-</div>
+  </div>
+{/if}
+
+{#if selectedVisibleCount}
+  <div
+    class="border-b border-[var(--workbench-border)] px-4 py-2"
+    transition:slide={{ duration: 200 }}
+  >
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+        <span
+          class="theme-workbench-summary-pill inline-flex items-center gap-1 rounded-[0.32rem] border border-[var(--pill-border)] bg-[var(--pill-bg)] px-1.5 py-0.5 text-[10px] font-medium text-carbon"
+        >
+          <span class="i-lucide-check-check h-3 w-3 text-muted-strong"></span>
+          <span>{copy.selectedAccountCount(selectedVisibleCount)}</span>
+        </span>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-end gap-1.5">
+        {#if visibleAccounts.length && !allVisibleSelected}
+          <AppButton
+            variant="secondary"
+            size="xs"
+            class="min-w-[108px]"
+            onclick={selectAllVisibleAccounts}
+            disabled={loginActionBusy || !visibleAccounts.length}
+          >
+            <span class="i-lucide-check-check h-3.5 w-3.5"></span>
+            <span>{copy.selectAllVisibleAccounts}</span>
+          </AppButton>
+        {/if}
+
+        <AppButton
+          variant="secondary"
+          size="xs"
+          class="min-w-[96px]"
+          onclick={clearSelectedAccounts}
+          disabled={loginActionBusy}
+        >
+          <span class="i-lucide-eraser h-3.5 w-3.5"></span>
+          <span>{copy.clearSelectedAccounts}</span>
+        </AppButton>
+
+        <AppButton
+          variant="secondary"
+          size="xs"
+          class="min-w-[104px]"
+          onclick={() => void exportCurrentSelection()}
+          disabled={loginActionBusy}
+        >
+          <span class="i-lucide-download h-3.5 w-3.5"></span>
+          <span>{copy.exportSelectedAccounts}</span>
+        </AppButton>
+
+        <AppButton
+          variant="danger"
+          size="xs"
+          class="min-w-[104px]"
+          onclick={() => void removeCurrentSelection()}
+          disabled={loginActionBusy || removingSelection}
+        >
+          {#if removingSelection}
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+          {:else}
+            <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+          {/if}
+          <span>{copy.deleteSelectedAccounts}</span>
+        </AppButton>
+      </div>
+    </div>
+  </div>
+{/if}
 
 {#if visibleAccounts.length && quotaSummary.totalAccounts > 0 && tagVisibility.quotaSummary !== false}
   <div class="px-4 pt-3" transition:slide={{ duration: 200 }}>
@@ -1175,7 +1055,7 @@
 {/if}
 
 {#if visibleAccounts.length}
-  <div class="accounts-scrollbar min-h-0 flex-1 overflow-y-auto px-4">
+  <div class="min-h-0 flex-1 overflow-y-auto px-4">
     <div
       class="grid"
       use:dragHandleZone={{
@@ -1883,31 +1763,6 @@
     display: none;
   }
 
-  .accounts-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-thumb {
-    border: 2px solid transparent;
-    border-radius: 999px;
-    background-clip: padding-box;
-    background-color: var(--scrollbar-thin-thumb);
-  }
-
-  .accounts-scrollbar::-webkit-scrollbar-thumb:hover {
-    background-color: var(--scrollbar-thin-thumb-hover);
-  }
-
   .theme-account-divider {
     height: 1px;
     background: var(--row-divider);
@@ -1919,17 +1774,6 @@
 
   .theme-account-expand-btn.is-expanded :global(.i-lucide-chevron-down) {
     transform: rotate(180deg);
-  }
-
-  .theme-selection-toolbar-idle,
-  .theme-selection-toolbar-active {
-    opacity: 1;
-  }
-
-  .theme-workbench-toggle:hover .theme-workbench-chevron,
-  .theme-workbench-toggle:focus-visible .theme-workbench-chevron {
-    background: var(--surface-hover);
-    color: var(--color-carbon);
   }
 
   .account-drag-button {

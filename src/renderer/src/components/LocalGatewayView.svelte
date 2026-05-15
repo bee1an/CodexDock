@@ -97,12 +97,22 @@
 
   const toggleAllowedGroup = async (groupId: string): Promise<void> => {
     if (allowedGroupsBusy) return
-    const next = allowedGroupIds.includes(groupId)
+    const groupSelected = allowedGroupIds.includes(groupId)
+    const next = groupSelected
       ? allowedGroupIds.filter((id) => id !== groupId)
       : [...allowedGroupIds, groupId]
+    const nextAllowedAccountIds = groupSelected
+      ? allowedAccountIds
+      : allowedAccountIds.filter((id) => {
+          const account = accounts.find((item) => item.id === id)
+          return !account?.groupIds.includes(groupId)
+        })
     allowedGroupsBusy = true
     try {
       await updateAllowedGroups(next)
+      if (nextAllowedAccountIds.length !== allowedAccountIds.length) {
+        await updateAllowedAccounts(nextAllowedAccountIds)
+      }
     } finally {
       allowedGroupsBusy = false
     }
@@ -111,8 +121,8 @@
   const toggleAllowedAccount = async (accountId: string): Promise<void> => {
     if (allowedAccountsBusy) return
     const next = allowedAccountIdSet.has(accountId)
-      ? allowedStandaloneAccountIds.filter((id) => id !== accountId)
-      : [...allowedStandaloneAccountIds, accountId]
+      ? allowedSelectableAccountIds.filter((id) => id !== accountId)
+      : [...allowedSelectableAccountIds, accountId]
     allowedAccountsBusy = true
     try {
       await updateAllowedAccounts(next)
@@ -443,17 +453,19 @@
     (log) => matchesStatusFilter(log, statusFilter) && matchesSearch(log, normalizedLogSearch)
   )
   $: allowedGroupIdSet = new Set(allowedGroupIds)
-  $: standaloneAccounts = accounts.filter((account) => account.groupIds.length === 0)
-  $: standaloneAccountIdSet = new Set(standaloneAccounts.map((account) => account.id))
-  $: allowedStandaloneAccountIds = allowedAccountIds.filter((id) => standaloneAccountIdSet.has(id))
-  $: allowedAccountIdSet = new Set(allowedStandaloneAccountIds)
-  $: selectedStandaloneAccounts = standaloneAccounts.filter((account) =>
+  $: selectableAccounts = accounts.filter(
+    (account) => !account.groupIds.some((groupId) => allowedGroupIdSet.has(groupId))
+  )
+  $: selectableAccountIdSet = new Set(selectableAccounts.map((account) => account.id))
+  $: allowedSelectableAccountIds = allowedAccountIds.filter((id) => selectableAccountIdSet.has(id))
+  $: allowedAccountIdSet = new Set(allowedSelectableAccountIds)
+  $: selectedAccounts = selectableAccounts.filter((account) =>
     allowedAccountIdSet.has(account.id)
   )
-  $: availableStandaloneAccounts = standaloneAccounts.filter(
+  $: availableAccounts = selectableAccounts.filter(
     (account) => !allowedAccountIdSet.has(account.id)
   )
-  $: allowedTargetCount = allowedGroupIds.length + selectedStandaloneAccounts.length
+  $: allowedTargetCount = allowedGroupIds.length + selectedAccounts.length
   $: hasAllowedEntities = allowedTargetCount > 0
   $: allowedProviderIdSet = new Set(allowedProviderIds)
   $: selectedProviders = providers.filter((p) => allowedProviderIdSet.has(p.id))
@@ -583,7 +595,7 @@
   </div>
 
   <div
-    class="gateway-scroll gateway-scrollbar flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden"
+    class="gateway-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden"
   >
     {#if shouldShowGatewayError}
       <div
@@ -655,6 +667,23 @@
             </div>
           </div>
           <div class="flex flex-none items-center gap-1.5">
+            <AppButton
+              variant="secondary"
+              size="xs"
+              onclick={() => {
+                showMappingDialog = true
+              }}
+              ariaLabel={copy.localGatewayModelMappingsManage}
+              title={copy.localGatewayModelMappingsHint}
+            >
+              <span class="i-lucide-arrow-left-right h-3.5 w-3.5" aria-hidden="true"></span>
+              <span>{copy.localGatewayModelMappingsManage}</span>
+              <span
+                class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
+              >
+                {formatNumber(modelMappings.length)}
+              </span>
+            </AppButton>
             {#if showPortEdit}
               <div class="flex items-center gap-1">
                 <input
@@ -894,23 +923,6 @@
             </p>
           </div>
         </div>
-        <AppButton
-          variant="secondary"
-          size="xs"
-          onclick={() => {
-            showMappingDialog = true
-          }}
-        >
-          <span class="i-lucide-arrow-left-right h-3.5 w-3.5" aria-hidden="true"></span>
-          <span>{copy.localGatewayModelMappingsManage}</span>
-          {#if modelMappings.length}
-            <span
-              class="gateway-status-pill inline-flex items-center rounded border px-1.5 py-0.5 text-[9px] font-mono font-medium tabular-nums text-muted-strong"
-            >
-              {formatNumber(modelMappings.length)}
-            </span>
-          {/if}
-        </AppButton>
       </div>
 
       <div class="flex flex-col gap-2 p-3">
@@ -921,20 +933,20 @@
               size="xs"
               selected
               ariaPressed={true}
-              disabled={allowedGroupsBusy || localGatewayBusy}
+              disabled={allowedGroupsBusy || allowedAccountsBusy || localGatewayBusy}
               onclick={() => void toggleAllowedGroup(group.id)}
             >
               <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
               <span>{group.name}</span>
             </AppButton>
           {/each}
-          {#each selectedStandaloneAccounts as account (account.id)}
+          {#each selectedAccounts as account (account.id)}
             <AppButton
               variant="filter"
               size="xs"
               selected
               ariaPressed={true}
-              disabled={allowedAccountsBusy || localGatewayBusy}
+              disabled={allowedAccountsBusy || allowedGroupsBusy || localGatewayBusy}
               onclick={() => void toggleAllowedAccount(account.id)}
             >
               <span class="i-lucide-check h-3 w-3" aria-hidden="true"></span>
@@ -964,20 +976,20 @@
                 size="xs"
                 selected={false}
                 ariaPressed={false}
-                disabled={allowedGroupsBusy || localGatewayBusy}
+                disabled={allowedGroupsBusy || allowedAccountsBusy || localGatewayBusy}
                 onclick={() => void toggleAllowedGroup(group.id)}
               >
                 <span class="i-lucide-folder h-3 w-3" aria-hidden="true"></span>
                 <span>{group.name}</span>
               </AppButton>
             {/each}
-            {#each availableStandaloneAccounts as account (account.id)}
+            {#each availableAccounts as account (account.id)}
               <AppButton
                 variant="filter"
                 size="xs"
                 selected={false}
                 ariaPressed={false}
-                disabled={allowedAccountsBusy || localGatewayBusy}
+                disabled={allowedAccountsBusy || allowedGroupsBusy || localGatewayBusy}
                 onclick={() => void toggleAllowedAccount(account.id)}
               >
                 <span class="i-lucide-user h-3 w-3" aria-hidden="true"></span>
@@ -1042,7 +1054,6 @@
         {/if}
       </div>
     </section>
-
 
     <section
       class="gateway-panel gateway-logs-panel rounded-[0.45rem] border"
@@ -1176,7 +1187,7 @@
 
       <div class="gateway-table-container">
         {#if visibleLogs.length}
-          <div class="gateway-scrollbar max-h-[400px] overflow-y-auto overflow-x-auto">
+          <div class="max-h-[400px] overflow-y-auto overflow-x-auto">
             <table class="w-full text-left text-xs" aria-label={copy.localGatewayLogs}>
               <thead
                 class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
@@ -1413,17 +1424,18 @@
     scrollable
     closeDisabled={mappingBusy}
     maxWidthClass="max-w-2xl"
+    motionSelector="[data-local-gateway-mapping-dialog-motion]"
     onclose={() => {
       if (!mappingBusy) showMappingDialog = false
     }}
   >
-    <div class="grid gap-4">
-      <div class="flex flex-wrap items-center gap-2" data-dialog-motion>
+    <div class="grid gap-3">
+      <div class="gateway-mapping-grid" data-dialog-motion>
         <AppInput
           id="local-gateway-mapping-from"
           name="local-gateway-mapping-from"
           size="xs"
-          class="min-w-[180px] flex-1"
+          class="min-w-0"
           autocomplete="off"
           spellcheck={false}
           placeholder={copy.localGatewayModelMappingFromPlaceholder}
@@ -1431,30 +1443,32 @@
           onkeydown={onAddMappingKey}
         />
         <span
-          class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-muted-strong"
+          class="i-lucide-arrow-right h-3.5 w-3.5 text-muted-strong justify-self-center"
           aria-hidden="true"
         ></span>
         <AppInput
           id="local-gateway-mapping-to"
           name="local-gateway-mapping-to"
           size="xs"
-          class="min-w-[180px] flex-1"
+          class="min-w-0"
           autocomplete="off"
           spellcheck={false}
           placeholder={copy.localGatewayModelMappingToPlaceholder}
           bind:value={draftTo}
           onkeydown={onAddMappingKey}
         />
-        <AppButton
-          variant="primary"
-          size="xs"
-          onclick={() => void addMapping()}
-          disabled={mappingBusy || !draftFrom.trim() || !draftTo.trim()}
-          ariaLabel={copy.localGatewayModelMappingAdd}
-        >
-          <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
-          <span>{copy.localGatewayModelMappingAdd}</span>
-        </AppButton>
+        <div class="gateway-mapping-action-cell gateway-mapping-action-cell-full">
+          <AppButton
+            variant="primary"
+            size="xs"
+            onclick={() => void addMapping()}
+            disabled={mappingBusy || !draftFrom.trim() || !draftTo.trim()}
+            ariaLabel={copy.localGatewayModelMappingAdd}
+          >
+            <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
+            <span>{copy.localGatewayModelMappingAdd}</span>
+          </AppButton>
+        </div>
       </div>
 
       {#if mappingError}
@@ -1464,39 +1478,38 @@
       {/if}
 
       {#if modelMappings.length}
-        <ul class="gateway-mapping-list flex flex-col divide-y" data-dialog-motion>
+        <div class="gateway-mapping-table rounded-[0.4rem] border border-[var(--card-border)]" data-dialog-motion>
           {#each modelMappings as entry (entry.from)}
-            <li
-              class="flex items-center gap-2 px-1 py-2"
-            >
+            <div class="gateway-mapping-row gateway-mapping-grid px-3 py-2.5">
               <code
-                class="min-w-0 flex-1 truncate font-mono text-[11px] text-carbon"
+                class="gateway-mapping-code min-w-0 truncate font-mono text-[12px] text-carbon"
                 title={entry.from}
                 translate="no">{entry.from}</code
               >
               <span
-                class="i-lucide-arrow-right h-3.5 w-3.5 flex-none text-faint"
+                class="i-lucide-arrow-right h-3.5 w-3.5 text-faint justify-self-center"
                 aria-hidden="true"
               ></span>
               <code
-                class="min-w-0 flex-1 truncate font-mono text-[11px] text-carbon"
+                class="gateway-mapping-code min-w-0 truncate font-mono text-[12px] text-carbon"
                 title={entry.to}
                 translate="no">{entry.to}</code
               >
-              <AppButton
-                variant="icon"
-                size="xs"
-                class="flex-none"
-                onclick={() => void removeMapping(entry.from)}
-                disabled={mappingBusy}
-                ariaLabel={copy.localGatewayModelMappingRemove}
-                title={copy.localGatewayModelMappingRemove}
-              >
-                <span class="i-lucide-trash-2 h-3.5 w-3.5" aria-hidden="true"></span>
-              </AppButton>
-            </li>
+              <div class="gateway-mapping-action-cell">
+                <AppButton
+                  variant="icon"
+                  size="xs"
+                  onclick={() => void removeMapping(entry.from)}
+                  disabled={mappingBusy}
+                  ariaLabel={copy.localGatewayModelMappingRemove}
+                  title={copy.localGatewayModelMappingRemove}
+                >
+                  <span class="i-lucide-trash-2 h-3.5 w-3.5" aria-hidden="true"></span>
+                </AppButton>
+              </div>
+            </div>
           {/each}
-        </ul>
+        </div>
       {:else}
         <p class="text-[11px] leading-4 text-faint" data-dialog-motion>
           {copy.localGatewayModelMappingsEmpty}
@@ -1522,11 +1535,6 @@
 <style>
   .gateway-container {
     background: transparent;
-  }
-
-  .gateway-scrollbar {
-    scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar-thin-thumb) transparent;
   }
 
   .gateway-toolbar {
@@ -1718,9 +1726,51 @@
     background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
   }
 
-  .gateway-mapping-list {
-    --tw-divide-opacity: 1;
-    border-color: color-mix(in srgb, var(--line-strong) 50%, transparent);
+  .gateway-mapping-table {
+    background: color-mix(in srgb, var(--panel-strong) 76%, var(--surface-soft));
+    overflow: hidden;
+  }
+
+  .gateway-mapping-grid {
+    --gateway-mapping-action-width: 6.75rem;
+
+    display: grid;
+    grid-template-columns:
+      minmax(0, 1fr) auto minmax(0, 1fr)
+      var(--gateway-mapping-action-width);
+    align-items: center;
+    column-gap: 0.5rem;
+  }
+
+  .gateway-mapping-action-cell {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gateway-mapping-action-cell-full :global(.app-button) {
+    width: 100%;
+  }
+
+  .gateway-mapping-row {
+    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 36%, transparent);
+    transition: background-color 140ms ease;
+  }
+
+  .gateway-mapping-row:last-child {
+    border-bottom: none;
+  }
+
+  .gateway-mapping-row:hover {
+    background: var(--surface-hover);
+  }
+
+  .gateway-mapping-code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-weight: 400;
   }
 
   .gateway-method-get {

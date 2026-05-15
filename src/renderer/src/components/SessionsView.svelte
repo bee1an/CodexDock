@@ -102,6 +102,16 @@
   let trashBusy = false
   let trashError = ''
   let trashNotice = ''
+  let trashNoticeTimer: ReturnType<typeof setTimeout> | null = null
+
+  function showTrashNotice(message: string): void {
+    trashNotice = message
+    if (trashNoticeTimer) clearTimeout(trashNoticeTimer)
+    trashNoticeTimer = setTimeout(() => {
+      trashNotice = ''
+      trashNoticeTimer = null
+    }, 4000)
+  }
   let trashProgress = { completed: 0, total: 0 }
   let copiedInstancesById: Record<string, CodexInstanceSummary> = {}
   let allKnownInstances: CodexInstanceSummary[] = []
@@ -655,12 +665,13 @@
     }
 
     if (successCount > 0 && failedSessions.length === 0) {
-      trashNotice =
+      showTrashNotice(
         successCount === 1 ? copy.sessionsTrashSuccess : copy.sessionsBulkTrashSuccess(successCount)
+      )
       trashTargetSession = null
       trashTargetSessions = []
     } else if (failedSessions.length > 0 && successCount > 0) {
-      trashNotice = copy.sessionsBulkTrashFailureCount(failedSessions.length)
+      showTrashNotice(copy.sessionsBulkTrashFailureCount(failedSessions.length))
       trashTargetSessions = failedSessions
       trashTargetSession = failedSessions[0]
     }
@@ -1593,16 +1604,19 @@
 
   {#if trashNotice}
     <div
-      class="fixed bottom-4 right-4 z-50 rounded-lg border border-[var(--card-border)] bg-[var(--panel-strong)] px-4 py-3 text-sm text-carbon shadow-lg"
+      class="fixed bottom-4 right-4 z-50 flex items-center gap-3 rounded-lg border border-[var(--line-strong)] bg-[var(--surface-soft)] px-4 py-3 text-sm text-carbon shadow-[0_8px_32px_-8px_rgba(0,0,0,0.4)]"
     >
-      {trashNotice}
+      <span>{trashNotice}</span>
       <button
-        class="ml-3 text-xs text-muted-strong hover:text-carbon"
+        class="inline-flex h-5 w-5 flex-none items-center justify-center rounded-[0.25rem] border-0 bg-transparent p-0 text-muted-strong transition-colors hover:bg-[var(--surface-hover)] hover:text-carbon"
         type="button"
+        aria-label="Close"
         onclick={() => {
           trashNotice = ''
-        }}>✕</button
+        }}
       >
+        <span class="i-lucide-x h-3.5 w-3.5"></span>
+      </button>
     </div>
   {/if}
 </div>

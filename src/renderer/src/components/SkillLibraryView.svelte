@@ -3,6 +3,8 @@
 
   import type {
     CodexInstanceSummary,
+    CodexSkillSummary,
+    CodexSkillsResult,
     CreateSkillLibraryInput,
     SkillLibraryCategoryList,
     SkillLibraryCollectInput,
@@ -21,6 +23,7 @@
   import AppButtonGroup from './AppButtonGroup.svelte'
   import AppDialog from './AppDialog.svelte'
   import AppInput from './AppInput.svelte'
+  import FloatingSelect, { type FloatingSelectOption } from './FloatingSelect.svelte'
   import { cascadeIn, reveal } from './gsap-motion'
 
   export let copy: LocalizedCopy
@@ -43,11 +46,13 @@
   export let installSkillLibrary: (
     input: SkillLibraryInstallInput
   ) => Promise<SkillLibraryInstallResult>
-  export let importSkillLibraryDir: (dirPath: string) => Promise<SkillLibraryImportResult>
-  export let exportSkillLibraryDir: (targetDir: string) => Promise<SkillLibraryExportResult>
+  export let listCodexSkills: () => Promise<CodexSkillsResult>
+  export let importSkillLibraryDirWithDialog: () => Promise<SkillLibraryImportResult | null>
+  export let exportSkillLibraryDirWithDialog: () => Promise<SkillLibraryExportResult | null>
   export let collectSkillLibrary: (
     input: SkillLibraryCollectInput
   ) => Promise<SkillLibraryCollectResult>
+  export let readSkillLibraryFile: (skillId: string, filePath: string) => Promise<string>
 
   let skills: SkillLibrarySummary[] = []
   let loading = false
@@ -70,9 +75,8 @@
   let createContent = ''
   let createCategories: string[] = []
 
-  // Install dialog
-  let installOpen = false
-  let installSkill: SkillLibrarySummary | null = null
+  // Install (inline, no dialog)
+  let installSkillId = ''
   let installTargetIds: string[] = []
   let installBusy = false
   let installResult: SkillLibraryInstallResult | null = null
@@ -90,11 +94,52 @@
   let importExportMessage = ''
   let collectOpen = false
   let collectInstanceId = ''
-  let collectSkillNames = ''
+  let collectSourceSkills: CodexSkillSummary[] = []
+  let collectSelectedSkillDirNames: string[] = []
   let collectBusy = false
+  let collectScanBusy = false
+  let collectScanError = ''
   let mounted = false
   let lastSearchQuery = ''
   let lastSelectedCategory = ''
+
+  // File viewer
+  let expandedFiles: Record<string, string> = {}
+  let fileLoadingSet: Set<string> = new Set()
+
+  async function toggleFileExpand(filePath: string): Promise<void> {
+    if (expandedFiles[filePath] !== undefined) {
+      const { [filePath]: _, ...rest } = expandedFiles
+      expandedFiles = rest
+      return
+    }
+    if (!currentSkill) return
+    fileLoadingSet = new Set([...fileLoadingSet, filePath])
+    try {
+      const content = await readSkillLibraryFile(currentSkill.id, filePath)
+      expandedFiles = { ...expandedFiles, [filePath]: content }
+    } catch (err) {
+      expandedFiles = {
+        ...expandedFiles,
+        [filePath]: `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
+    } finally {
+      fileLoadingSet = new Set([...fileLoadingSet].filter((f) => f !== filePath))
+    }
+  }
+
+  const floatingSelectButtonClass =
+    'theme-select flex h-9 w-full items-center justify-between rounded-[0.4rem] border border-[var(--empty-border)] bg-transparent px-3 py-2 text-xs text-carbon outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60'
+  const floatingSelectMenuClass = 'theme-tag-picker-surface z-[999] rounded-[0.75rem] p-1.5'
+  const floatingSelectOptionClass =
+    'theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-xs text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]'
+
+  $: collectInstanceOptions = instances.map(
+    (instance): FloatingSelectOption => ({
+      value: instance.id,
+      label: instance.name || instance.id
+    })
+  )
 
   async function loadSkills(): Promise<void> {
     loading = true
@@ -130,6 +175,7 @@
     try {
       currentSkill = await getSkillLibraryDetail(skill.id)
       editMode = false
+      expandedFiles = {}
     } catch (err) {
       error = String(err instanceof Error ? err.message : err)
     }
@@ -193,19 +239,30 @@
     }
   }
 
-  function openInstall(skill: SkillLibrarySummary): void {
-    installSkill = skill
+  function toggleInstall(skill: SkillLibrarySummary): void {
+    if (installSkillId === skill.id) {
+      installSkillId = ''
+      installTargetIds = []
+      installResult = null
+      return
+    }
+    installSkillId = skill.id
     installTargetIds = []
     installResult = null
-    installOpen = true
+  }
+
+  function toggleInstallTarget(instanceId: string): void {
+    installTargetIds = installTargetIds.includes(instanceId)
+      ? installTargetIds.filter((id) => id !== instanceId)
+      : [...installTargetIds, instanceId]
   }
 
   async function confirmInstall(): Promise<void> {
-    if (!installSkill || !installTargetIds.length) return
+    if (!installSkillId || !installTargetIds.length) return
     installBusy = true
     try {
       installResult = await installSkillLibrary({
-        skillId: installSkill.id,
+        skillId: installSkillId,
         targetInstanceIds: installTargetIds
       })
     } catch (err) {
@@ -254,11 +311,11 @@
   }
 
   async function handleImport(): Promise<void> {
-    const dirPath = window.prompt(copy.skillLibraryImportPrompt)
-    if (!dirPath) return
     importExportMessage = ''
+    error = ''
     try {
-      const result = await importSkillLibraryDir(dirPath)
+      const result = await importSkillLibraryDirWithDialog()
+      if (!result) return
       importExportMessage = copy.skillLibraryImportResult(result.imported, result.skipped)
       if (result.errors.length) {
         importExportMessage += ` (${copy.skillLibraryErrorCount(result.errors.length)})`
@@ -270,35 +327,70 @@
   }
 
   async function handleExport(): Promise<void> {
-    const dirPath = window.prompt(copy.skillLibraryExportPrompt)
-    if (!dirPath) return
     importExportMessage = ''
+    error = ''
     try {
-      const result = await exportSkillLibraryDir(dirPath)
+      const result = await exportSkillLibraryDirWithDialog()
+      if (!result) return
       importExportMessage = copy.skillLibraryExportResult(result.exported, result.outputPath)
     } catch (err) {
       error = String(err instanceof Error ? err.message : err)
     }
   }
 
+  async function scanCollectSkills(instanceId = collectInstanceId): Promise<void> {
+    collectScanBusy = true
+    collectScanError = ''
+    collectSourceSkills = []
+    collectSelectedSkillDirNames = []
+    try {
+      const result = await listCodexSkills()
+      collectSourceSkills = result.skills
+        .filter((skill) => skill.instanceId === instanceId)
+        .sort((a, b) => a.name.localeCompare(b.name))
+      collectSelectedSkillDirNames = collectSourceSkills.map((skill) => skill.skillDirName)
+      collectScanError = result.errorsByInstanceId[instanceId] ?? ''
+    } catch (err) {
+      collectScanError = String(err instanceof Error ? err.message : err)
+    } finally {
+      collectScanBusy = false
+    }
+  }
+
   function openCollect(): void {
-    collectInstanceId = instances[0]?.id ?? ''
-    collectSkillNames = ''
+    const firstInstanceId = instances[0]?.id ?? ''
+    collectInstanceId = firstInstanceId
+    collectSourceSkills = []
+    collectSelectedSkillDirNames = []
+    collectScanError = ''
     collectOpen = true
     importExportMessage = ''
+    if (firstInstanceId) {
+      void scanCollectSkills(firstInstanceId)
+    }
+  }
+
+  function toggleCollectSkill(skillDirName: string): void {
+    collectSelectedSkillDirNames = collectSelectedSkillDirNames.includes(skillDirName)
+      ? collectSelectedSkillDirNames.filter((item) => item !== skillDirName)
+      : [...collectSelectedSkillDirNames, skillDirName]
+  }
+
+  function selectAllCollectSkills(): void {
+    collectSelectedSkillDirNames = collectSourceSkills.map((skill) => skill.skillDirName)
+  }
+
+  function clearCollectSkills(): void {
+    collectSelectedSkillDirNames = []
   }
 
   async function confirmCollect(): Promise<void> {
-    if (!collectInstanceId || !collectSkillNames.trim()) return
+    if (!collectInstanceId || !collectSelectedSkillDirNames.length) return
     collectBusy = true
     try {
-      const names = collectSkillNames
-        .split(',')
-        .map((s) => s.trim())
-        .filter(Boolean)
       const result = await collectSkillLibrary({
         sourceInstanceId: collectInstanceId,
-        sourceSkillDirNames: names
+        sourceSkillDirNames: collectSelectedSkillDirNames
       })
       importExportMessage = copy.skillLibraryCollectResult(result.collected, result.skipped)
       if (result.errors.length) {
@@ -341,282 +433,489 @@
   }
 </script>
 
-<div class="flex flex-col gap-3 p-4" use:reveal>
-  <div class="flex items-center justify-between">
-    <div>
-      <h2 class="text-base font-semibold">{copy.skillLibraryTitle}</h2>
-      <p class="text-xs text-neutral-500">{copy.skillLibraryDescription}</p>
+<div
+  class="flex min-h-0 flex-1 flex-col gap-4 px-4 pb-4"
+  class:overflow-y-auto={!currentSkill || createMode}
+  use:reveal={{ delay: 0.02 }}
+>
+  <!-- Header -->
+  <section
+    class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+  >
+    <div class="flex flex-wrap items-start justify-between gap-3">
+      <div class="grid gap-1">
+        <p class="text-sm font-semibold tracking-[-0.01em] text-carbon">{copy.skillLibraryTitle}</p>
+        <p class="max-w-3xl text-xs leading-5 text-muted-strong">{copy.skillLibraryDescription}</p>
+      </div>
+      <div class="flex flex-wrap items-center gap-1.5">
+        <AppButton
+          variant="primary"
+          size="sm"
+          onclick={() => {
+            createMode = true
+            currentSkill = null
+          }}
+        >
+          <span class="i-lucide-plus h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryCreate}</span>
+        </AppButton>
+        <AppButton variant="toolbar" size="sm" onclick={handleImport}>
+          <span class="i-lucide-download h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryImport}</span>
+        </AppButton>
+        <AppButton variant="toolbar" size="sm" onclick={handleExport}>
+          <span class="i-lucide-upload h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryExport}</span>
+        </AppButton>
+        <AppButton variant="toolbar" size="sm" onclick={openCollect}>
+          <span class="i-lucide-package h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryCollect}</span>
+        </AppButton>
+        <AppButton
+          variant="toolbar"
+          size="sm"
+          onclick={() => {
+            categoryManagerOpen = true
+          }}
+        >
+          <span class="i-lucide-tags h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryCategoryManager}</span>
+        </AppButton>
+        <AppButton variant="toolbar" size="sm" onclick={loadSkills} disabled={loading}>
+          <span
+            class={`${loading ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
+          ></span>
+          <span>{loading ? copy.skillLibraryLoading : copy.skillLibraryRefresh}</span>
+        </AppButton>
+      </div>
     </div>
-    <AppButtonGroup>
-      <AppButton
-        size="sm"
-        onclick={() => {
-          createMode = true
-          currentSkill = null
-        }}
-      >
-        {copy.skillLibraryCreate}
-      </AppButton>
-      <AppButton size="sm" onclick={handleImport}>
-        {copy.skillLibraryImport}
-      </AppButton>
-      <AppButton size="sm" onclick={handleExport}>
-        {copy.skillLibraryExport}
-      </AppButton>
-      <AppButton size="sm" onclick={openCollect}>
-        {copy.skillLibraryCollect}
-      </AppButton>
-      <AppButton
-        size="sm"
-        onclick={() => {
-          categoryManagerOpen = true
-        }}
-      >
-        {copy.skillLibraryCategoryManager}
-      </AppButton>
-      <AppButton size="sm" onclick={loadSkills}>
-        {copy.skillLibraryRefresh}
-      </AppButton>
-    </AppButtonGroup>
-  </div>
+  </section>
 
   {#if !currentSkill && !createMode}
-    {#if importExportMessage}
-      <p class="text-xs text-green-600">{importExportMessage}</p>
-    {/if}
-    <div class="flex gap-2">
+    <div class="flex min-h-8 flex-wrap items-center gap-2 pt-1">
+      <AppButtonGroup
+        class="skill-lib-filter-shell inline-flex min-w-0 max-w-full items-center gap-0 overflow-x-auto rounded-[0.4rem] p-0.5"
+      >
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={selectedCategory === ''}
+          ariaPressed={selectedCategory === ''}
+          onclick={() => {
+            selectedCategory = ''
+          }}
+        >
+          {copy.skillLibraryAllCategories}
+        </AppButton>
+        {#each categories as cat (cat)}
+          <AppButton
+            variant="filter"
+            size="sm"
+            selected={selectedCategory === cat}
+            ariaPressed={selectedCategory === cat}
+            onclick={() => {
+              selectedCategory = cat
+            }}
+          >
+            <span class="max-w-[8rem] truncate">{cat}</span>
+          </AppButton>
+        {/each}
+      </AppButtonGroup>
+
+      <div class="flex-1"></div>
+
       <AppInput
+        variant="search"
+        size="sm"
+        icon="i-lucide-search"
+        class="w-44"
         placeholder={copy.skillLibrarySearchPlaceholder}
         bind:value={searchQuery}
-        class="flex-1"
       />
-      <select
-        class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-800"
-        bind:value={selectedCategory}
-      >
-        <option value="">{copy.skillLibraryAllCategories}</option>
-        {#each categories as cat (cat)}
-          <option value={cat}>{cat}</option>
-        {/each}
-      </select>
     </div>
 
-    {#if loading}
-      <p class="text-xs text-neutral-500">{copy.skillLibraryLoading}</p>
-    {:else if error}
-      <p class="text-xs text-red-500">{error}</p>
-    {:else if !skills.length}
-      <p class="text-xs text-neutral-500">{copy.skillLibraryEmpty}</p>
-    {:else}
-      <p class="text-xs text-neutral-500">{copy.skillLibraryCount(skills.length)}</p>
-      <div class="flex flex-col gap-1" use:cascadeIn>
-        {#each skills as skill (skill.id)}
-          <div
-            class="flex items-center justify-between rounded border border-neutral-200 px-3 py-2 dark:border-neutral-700"
-          >
-            <button
-              class="flex flex-1 flex-col items-start text-left"
-              onclick={() => openDetail(skill)}
-            >
-              <span class="text-sm font-medium">{skill.name}</span>
-              {#if skill.description}
-                <span class="text-xs text-neutral-500 line-clamp-1">{skill.description}</span>
-              {/if}
-              {#if skill.categories.length}
-                <span class="text-xs text-blue-500">{skill.categories.join(', ')}</span>
-              {/if}
-            </button>
-            <AppButton size="sm" onclick={() => openInstall(skill)}>
-              {copy.skillLibraryInstall}
-            </AppButton>
-          </div>
-        {/each}
+    {#if importExportMessage}
+      <div class="skill-lib-success-banner rounded-[0.45rem] px-3 py-2 text-xs">
+        {importExportMessage}
       </div>
     {/if}
-  {/if}
 
-  {#if createMode}
-    <div class="flex flex-col gap-2">
-      <AppButton size="sm" variant="ghost" onclick={backToList}>
-        {copy.skillLibraryBackToList}
-      </AppButton>
-      <AppInput placeholder={copy.skillLibraryNamePlaceholder} bind:value={createName} />
-      <textarea
-        class="min-h-48 w-full rounded border border-neutral-300 p-2 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-800"
-        placeholder={copy.skillLibraryContentPlaceholder}
-        bind:value={createContent}
-      ></textarea>
-      {#if categories.length}
-        <div class="grid gap-1">
-          <span class="text-xs font-medium text-neutral-500">
-            {copy.skillLibraryCategorySelection}
-          </span>
-          <div class="flex flex-wrap gap-2">
-            {#each categories as cat (cat)}
-              <label class="flex items-center gap-1 text-xs">
-                <input
-                  type="checkbox"
-                  checked={createCategories.includes(cat)}
-                  onchange={() => toggleCreateCategory(cat)}
-                />
-                {cat}
-              </label>
+    {#if error}
+      <div
+        class="theme-error-panel rounded-[0.45rem] border border-danger/18 bg-danger/8 px-3 py-2 text-sm text-danger"
+      >
+        {error}
+      </div>
+    {/if}
+
+    <!-- Content -->
+    <div class="grid gap-3">
+      {#if loading && !skills.length}
+        <section
+          class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
+        >
+          <div class="flex flex-col items-center justify-center gap-2">
+            <span class="i-lucide-loader-circle h-5 w-5 animate-spin text-faint"></span>
+            <span>{copy.skillLibraryLoading}</span>
+          </div>
+        </section>
+      {:else if !skills.length}
+        <section
+          class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
+        >
+          <div class="flex flex-col items-center justify-center gap-2">
+            <span class="i-lucide-book-open h-5 w-5 text-faint"></span>
+            <p>{copy.skillLibraryEmpty}</p>
+          </div>
+        </section>
+      {:else}
+        <section
+          class="theme-soft-panel grid gap-2 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+          use:cascadeIn={{ selector: '[data-motion-item]' }}
+        >
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="i-lucide-book-open h-3.5 w-3.5 text-faint"></span>
+            <span class="text-sm font-semibold text-carbon">{copy.skillLibraryTitle}</span>
+            <span class="skill-lib-count-pill">{copy.skillLibraryCount(skills.length)}</span>
+          </div>
+
+          <div class="grid gap-1.5">
+            {#each skills as skill (skill.id)}
+              <article class="skill-lib-card" data-motion-item>
+                <div class="min-w-0 flex-1">
+                  <div class="flex items-center gap-2">
+                    <span class="i-lucide-sparkles h-3.5 w-3.5 flex-none text-faint"></span>
+                    <AppButton
+                      variant="link"
+                      class="min-w-0 truncate text-sm font-semibold"
+                      onclick={() => openDetail(skill)}
+                    >
+                      {skill.name}
+                    </AppButton>
+                  </div>
+                  {#if skill.description}
+                    <p class="skill-lib-card-description mt-0.5 truncate pl-5.5 text-xs">
+                      {skill.description}
+                    </p>
+                  {/if}
+                  {#if skill.categories.length}
+                    <div class="mt-1.5 flex flex-wrap gap-1.5 pl-5.5">
+                      {#each skill.categories as cat (cat)}
+                        <span class="skill-lib-tag">{cat}</span>
+                      {/each}
+                    </div>
+                  {/if}
+                </div>
+                <div class="skill-lib-card-actions">
+                  <AppButton
+                    variant="icon"
+                    size="xs"
+                    ariaLabel={copy.skillLibraryInstall}
+                    onclick={() => toggleInstall(skill)}
+                  >
+                    <span class="i-lucide-download h-3.5 w-3.5"></span>
+                  </AppButton>
+                </div>
+                {#if installSkillId === skill.id}
+                  <div class="skill-lib-install-inline">
+                    {#if !installResult}
+                      <div class="flex flex-wrap items-center gap-2">
+                        {#each instances as instance (instance.id)}
+                          <label class="skill-lib-checkbox-label">
+                            <input
+                              type="checkbox"
+                              checked={installTargetIds.includes(instance.id)}
+                              onchange={() => toggleInstallTarget(instance.id)}
+                            />
+                            <span>{instance.name || instance.id}</span>
+                          </label>
+                        {/each}
+                        <AppButton
+                          variant="primary"
+                          size="xs"
+                          onclick={confirmInstall}
+                          disabled={!installTargetIds.length || installBusy}
+                        >
+                          {#if installBusy}
+                            <span class="i-lucide-loader-circle h-3 w-3 animate-spin"></span>
+                          {/if}
+                          <span>{copy.skillLibraryInstallConfirm}</span>
+                        </AppButton>
+                      </div>
+                    {:else}
+                      <div class="flex flex-wrap items-center gap-3 text-xs">
+                        {#if installResult.installed.length}
+                          <span class="text-success"
+                            >{copy.skillLibraryInstallSuccess(installResult.installed.length)}</span
+                          >
+                        {/if}
+                        {#if installResult.skipped.length}
+                          <span class="text-warn"
+                            >{copy.skillLibraryInstallSkipped(installResult.skipped.length)}</span
+                          >
+                        {/if}
+                        {#if installResult.failed.length}
+                          <span class="text-danger"
+                            >{copy.skillLibraryInstallFailed(installResult.failed.length)}</span
+                          >
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </article>
             {/each}
           </div>
-        </div>
+        </section>
       {/if}
-      <AppButtonGroup>
-        <AppButton
-          size="sm"
-          onclick={handleCreate}
-          disabled={!createName.trim() || !createContent || saving}
-        >
-          {copy.skillLibrarySave}
-        </AppButton>
-        <AppButton size="sm" variant="ghost" onclick={backToList}>
-          {copy.skillLibraryCancel}
-        </AppButton>
-      </AppButtonGroup>
     </div>
   {/if}
 
   {#if currentSkill && !createMode}
-    <div class="flex flex-col gap-2">
-      <AppButton size="sm" variant="ghost" onclick={backToList}>
-        {copy.skillLibraryBackToList}
-      </AppButton>
+    <section class="flex min-h-0 flex-1 flex-col gap-3 px-4 pb-4">
+      <div class="flex items-center gap-2">
+        <AppButton variant="toolbar" size="sm" onclick={backToList}>
+          <span class="i-lucide-arrow-left h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryBackToList}</span>
+        </AppButton>
+        <span class="text-sm font-semibold text-carbon">{currentSkill.name}</span>
+      </div>
 
       {#if !editMode}
-        <div class="flex flex-col gap-1">
-          <h3 class="text-sm font-semibold">{currentSkill.name}</h3>
+        <dl class="skill-lib-detail-meta">
           {#if currentSkill.description}
-            <p class="text-xs text-neutral-500">{currentSkill.description}</p>
+            <div class="skill-lib-detail-meta-item">
+              <dt>Description</dt>
+              <dd>{currentSkill.description}</dd>
+            </div>
           {/if}
           {#if currentSkill.categories.length}
-            <p class="text-xs text-blue-500">{currentSkill.categories.join(', ')}</p>
+            <div class="skill-lib-detail-meta-item">
+              <dt>Categories</dt>
+              <dd>
+                <div class="flex flex-wrap gap-1.5">
+                  {#each currentSkill.categories as cat (cat)}
+                    <span class="skill-lib-tag">{cat}</span>
+                  {/each}
+                </div>
+              </dd>
+            </div>
           {/if}
           {#if currentSkill.files.length}
-            <p class="text-xs text-neutral-400">Files: {currentSkill.files.join(', ')}</p>
+            <div class="skill-lib-detail-meta-item">
+              <dt>Files</dt>
+              <dd>
+                <div class="grid gap-1">
+                  {#each currentSkill.files as file (file)}
+                    <div class="skill-lib-file-item">
+                      <button
+                        class="skill-lib-file-toggle"
+                        type="button"
+                        onclick={() => toggleFileExpand(file)}
+                      >
+                        <span
+                          class={`h-3 w-3 flex-none transition-transform duration-140 ${expandedFiles[file] !== undefined ? 'i-lucide-chevron-down' : 'i-lucide-chevron-right'}`}
+                        ></span>
+                        <span class="min-w-0 truncate">{file}</span>
+                        {#if fileLoadingSet.has(file)}
+                          <span
+                            class="i-lucide-loader-circle h-3 w-3 flex-none animate-spin text-faint"
+                          ></span>
+                        {/if}
+                      </button>
+                      {#if expandedFiles[file] !== undefined}
+                        <pre class="skill-lib-file-content">{expandedFiles[file]}</pre>
+                      {/if}
+                    </div>
+                  {/each}
+                </div>
+              </dd>
+            </div>
           {/if}
+        </dl>
+
+        <div class="flex min-h-0 flex-1 flex-col gap-1.5">
+          <span class="text-xs font-medium text-muted-strong">Content</span>
           <pre
-            class="mt-2 max-h-96 overflow-auto rounded bg-neutral-100 p-2 font-mono text-xs dark:bg-neutral-800">{currentSkill.content}</pre>
-          <AppButtonGroup>
-            <AppButton size="sm" onclick={startEdit}>{copy.skillLibraryEdit}</AppButton>
-            <AppButton size="sm" onclick={() => openInstall(currentSkill!)}
-              >{copy.skillLibraryInstall}</AppButton
-            >
-            <AppButton
-              size="sm"
-              variant="danger"
-              onclick={() => {
-                deleteConfirmOpen = true
-              }}>{copy.skillLibraryDelete}</AppButton
-            >
-          </AppButtonGroup>
+            class="skill-lib-content-pre min-h-0 flex-1 overflow-auto rounded-[0.5rem] border border-[var(--card-border)] px-3 py-3 font-mono text-[13px] leading-relaxed whitespace-pre-wrap text-carbon">{currentSkill.content}</pre>
         </div>
+
+        <div class="flex justify-end gap-2 pt-2">
+          <AppButton variant="secondary" size="sm" onclick={startEdit}>
+            <span class="i-lucide-pencil h-3.5 w-3.5"></span>
+            <span>{copy.skillLibraryEdit}</span>
+          </AppButton>
+          <AppButton variant="secondary" size="sm" onclick={() => toggleInstall(currentSkill!)}>
+            <span class="i-lucide-download h-3.5 w-3.5"></span>
+            <span>{copy.skillLibraryInstall}</span>
+          </AppButton>
+          <AppButton
+            variant="danger"
+            size="sm"
+            onclick={() => {
+              deleteConfirmOpen = true
+            }}
+          >
+            <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+            <span>{copy.skillLibraryDelete}</span>
+          </AppButton>
+        </div>
+
+        {#if currentSkill && installSkillId === currentSkill.id}
+          <div class="skill-lib-install-inline">
+            {#if !installResult}
+              <div class="flex flex-wrap items-center gap-2">
+                {#each instances as instance (instance.id)}
+                  <label class="skill-lib-checkbox-label">
+                    <input
+                      type="checkbox"
+                      checked={installTargetIds.includes(instance.id)}
+                      onchange={() => toggleInstallTarget(instance.id)}
+                    />
+                    <span>{instance.name || instance.id}</span>
+                  </label>
+                {/each}
+                <AppButton
+                  variant="primary"
+                  size="xs"
+                  onclick={confirmInstall}
+                  disabled={!installTargetIds.length || installBusy}
+                >
+                  {#if installBusy}
+                    <span class="i-lucide-loader-circle h-3 w-3 animate-spin"></span>
+                  {/if}
+                  <span>{copy.skillLibraryInstallConfirm}</span>
+                </AppButton>
+              </div>
+            {:else}
+              <div class="flex flex-wrap items-center gap-3 text-xs">
+                {#if installResult.installed.length}
+                  <span class="text-success"
+                    >{copy.skillLibraryInstallSuccess(installResult.installed.length)}</span
+                  >
+                {/if}
+                {#if installResult.skipped.length}
+                  <span class="text-warn"
+                    >{copy.skillLibraryInstallSkipped(installResult.skipped.length)}</span
+                  >
+                {/if}
+                {#if installResult.failed.length}
+                  <span class="text-danger"
+                    >{copy.skillLibraryInstallFailed(installResult.failed.length)}</span
+                  >
+                {/if}
+              </div>
+            {/if}
+          </div>
+        {/if}
       {:else}
         <AppInput placeholder={copy.skillLibraryNamePlaceholder} bind:value={editName} />
-        <textarea
-          class="min-h-48 w-full rounded border border-neutral-300 p-2 font-mono text-xs dark:border-neutral-600 dark:bg-neutral-800"
-          bind:value={editContent}
-        ></textarea>
+        <textarea class="skill-lib-textarea" bind:value={editContent}></textarea>
+
         {#if categories.length}
-          <div class="grid gap-1">
-            <span class="text-xs font-medium text-neutral-500">
+          <div class="grid gap-1.5">
+            <span class="text-xs font-medium text-muted-strong">
               {copy.skillLibraryCategorySelection}
             </span>
             <div class="flex flex-wrap gap-2">
               {#each categories as cat (cat)}
-                <label class="flex items-center gap-1 text-xs">
+                <label class="skill-lib-checkbox-label">
                   <input
                     type="checkbox"
                     checked={editCategories.includes(cat)}
                     onchange={() => toggleEditCategory(cat)}
                   />
-                  {cat}
+                  <span>{cat}</span>
                 </label>
               {/each}
             </div>
           </div>
         {/if}
-        <AppButtonGroup>
-          <AppButton size="sm" onclick={saveEdit} disabled={!editName.trim() || saving}>
-            {copy.skillLibrarySave}
-          </AppButton>
+
+        <div class="flex justify-end gap-2 pt-2">
           <AppButton
-            size="sm"
             variant="ghost"
+            size="sm"
             onclick={() => {
               editMode = false
             }}
           >
             {copy.skillLibraryCancel}
           </AppButton>
-        </AppButtonGroup>
+          <AppButton
+            variant="primary"
+            size="sm"
+            onclick={saveEdit}
+            disabled={!editName.trim() || saving}
+          >
+            {#if saving}
+              <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+            {:else}
+              <span class="i-lucide-check h-3.5 w-3.5"></span>
+            {/if}
+            <span>{copy.skillLibrarySave}</span>
+          </AppButton>
+        </div>
       {/if}
-    </div>
+    </section>
   {/if}
 </div>
 
-<!-- Install Dialog -->
-{#if installOpen}
+<!-- Create Dialog -->
+{#if createMode}
   <AppDialog
-    title={copy.skillLibraryInstallTitle}
-    onclose={() => {
-      installOpen = false
-    }}
+    title={copy.skillLibraryCreate}
+    panelClass="skill-lib-dialog-panel"
+    showClose
+    onclose={backToList}
   >
-    {#if installSkill}
-      <p class="text-xs">{copy.skillLibraryInstallDescription(installSkill.name)}</p>
-    {/if}
+    <div class="flex flex-col gap-3">
+      <AppInput placeholder={copy.skillLibraryNamePlaceholder} bind:value={createName} />
+      <textarea
+        class="skill-lib-textarea"
+        placeholder={copy.skillLibraryContentPlaceholder}
+        bind:value={createContent}
+      ></textarea>
 
-    {#if !installResult}
-      <div class="mt-2 flex flex-col gap-1">
-        {#each instances as instance (instance.id)}
-          <label class="flex items-center gap-2 text-xs">
-            <input
-              type="checkbox"
-              value={instance.id}
-              checked={installTargetIds.includes(instance.id)}
-              onchange={(e) => {
-                const target = e.currentTarget
-                if (target.checked) {
-                  installTargetIds = [...installTargetIds, instance.id]
-                } else {
-                  installTargetIds = installTargetIds.filter((id) => id !== instance.id)
-                }
-              }}
-            />
-            {instance.name || instance.id}
-          </label>
-        {/each}
-      </div>
-      <div class="mt-3">
+      {#if categories.length}
+        <div class="grid gap-1.5">
+          <span class="text-xs font-medium text-muted-strong">
+            {copy.skillLibraryCategorySelection}
+          </span>
+          <div class="flex flex-wrap gap-2">
+            {#each categories as cat (cat)}
+              <label class="skill-lib-checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={createCategories.includes(cat)}
+                  onchange={() => toggleCreateCategory(cat)}
+                />
+                <span>{cat}</span>
+              </label>
+            {/each}
+          </div>
+        </div>
+      {/if}
+
+      <div class="flex justify-end gap-2 pt-2">
+        <AppButton variant="ghost" size="sm" onclick={backToList}>
+          {copy.skillLibraryCancel}
+        </AppButton>
         <AppButton
+          variant="primary"
           size="sm"
-          onclick={confirmInstall}
-          disabled={!installTargetIds.length || installBusy}
+          onclick={handleCreate}
+          disabled={!createName.trim() || !createContent || saving}
         >
-          {copy.skillLibraryInstallConfirm}
+          {#if saving}
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+          {:else}
+            <span class="i-lucide-check h-3.5 w-3.5"></span>
+          {/if}
+          <span>{copy.skillLibrarySave}</span>
         </AppButton>
       </div>
-    {:else}
-      <div class="mt-2 flex flex-col gap-1 text-xs">
-        {#if installResult.installed.length}
-          <p class="text-green-600">
-            {copy.skillLibraryInstallSuccess(installResult.installed.length)}
-          </p>
-        {/if}
-        {#if installResult.skipped.length}
-          <p class="text-yellow-600">
-            {copy.skillLibraryInstallSkipped(installResult.skipped.length)}
-          </p>
-        {/if}
-        {#if installResult.failed.length}
-          <p class="text-red-600">{copy.skillLibraryInstallFailed(installResult.failed.length)}</p>
-        {/if}
-      </div>
-    {/if}
+    </div>
   </AppDialog>
 {/if}
 
@@ -624,45 +923,55 @@
 {#if categoryManagerOpen}
   <AppDialog
     title={copy.skillLibraryCategoryManager}
+    panelClass="skill-lib-dialog-panel"
+    showClose
     onclose={() => {
       categoryManagerOpen = false
     }}
   >
-    <div class="flex flex-col gap-2">
+    <div class="flex flex-col gap-3">
       <div class="flex gap-2">
         <AppInput
           placeholder={copy.skillLibraryCategoryPlaceholder}
           bind:value={newCategoryName}
           class="flex-1"
         />
-        <AppButton size="sm" onclick={handleCreateCategory}>
-          {copy.skillLibraryCategoryCreate}
+        <AppButton variant="primary" size="sm" onclick={handleCreateCategory}>
+          <span class="i-lucide-plus h-3.5 w-3.5"></span>
+          <span>{copy.skillLibraryCategoryCreate}</span>
         </AppButton>
       </div>
       {#each categories as cat (cat)}
-        <div class="flex items-center justify-between text-xs">
+        <div class="skill-lib-category-item">
           {#if renamingCategory === cat}
-            <AppInput bind:value={renameCategoryValue} class="flex-1 mr-2" />
-            <AppButton size="sm" onclick={handleRenameCategory}>
-              {copy.skillLibrarySave}
+            <AppInput bind:value={renameCategoryValue} class="flex-1" />
+            <AppButton variant="primary" size="sm" onclick={handleRenameCategory}>
+              <span class="i-lucide-check h-3.5 w-3.5"></span>
+              <span>{copy.skillLibrarySave}</span>
             </AppButton>
           {:else}
-            <span>{cat}</span>
-            <AppButtonGroup>
+            <span class="flex-1 text-sm text-carbon">{cat}</span>
+            <div class="flex items-center gap-1.5">
               <AppButton
-                size="sm"
-                variant="ghost"
+                variant="icon"
+                size="xs"
+                ariaLabel={copy.skillLibraryCategoryRename}
                 onclick={() => {
                   renamingCategory = cat
                   renameCategoryValue = cat
                 }}
               >
-                {copy.skillLibraryCategoryRename}
+                <span class="i-lucide-pencil h-3.5 w-3.5"></span>
               </AppButton>
-              <AppButton size="sm" variant="danger" onclick={() => handleRemoveCategory(cat)}>
-                {copy.skillLibraryCategoryRemove}
+              <AppButton
+                variant="icon"
+                size="xs"
+                ariaLabel={copy.skillLibraryCategoryRemove}
+                onclick={() => handleRemoveCategory(cat)}
+              >
+                <span class="i-lucide-trash-2 h-3.5 w-3.5 text-danger"></span>
               </AppButton>
-            </AppButtonGroup>
+            </div>
           {/if}
         </div>
       {/each}
@@ -674,30 +983,33 @@
 {#if deleteConfirmOpen && currentSkill}
   <AppDialog
     title={copy.skillLibraryDelete}
+    panelClass="skill-lib-dialog-panel"
+    showClose
     onclose={() => {
       deleteConfirmOpen = false
     }}
   >
-    <p class="text-xs">{copy.skillLibraryDeleteConfirm(currentSkill.name)}</p>
-    <div class="mt-3 flex gap-2">
+    <p class="text-xs text-muted-strong">{copy.skillLibraryDeleteConfirm(currentSkill.name)}</p>
+    <div class="mt-4 flex justify-end gap-2">
       <AppButton
-        size="sm"
-        variant="danger"
-        onclick={() => {
-          deleteConfirmOpen = false
-          deleteSkill()
-        }}
-      >
-        {copy.skillLibraryDelete}
-      </AppButton>
-      <AppButton
-        size="sm"
         variant="ghost"
+        size="sm"
         onclick={() => {
           deleteConfirmOpen = false
         }}
       >
         {copy.skillLibraryCancel}
+      </AppButton>
+      <AppButton
+        variant="danger"
+        size="sm"
+        onclick={() => {
+          deleteConfirmOpen = false
+          deleteSkill()
+        }}
+      >
+        <span class="i-lucide-trash-2 h-3.5 w-3.5"></span>
+        <span>{copy.skillLibraryDelete}</span>
       </AppButton>
     </div>
   </AppDialog>
@@ -707,38 +1019,326 @@
 {#if collectOpen}
   <AppDialog
     title={copy.skillLibraryCollect}
+    panelClass="skill-lib-dialog-panel"
+    showClose
     onclose={() => {
       collectOpen = false
     }}
   >
-    <div class="flex flex-col gap-2">
-      <label class="text-xs font-medium" for="skill-library-collect-instance">
-        {copy.skillLibraryCollectInstance}
-      </label>
-      <select
-        id="skill-library-collect-instance"
-        class="rounded border border-neutral-300 bg-white px-2 py-1 text-xs dark:border-neutral-600 dark:bg-neutral-800"
-        bind:value={collectInstanceId}
-      >
-        {#each instances as instance (instance.id)}
-          <option value={instance.id}>{instance.name || instance.id}</option>
-        {/each}
-      </select>
-      <label class="text-xs font-medium" for="skill-library-collect-names">
-        {copy.skillLibraryCollectNames}
-      </label>
-      <AppInput
-        id="skill-library-collect-names"
-        placeholder={copy.skillLibraryCollectPlaceholder}
-        bind:value={collectSkillNames}
-      />
-      <AppButton
-        size="sm"
-        onclick={confirmCollect}
-        disabled={!collectInstanceId || !collectSkillNames.trim() || collectBusy}
-      >
-        {copy.skillLibraryCollect}
-      </AppButton>
+    <div class="flex flex-col gap-3">
+      <div class="grid gap-1.5">
+        <span class="text-xs font-medium text-muted-strong">
+          {copy.skillLibraryCollectInstance}
+        </span>
+        <FloatingSelect
+          options={collectInstanceOptions}
+          value={collectInstanceId}
+          ariaLabel={copy.skillLibraryCollectInstance}
+          buttonClass={floatingSelectButtonClass}
+          menuClass={floatingSelectMenuClass}
+          optionClass={floatingSelectOptionClass}
+          activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
+          inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
+          on:change={(event) => {
+            collectInstanceId = event.detail
+            void scanCollectSkills(event.detail)
+          }}
+        />
+      </div>
+      <div class="grid gap-2">
+        <div class="flex items-center justify-between gap-2">
+          <span class="text-xs font-medium text-muted-strong">
+            {copy.skillLibraryCollectNames}
+          </span>
+          {#if collectSourceSkills.length}
+            <div class="flex items-center gap-1.5">
+              <AppButton variant="ghost" size="xs" onclick={selectAllCollectSkills}>
+                {copy.skillLibraryCollectSelectAll}
+              </AppButton>
+              <AppButton variant="ghost" size="xs" onclick={clearCollectSkills}>
+                {copy.skillLibraryCollectClear}
+              </AppButton>
+            </div>
+          {/if}
+        </div>
+
+        {#if collectScanBusy}
+          <div
+            class="flex items-center gap-2 rounded-[0.45rem] border border-[var(--card-border)] px-3 py-2 text-xs text-muted-strong"
+          >
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+            <span>{copy.skillLibraryCollectScanning}</span>
+          </div>
+        {:else if collectScanError}
+          <div
+            class="theme-error-panel rounded-[0.45rem] border border-danger/18 bg-danger/8 px-3 py-2 text-xs text-danger"
+          >
+            {collectScanError}
+          </div>
+        {:else if collectSourceSkills.length}
+          <div
+            class="grid max-h-64 gap-1.5 overflow-auto rounded-[0.5rem] border border-[var(--card-border)] bg-[var(--surface-soft)] p-2"
+          >
+            {#each collectSourceSkills as skill (skill.skillDirName)}
+              <label
+                class="flex cursor-pointer items-start gap-2 rounded-[0.4rem] px-2 py-1.5 text-xs hover:bg-[var(--surface-hover)]"
+              >
+                <input
+                  class="mt-0.5"
+                  type="checkbox"
+                  checked={collectSelectedSkillDirNames.includes(skill.skillDirName)}
+                  onchange={() => toggleCollectSkill(skill.skillDirName)}
+                />
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate font-medium text-carbon">{skill.name}</span>
+                  <span class="block truncate text-muted-strong">{skill.skillDirName}</span>
+                </span>
+              </label>
+            {/each}
+          </div>
+        {:else}
+          <div
+            class="rounded-[0.45rem] border border-[var(--card-border)] px-3 py-2 text-xs text-muted-strong"
+          >
+            {copy.skillLibraryCollectEmpty}
+          </div>
+        {/if}
+      </div>
+      <div class="flex justify-end pt-1">
+        <AppButton
+          variant="primary"
+          size="sm"
+          onclick={confirmCollect}
+          disabled={!collectInstanceId ||
+            !collectSelectedSkillDirNames.length ||
+            collectBusy ||
+            collectScanBusy}
+        >
+          {#if collectBusy}
+            <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"></span>
+          {:else}
+            <span class="i-lucide-package h-3.5 w-3.5"></span>
+          {/if}
+          <span>{copy.skillLibraryCollect}</span>
+        </AppButton>
+      </div>
     </div>
   </AppDialog>
 {/if}
+
+<style>
+  :global(.skill-lib-filter-shell) {
+    background: transparent;
+    scrollbar-width: none;
+  }
+
+  :global(.skill-lib-filter-shell::-webkit-scrollbar) {
+    display: none;
+  }
+
+  :global(.skill-lib-dialog-panel) {
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent) !important;
+    background: var(--panel-strong) !important;
+  }
+
+  .skill-lib-count-pill {
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-carbon) 7%, transparent);
+    color: var(--ink-faint);
+    font-size: 0.625rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 0.15rem 0.35rem;
+  }
+
+  .skill-lib-card {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
+    padding: 0.62rem 0.75rem;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  .skill-lib-card:hover,
+  .skill-lib-card:focus-within {
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent);
+    background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
+  }
+
+  .skill-lib-card-description {
+    color: var(--ink-soft-strong);
+  }
+
+  .skill-lib-card-actions {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 0.25rem;
+    opacity: 0.58;
+    transition: opacity 140ms ease;
+  }
+
+  .skill-lib-card:hover .skill-lib-card-actions,
+  .skill-lib-card:focus-within .skill-lib-card-actions {
+    opacity: 1;
+  }
+
+  .skill-lib-install-inline {
+    grid-column: 1 / -1;
+    border-top: 1px solid color-mix(in srgb, var(--color-arctic-mist) 60%, transparent);
+    padding-top: 0.5rem;
+    margin-top: 0.25rem;
+  }
+
+  .skill-lib-content-pre {
+    background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
+    box-shadow: inset 0 1px 3px color-mix(in srgb, var(--color-carbon) 4%, transparent);
+  }
+
+  .skill-lib-file-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+
+  .skill-lib-file-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: none;
+    background: none;
+    color: var(--color-carbon);
+    font-size: 0.75rem;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 0.15rem 0;
+    text-align: left;
+  }
+
+  .skill-lib-file-toggle:hover {
+    color: var(--color-link-blue);
+  }
+
+  .skill-lib-file-content {
+    max-height: 16rem;
+    overflow: auto;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 60%, transparent);
+    border-radius: 0.4rem;
+    background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
+    padding: 0.5rem 0.65rem;
+    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 0.7rem;
+    line-height: 1.6;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: var(--color-carbon);
+  }
+
+  .skill-lib-tag {
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--color-carbon) 5%, transparent);
+    color: var(--ink-soft-strong);
+    font-size: 0.68rem;
+    font-weight: 650;
+    line-height: 1;
+    padding: 0.25rem 0.48rem;
+  }
+
+  .skill-lib-detail-meta {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: 0.5rem 0.75rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 78%, transparent);
+    border-radius: 0.5rem;
+    background: color-mix(in srgb, var(--surface-soft) 54%, transparent);
+    padding: 0.75rem;
+    font-size: 0.75rem;
+  }
+
+  .skill-lib-detail-meta-item {
+    display: contents;
+  }
+
+  .skill-lib-detail-meta dt {
+    color: var(--ink-faint);
+    font-weight: 650;
+    white-space: nowrap;
+  }
+
+  .skill-lib-detail-meta dd {
+    min-width: 0;
+    color: var(--color-carbon);
+    font-weight: 600;
+  }
+
+  .skill-lib-textarea {
+    min-height: 12rem;
+    width: 100%;
+    resize: vertical;
+    border: 1px solid color-mix(in srgb, var(--line-strong) 70%, transparent);
+    border-radius: 0.45rem;
+    background: var(--panel-strong);
+    box-shadow: var(--input-shadow);
+    color: var(--color-carbon);
+    font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    padding: 0.62rem 0.75rem;
+    transition:
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .skill-lib-textarea:focus {
+    border-color: var(--line-strong);
+    outline: 2px solid color-mix(in srgb, var(--ring) 78%, var(--color-carbon) 22%);
+    outline-offset: 2px;
+  }
+
+  .skill-lib-checkbox-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.75rem;
+    color: var(--ink-soft-strong);
+    cursor: pointer;
+  }
+
+  .skill-lib-checkbox-label input {
+    width: 0.9rem;
+    height: 0.9rem;
+    cursor: pointer;
+    accent-color: var(--color-carbon);
+  }
+
+  .skill-lib-category-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border-radius: 0.45rem;
+    background: color-mix(in srgb, var(--panel-strong) 66%, var(--surface-soft));
+    padding: 0.55rem 0.65rem;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease;
+  }
+
+  .skill-lib-category-item:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent);
+    background: color-mix(in srgb, var(--surface-hover) 78%, transparent);
+  }
+
+  .skill-lib-success-banner {
+    border: 1px solid color-mix(in srgb, var(--success) 18%, transparent);
+    background: color-mix(in srgb, var(--success) 8%, transparent);
+    color: var(--success);
+  }
+</style>

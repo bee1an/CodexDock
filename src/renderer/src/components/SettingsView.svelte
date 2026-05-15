@@ -1,11 +1,5 @@
 <script lang="ts">
-  import type {
-    AppLanguage,
-    AppMeta,
-    AppSettings,
-    AppTheme,
-    AppUpdateState
-  } from '../../../shared/codex'
+  import type { AppLanguage, AppMeta, AppSettings, AppUpdateState } from '../../../shared/codex'
   import { languageOptions, type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
   import AppButtonGroup from './AppButtonGroup.svelte'
@@ -14,7 +8,6 @@
 
   export let copy: LocalizedCopy
   export let language: AppLanguage
-  export let theme: AppTheme
   export let settings: AppSettings
   export let updateState: AppUpdateState
   export let appMeta: AppMeta
@@ -27,7 +20,6 @@
   export let checkForUpdates: () => void
   export let downloadUpdate: () => Promise<void>
   export let installUpdate: () => Promise<void>
-  export let openExternalLink: (url?: string) => void
 
   let codexDesktopExecutablePathDraft = settings.codexDesktopExecutablePath ?? ''
   let lastSyncedPath = settings.codexDesktopExecutablePath ?? ''

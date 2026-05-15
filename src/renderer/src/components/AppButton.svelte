@@ -112,7 +112,7 @@
     border-color: var(--color-carbon);
     background: var(--color-carbon);
     color: var(--color-snow);
-    box-shadow: var(--control-shadow);
+    box-shadow: none;
   }
 
   .app-button-primary:hover:not(:disabled) {
@@ -122,8 +122,8 @@
   .app-button-secondary,
   .app-button-ghost,
   .app-button-toolbar {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+    border-color: var(--line-strong);
+    background: var(--panel-strong);
     color: var(--color-carbon);
   }
 
