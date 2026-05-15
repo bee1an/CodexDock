@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.8 - 2026-05-15
+
+This release expands stash and session management while refining local gateway routing, launch flows, and desktop workspaces.
+
+- Added a standalone Skill Library with desktop and CLI flows for browsing, creating, editing, categorizing, importing, exporting, collecting from instances, installing into instances, and reading bundled skill files.
+- Added session history management with desktop Trash deletion and CLI session list/remove commands for safer cleanup of local Codex sessions.
+- Improved local gateway operation with direct provider launches, editable port controls, richer request/response logging, model mapping controls, provider fallback selection, and support for individually allowed grouped accounts.
+- Improved usage analytics with richer token and cost breakdowns, clearer model and instance tooltips, peak-day context, and better unknown-price labeling.
+- Refined desktop navigation and layout with the new Stash view for Skills and Prompts, dialog-based provider editing, topbar settings actions, inline quota polling controls, smoother gateway surfaces, and more consistent themed scrollbars and controls.
+- Fixed skill library exports so backups cannot target the library storage directory itself.
+
 ## 0.4.7 - 2026-05-14
 
 This release hardens account recovery and local gateway routing while polishing imports, metrics, and themed desktop surfaces.
