@@ -190,6 +190,8 @@ const codexApp = {
     ipcRenderer.invoke('codex:skill-library-list', input),
   getSkillLibraryDetail: (skillId: string): Promise<SkillLibraryDetail> =>
     ipcRenderer.invoke('codex:skill-library-detail', skillId),
+  readSkillLibraryFile: (skillId: string, filePath: string): Promise<string> =>
+    ipcRenderer.invoke('codex:skill-library-read-file', skillId, filePath),
   createSkillLibrary: (input: CreateSkillLibraryInput): Promise<SkillLibraryDetail> =>
     ipcRenderer.invoke('codex:skill-library-create', input),
   updateSkillLibrary: (
@@ -212,8 +214,12 @@ const codexApp = {
     ipcRenderer.invoke('codex:skill-library-category-remove', name),
   importSkillLibraryDir: (dirPath: string): Promise<SkillLibraryImportResult> =>
     ipcRenderer.invoke('codex:skill-library-import-dir', dirPath),
+  importSkillLibraryDirWithDialog: (): Promise<SkillLibraryImportResult | null> =>
+    ipcRenderer.invoke('codex:skill-library-import-dir-dialog'),
   exportSkillLibraryDir: (targetDir: string): Promise<SkillLibraryExportResult> =>
     ipcRenderer.invoke('codex:skill-library-export-dir', targetDir),
+  exportSkillLibraryDirWithDialog: (): Promise<SkillLibraryExportResult | null> =>
+    ipcRenderer.invoke('codex:skill-library-export-dir-dialog'),
   collectSkillLibrary: (input: SkillLibraryCollectInput): Promise<SkillLibraryCollectResult> =>
     ipcRenderer.invoke('codex:skill-library-collect', input),
   installSkillLibrary: (input: SkillLibraryInstallInput): Promise<SkillLibraryInstallResult> =>

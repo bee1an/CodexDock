@@ -498,6 +498,7 @@ export interface CodexServices {
   skillLibrary: {
     list(input?: SkillLibrarySearchInput): Promise<SkillLibrarySummary[]>
     detail(skillId: string): Promise<SkillLibraryDetail>
+    readFile(skillId: string, filePath: string): Promise<string>
     create(input: CreateSkillLibraryInput): Promise<SkillLibraryDetail>
     update(skillId: string, input: UpdateSkillLibraryInput): Promise<SkillLibraryDetail>
     remove(skillId: string): Promise<void>

@@ -1016,6 +1016,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:skill-library-detail', (_, skillId: string) =>
     codexServices.skillLibrary.detail(skillId)
   )
+  ipcMain.handle('codex:skill-library-read-file', (_, skillId: string, filePath: string) =>
+    codexServices.skillLibrary.readFile(skillId, filePath)
+  )
   ipcMain.handle('codex:skill-library-create', (_, input) => codexServices.skillLibrary.create(input))
   ipcMain.handle('codex:skill-library-update', (_, skillId: string, input) =>
     codexServices.skillLibrary.update(skillId, input)
@@ -1038,9 +1041,41 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:skill-library-import-dir', (_, dirPath: string) =>
     codexServices.skillLibrary.importDir(dirPath)
   )
+  ipcMain.handle('codex:skill-library-import-dir-dialog', async () => {
+    const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
+    const openDialogOptions: OpenDialogOptions = {
+      title: 'Import Skill Library',
+      properties: ['openDirectory']
+    }
+    const selection = dialogWindow
+      ? await dialog.showOpenDialog(dialogWindow, openDialogOptions)
+      : await dialog.showOpenDialog(openDialogOptions)
+
+    if (selection.canceled || !selection.filePaths[0]) {
+      return null
+    }
+
+    return codexServices.skillLibrary.importDir(selection.filePaths[0])
+  })
   ipcMain.handle('codex:skill-library-export-dir', (_, targetDir: string) =>
     codexServices.skillLibrary.exportDir(targetDir)
   )
+  ipcMain.handle('codex:skill-library-export-dir-dialog', async () => {
+    const dialogWindow = BrowserWindow.getFocusedWindow() ?? mainWindow ?? undefined
+    const openDialogOptions: OpenDialogOptions = {
+      title: 'Export Skill Library',
+      properties: ['openDirectory', 'createDirectory']
+    }
+    const selection = dialogWindow
+      ? await dialog.showOpenDialog(dialogWindow, openDialogOptions)
+      : await dialog.showOpenDialog(openDialogOptions)
+
+    if (selection.canceled || !selection.filePaths[0]) {
+      return null
+    }
+
+    return codexServices.skillLibrary.exportDir(selection.filePaths[0])
+  })
   ipcMain.handle('codex:skill-library-collect', (_, input) =>
     codexServices.skillLibrary.collect(input)
   )

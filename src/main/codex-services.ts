@@ -818,6 +818,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     skillLibrary: {
       list: (input) => skillLibraryService.list(input),
       detail: (skillId) => skillLibraryService.detail(skillId),
+      readFile: (skillId, filePath) => skillLibraryService.readFile(skillId, filePath),
       create: (input) => skillLibraryService.create(input),
       update: (skillId, input) => skillLibraryService.update(skillId, input),
       remove: (skillId) => skillLibraryService.remove(skillId),

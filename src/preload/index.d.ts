@@ -146,6 +146,7 @@ interface CodexDesktopApi {
   readPromptAttachment: (promptId: string, fileName: string) => Promise<PromptAttachmentData>
   listSkillLibrary: (input?: SkillLibrarySearchInput) => Promise<SkillLibrarySummary[]>
   getSkillLibraryDetail: (skillId: string) => Promise<SkillLibraryDetail>
+  readSkillLibraryFile: (skillId: string, filePath: string) => Promise<string>
   createSkillLibrary: (input: CreateSkillLibraryInput) => Promise<SkillLibraryDetail>
   updateSkillLibrary: (
     skillId: string,
@@ -160,7 +161,9 @@ interface CodexDesktopApi {
   ) => Promise<SkillLibraryCategoryList>
   removeSkillLibraryCategory: (name: string) => Promise<SkillLibraryCategoryList>
   importSkillLibraryDir: (dirPath: string) => Promise<SkillLibraryImportResult>
+  importSkillLibraryDirWithDialog: () => Promise<SkillLibraryImportResult | null>
   exportSkillLibraryDir: (targetDir: string) => Promise<SkillLibraryExportResult>
+  exportSkillLibraryDirWithDialog: () => Promise<SkillLibraryExportResult | null>
   collectSkillLibrary: (input: SkillLibraryCollectInput) => Promise<SkillLibraryCollectResult>
   installSkillLibrary: (input: SkillLibraryInstallInput) => Promise<SkillLibraryInstallResult>
   getLocalGatewayStatus: () => Promise<LocalGatewayStatus>

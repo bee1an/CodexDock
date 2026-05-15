@@ -141,6 +141,7 @@ interface ResolvedInstance {
 export interface SkillLibraryService {
   list(input?: SkillLibrarySearchInput): Promise<SkillLibrarySummary[]>
   detail(skillId: string): Promise<SkillLibraryDetail>
+  readFile(skillId: string, filePath: string): Promise<string>
   create(input: CreateSkillLibraryInput): Promise<SkillLibraryDetail>
   update(skillId: string, input: UpdateSkillLibraryInput): Promise<SkillLibraryDetail>
   remove(skillId: string): Promise<void>
@@ -234,10 +235,21 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
     }
   }
 
-  async function listFiles(skillDir: string): Promise<string[]> {
+  async function listFiles(skillDir: string, prefix = ''): Promise<string[]> {
     try {
-      const entries = await fs.readdir(skillDir, { withFileTypes: true })
-      return entries.filter((e) => e.isFile() && !e.name.startsWith('.')).map((e) => e.name)
+      const entries = await fs.readdir(join(skillDir, prefix), { withFileTypes: true })
+      const results: string[] = []
+      for (const entry of entries) {
+        if (entry.name.startsWith('.')) continue
+        const relativePath = prefix ? `${prefix}/${entry.name}` : entry.name
+        if (entry.isFile()) {
+          results.push(relativePath)
+        } else if (entry.isDirectory()) {
+          const subFiles = await listFiles(skillDir, relativePath)
+          results.push(...subFiles)
+        }
+      }
+      return results
     } catch {
       return []
     }
@@ -303,6 +315,31 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
       content,
       files
     }
+  }
+
+  async function readFile(skillId: string, filePath: string): Promise<string> {
+    await ensureDir()
+    const dirName = await findDirById(skillId)
+    if (!dirName) throw new Error(`Skill "${skillId}" not found in library.`)
+
+    const normalized = filePath.trim()
+    if (
+      !normalized ||
+      normalized.includes('..') ||
+      isAbsolute(normalized) ||
+      normalized.startsWith('.')
+    ) {
+      throw new Error(`Invalid file path: "${filePath}"`)
+    }
+
+    const skillDir = join(libraryDir, dirName)
+    const targetPath = join(skillDir, normalized)
+
+    if (!isPathInsideBase(skillDir, targetPath)) {
+      throw new Error('File path escapes skill directory.')
+    }
+
+    return await fs.readFile(targetPath, 'utf8')
   }
 
   async function create(input: CreateSkillLibraryInput): Promise<SkillLibraryDetail> {
@@ -753,6 +790,7 @@ export function createSkillLibraryService(userDataPath: string): SkillLibrarySer
   return {
     list,
     detail,
+    readFile,
     create,
     update,
     remove,
