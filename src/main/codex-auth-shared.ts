@@ -76,6 +76,7 @@ function defaultSettings(): AppSettings {
     theme: 'light',
     checkForUpdatesOnStartup: true,
     codexDesktopExecutablePath: '',
+    preserveChatGptAuthOnDirectProviderOpen: false,
     showLocalMockData: true,
     statsDisplay: defaultStatsDisplaySettings(),
     tagVisibility: {},

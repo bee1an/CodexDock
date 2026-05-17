@@ -32,6 +32,7 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'theme',
   'checkForUpdatesOnStartup',
   'showLocalMockData',
+  'preserveChatGptAuthOnDirectProviderOpen',
   'codexDesktopExecutablePath',
   'statsDisplay',
   'localGateway',
@@ -193,6 +194,14 @@ export function parseSettingsValue(
     case 'showLocalMockData':
       if (rawValue !== 'true' && rawValue !== 'false') {
         throw new CliError('showLocalMockData must be true or false', EXIT_USAGE)
+      }
+      return rawValue === 'true'
+    case 'preserveChatGptAuthOnDirectProviderOpen':
+      if (rawValue !== 'true' && rawValue !== 'false') {
+        throw new CliError(
+          'preserveChatGptAuthOnDirectProviderOpen must be true or false',
+          EXIT_USAGE
+        )
       }
       return rawValue === 'true'
     case 'toolbarIconMovable':

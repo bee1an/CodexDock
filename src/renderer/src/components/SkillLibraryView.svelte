@@ -109,8 +109,9 @@
 
   async function toggleFileExpand(filePath: string): Promise<void> {
     if (expandedFiles[filePath] !== undefined) {
-      const { [filePath]: _, ...rest } = expandedFiles
-      expandedFiles = rest
+      const nextExpandedFiles = { ...expandedFiles }
+      delete nextExpandedFiles[filePath]
+      expandedFiles = nextExpandedFiles
       return
     }
     if (!currentSkill) return

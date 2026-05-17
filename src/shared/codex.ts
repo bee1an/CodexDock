@@ -109,6 +109,7 @@ export interface AppSettings {
   theme: AppTheme
   checkForUpdatesOnStartup: boolean
   codexDesktopExecutablePath: string
+  preserveChatGptAuthOnDirectProviderOpen?: boolean
   showLocalMockData?: boolean
   statsDisplay?: StatsDisplaySettings
   toolbarIconMovable?: boolean

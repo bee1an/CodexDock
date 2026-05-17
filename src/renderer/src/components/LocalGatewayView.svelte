@@ -459,9 +459,7 @@
   $: selectableAccountIdSet = new Set(selectableAccounts.map((account) => account.id))
   $: allowedSelectableAccountIds = allowedAccountIds.filter((id) => selectableAccountIdSet.has(id))
   $: allowedAccountIdSet = new Set(allowedSelectableAccountIds)
-  $: selectedAccounts = selectableAccounts.filter((account) =>
-    allowedAccountIdSet.has(account.id)
-  )
+  $: selectedAccounts = selectableAccounts.filter((account) => allowedAccountIdSet.has(account.id))
   $: availableAccounts = selectableAccounts.filter(
     (account) => !allowedAccountIdSet.has(account.id)
   )
@@ -594,9 +592,7 @@
     </div>
   </div>
 
-  <div
-    class="gateway-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden"
-  >
+  <div class="gateway-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden">
     {#if shouldShowGatewayError}
       <div
         class="gateway-error flex items-start gap-2 rounded-[0.45rem] border p-2.5 text-xs text-danger"
@@ -829,9 +825,7 @@
                 title={copy.rotateLocalGatewayKey}
               >
                 {#if localGatewayBusy}
-                  <span
-                    class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin"
-                    aria-hidden="true"
+                  <span class="i-lucide-loader-circle h-3.5 w-3.5 animate-spin" aria-hidden="true"
                   ></span>
                 {:else}
                   <span class="i-lucide-rotate-cw h-3.5 w-3.5" aria-hidden="true"></span>
@@ -1478,7 +1472,10 @@
       {/if}
 
       {#if modelMappings.length}
-        <div class="gateway-mapping-table rounded-[0.4rem] border border-[var(--card-border)]" data-dialog-motion>
+        <div
+          class="gateway-mapping-table rounded-[0.4rem] border border-[var(--card-border)]"
+          data-dialog-motion
+        >
           {#each modelMappings as entry (entry.from)}
             <div class="gateway-mapping-row gateway-mapping-grid px-3 py-2.5">
               <code

@@ -374,9 +374,48 @@ export async function writeProviderApiKeyToCodexHome(
   }
 }
 
+export async function writeChatGptAuthModeToCodexHome(codexHome: string): Promise<void> {
+  await fs.mkdir(codexHome, { recursive: true })
+  const authPath = join(codexHome, 'auth.json')
+  const tmpAuthPath = `${authPath}.${process.pid}.${randomUUID()}.tmp`
+  let existingAuthPayload: Record<string, unknown> = {}
+  try {
+    const raw = await fs.readFile(authPath, 'utf8')
+    const parsed = raw.trim() ? JSON.parse(raw) : {}
+    existingAuthPayload =
+      parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {}
+  } catch {
+    existingAuthPayload = {}
+  }
+
+  const nextAuthPayload: Record<string, unknown> = {
+    auth_mode: 'chatgpt',
+    OPENAI_API_KEY: null
+  }
+  for (const [key, value] of Object.entries(existingAuthPayload)) {
+    if (key === 'auth_mode' || key === 'OPENAI_API_KEY') {
+      continue
+    }
+    nextAuthPayload[key] = value
+  }
+
+  try {
+    await fs.writeFile(tmpAuthPath, `${JSON.stringify(nextAuthPayload, null, 2)}\n`, 'utf8')
+    await fs.rename(tmpAuthPath, authPath)
+  } finally {
+    await fs.rm(tmpAuthPath, { force: true })
+  }
+}
+
 export async function writeProviderConfigToCodexHome(
   codexHome: string,
-  provider: Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'model' | 'fastMode'>
+  provider: Pick<CustomProviderSummary, 'name' | 'baseUrl' | 'model' | 'fastMode'>,
+  options: {
+    experimentalBearerToken?: string
+    modelProvider?: string
+  } = {}
 ): Promise<void> {
   const configPath = join(codexHome, 'config.toml')
   let nextConfig: Record<string, unknown> = {}
@@ -392,11 +431,15 @@ export async function writeProviderConfigToCodexHome(
     nextConfig['model_providers'] && typeof nextConfig['model_providers'] === 'object'
       ? { ...(nextConfig['model_providers'] as Record<string, unknown>) }
       : {}
-  modelProviders['custom'] = {
-    name: provider.name?.trim() || 'custom',
+  const modelProvider = options.modelProvider?.trim() || 'custom'
+  modelProviders[modelProvider] = {
+    name: options.modelProvider?.trim() || provider.name?.trim() || modelProvider,
+    base_url: provider.baseUrl,
     wire_api: 'responses',
-    requires_openai_auth: true,
-    base_url: provider.baseUrl
+    ...(options.experimentalBearerToken
+      ? { experimental_bearer_token: options.experimentalBearerToken }
+      : {}),
+    requires_openai_auth: true
   }
 
   const feature =
@@ -406,7 +449,7 @@ export async function writeProviderConfigToCodexHome(
   feature['fast_mode'] = provider.fastMode
 
   nextConfig['model'] = provider.model?.trim() || '5.4'
-  nextConfig['model_provider'] = 'custom'
+  nextConfig['model_provider'] = modelProvider
   nextConfig['model_providers'] = modelProviders
   nextConfig['feature'] = feature
 

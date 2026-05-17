@@ -14,6 +14,7 @@ import {
   resolveManagedCodexPid,
   stopCodexProcess,
   writeAuthPayloadToCodexHome,
+  writeChatGptAuthModeToCodexHome,
   writeProviderApiKeyToCodexHome,
   writeProviderConfigToCodexHome
 } from './codex-launcher'
@@ -474,6 +475,10 @@ export function createCodexServicesInstanceRuntime(
     }
   }
 
+  async function shouldPreserveChatGptAuthOnDirectProviderOpen(): Promise<boolean> {
+    return Boolean((await store.getSettings()).preserveChatGptAuthOnDirectProviderOpen)
+  }
+
   async function launchServiceCodex(input: {
     workspacePath: string
     codexHome: string
@@ -773,51 +778,17 @@ export function createCodexServicesInstanceRuntime(
     await configGuard.guardBeforeWrite(configPath)
     await configGuard.guardBeforeWrite(authPath, { sensitive: true })
 
-    let nextConfig: Record<string, unknown> = {}
-    try {
-      const raw = await fs.readFile(configPath, 'utf8')
-      nextConfig = raw.trim() ? (parseToml(raw) as Record<string, unknown>) : {}
-    } catch {
-      nextConfig = {}
-    }
-
-    const modelProviders =
-      nextConfig['model_providers'] && typeof nextConfig['model_providers'] === 'object'
-        ? { ...(nextConfig['model_providers'] as Record<string, unknown>) }
-        : {}
-    modelProviders['custom'] = {
-      name: provider.summary.name?.trim() || 'custom',
-      wire_api: 'responses',
-      requires_openai_auth: true,
-      base_url: provider.summary.baseUrl
-    }
-
-    const feature =
-      nextConfig['feature'] && typeof nextConfig['feature'] === 'object'
-        ? { ...(nextConfig['feature'] as Record<string, unknown>) }
-        : {}
-    feature['fast_mode'] = provider.summary.fastMode
-
-    nextConfig['model'] = provider.summary.model?.trim() || '5.4'
-    nextConfig['model_provider'] = 'custom'
-    nextConfig['model_providers'] = modelProviders
-    nextConfig['feature'] = feature
-
-    const tomlContent = stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])
-    parseToml(tomlContent)
-
-    await fs.mkdir(defaultCodexHome, { recursive: true })
-    const tmpConfig = `${configPath}.${process.pid}.${randomUUID()}.tmp`
-    try {
-      await fs.writeFile(tmpConfig, `${tomlContent}\n`, 'utf8')
-      await fs.rename(tmpConfig, configPath)
-    } catch (error) {
-      await fs.rm(tmpConfig, { force: true })
-      throw error
-    }
-
+    const preserveChatGptAuth = await shouldPreserveChatGptAuthOnDirectProviderOpen()
+    await writeProviderConfigToCodexHome(defaultCodexHome, provider.summary, {
+      experimentalBearerToken: preserveChatGptAuth ? provider.apiKey : undefined,
+      modelProvider: preserveChatGptAuth ? provider.summary.name?.trim() || 'custom' : undefined
+    })
     await configGuard.recordWriteComplete(configPath)
-    await writeProviderApiKeyToCodexHome(defaultCodexHome, provider.apiKey)
+    if (preserveChatGptAuth) {
+      await writeChatGptAuthModeToCodexHome(defaultCodexHome)
+    } else {
+      await writeProviderApiKeyToCodexHome(defaultCodexHome, provider.apiKey)
+    }
     await configGuard.recordWriteComplete(authPath)
 
     const defaultInstance = await instanceStore.getDefaultInstance()
@@ -922,15 +893,27 @@ export function createCodexServicesInstanceRuntime(
     await configGuard.guardBeforeWrite(configPath)
     await configGuard.guardBeforeWrite(authPath, { sensitive: true })
 
-    await writeProviderConfigToCodexHome(defaultCodexHome, {
-      name: localGatewayInstanceName,
-      baseUrl: localGatewayProviderBaseUrl(input.baseUrl),
-      model: localGatewayProviderModel,
-      fastMode: true
-    })
+    const preserveChatGptAuth = await shouldPreserveChatGptAuthOnDirectProviderOpen()
+    await writeProviderConfigToCodexHome(
+      defaultCodexHome,
+      {
+        name: localGatewayInstanceName,
+        baseUrl: localGatewayProviderBaseUrl(input.baseUrl),
+        model: localGatewayProviderModel,
+        fastMode: true
+      },
+      {
+        experimentalBearerToken: preserveChatGptAuth ? input.apiKey : undefined,
+        modelProvider: preserveChatGptAuth ? localGatewayInstanceName : undefined
+      }
+    )
     await configGuard.recordWriteComplete(configPath)
 
-    await writeProviderApiKeyToCodexHome(defaultCodexHome, input.apiKey)
+    if (preserveChatGptAuth) {
+      await writeChatGptAuthModeToCodexHome(defaultCodexHome)
+    } else {
+      await writeProviderApiKeyToCodexHome(defaultCodexHome, input.apiKey)
+    }
     await configGuard.recordWriteComplete(authPath)
 
     const defaultInstance = await instanceStore.getDefaultInstance()

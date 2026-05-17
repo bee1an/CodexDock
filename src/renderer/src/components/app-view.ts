@@ -90,6 +90,9 @@ export const messages = {
     pollingInterval: '额度轮询',
     autoCheckUpdates: '启动时检查更新',
     showLocalMockData: '显示本地 Mock 数据',
+    preserveChatGptAuthOnDirectProviderOpen: '直连 Provider 时保留 ChatGPT 登录',
+    preserveChatGptAuthOnDirectProviderOpenDescription:
+      '开启后，自定义 Provider / 本地服务的“直接打开 Codex”会把 API Key 写入 config.toml 的 experimental_bearer_token，并让 auth.json 保持 ChatGPT 模式。',
     toolbarSettings: '底部工具栏',
     toolbarSettingsDescription: '控制工具栏收起后的入口图标显示与拖动行为。',
     toolbarIconMovable: '允许拖动收起图标',
@@ -821,6 +824,9 @@ export const messages = {
     pollingInterval: 'Usage polling',
     autoCheckUpdates: 'Check updates on startup',
     showLocalMockData: 'Show local mock data',
+    preserveChatGptAuthOnDirectProviderOpen: 'Keep ChatGPT login for direct Provider open',
+    preserveChatGptAuthOnDirectProviderOpenDescription:
+      'When enabled, “Open Codex directly” for custom providers / local service writes the API key to config.toml experimental_bearer_token and keeps auth.json in ChatGPT mode.',
     toolbarSettings: 'Bottom toolbar',
     toolbarSettingsDescription: 'Configure the collapsed entry icon and drag behavior.',
     toolbarIconMovable: 'Allow dragging collapsed icon',

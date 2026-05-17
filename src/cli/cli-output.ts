@@ -385,6 +385,9 @@ export function printSettings(settings: AppSettings, quiet: boolean): void {
   console.log(`checkForUpdatesOnStartup=${settings.checkForUpdatesOnStartup}`)
   console.log(`codexDesktopExecutablePath=${settings.codexDesktopExecutablePath}`)
   console.log(`showLocalMockData=${settings.showLocalMockData !== false}`)
+  console.log(
+    `preserveChatGptAuthOnDirectProviderOpen=${settings.preserveChatGptAuthOnDirectProviderOpen === true}`
+  )
   console.log(`statsDisplay=${serializeStatsDisplaySettings(settings.statsDisplay)}`)
   console.log(`tagVisibility=${serializeTagVisibilitySettings(settings.tagVisibility)}`)
   console.log(`toolbarIconMovable=${settings.toolbarIconMovable !== false}`)
@@ -402,6 +405,10 @@ export function formatSettingsValue(key: keyof AppSettings, settings: AppSetting
 
   if (key === 'showLocalMockData') {
     return String(value !== false)
+  }
+
+  if (key === 'preserveChatGptAuthOnDirectProviderOpen') {
+    return String(value === true)
   }
 
   if (key === 'toolbarIconMovable') {

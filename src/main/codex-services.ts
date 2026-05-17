@@ -828,10 +828,8 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       removeCategory: (name) => skillLibraryService.removeCategory(name),
       importDir: (dirPath) => skillLibraryService.importDir(dirPath),
       exportDir: (targetDir) => skillLibraryService.exportDir(targetDir),
-      collect: async (input) =>
-        skillLibraryService.collect(input, await listCodexInstances()),
-      install: async (input) =>
-        skillLibraryService.install(input, await listCodexInstances())
+      collect: async (input) => skillLibraryService.collect(input, await listCodexInstances()),
+      install: async (input) => skillLibraryService.install(input, await listCodexInstances())
     }
   }
 }

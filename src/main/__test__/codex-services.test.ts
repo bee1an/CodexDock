@@ -935,6 +935,48 @@ describe('createCodexServices', () => {
     await expect(readdir(backupDir)).resolves.toEqual(backupsAfterProvider)
   })
 
+  it('保留 ChatGPT 登录直连自定义 Provider 时把 API Key 写入 config.toml', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+    await services.settings.update({
+      preserveChatGptAuthOnDirectProviderOpen: true
+    })
+
+    const created = await services.providers.create({
+      name: 'OpenAI',
+      baseUrl: 'https://api.bee1an.us.kg/v1',
+      apiKey: 'provider-secret',
+      model: 'gpt-5.4',
+      fastMode: true
+    })
+    const providerId = created.providers[0]?.id
+    expect(providerId).toBeTruthy()
+
+    await services.providers.open(providerId!, env.workspacePath)
+
+    const defaultHome = join(process.env.HOME ?? '', '.codex')
+    const auth = await readFile(join(defaultHome, 'auth.json'), 'utf8')
+    const config = await readFile(join(defaultHome, 'config.toml'), 'utf8')
+
+    expect(auth).toContain('"auth_mode": "chatgpt"')
+    expect(auth).toContain('"OPENAI_API_KEY": null')
+    expect(auth).toContain('"account_id": "acct-a"')
+    expect(auth).not.toContain('provider-secret')
+    expect(config).toContain('model_provider = "OpenAI"')
+    expect(config).toContain('[model_providers.OpenAI]')
+    expect(config).toContain('name = "OpenAI"')
+    expect(config).toContain('requires_openai_auth = true')
+    expect(config).toContain('experimental_bearer_token = "provider-secret"')
+    expect(config).toContain('base_url = "https://api.bee1an.us.kg/v1"')
+  })
+
   it('opens a normal account by clearing provider config from default config.toml with backup', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
@@ -943,20 +985,21 @@ describe('createCodexServices', () => {
       platform: createPlatform()
     })
     const defaultHome = join(process.env.HOME ?? '', '.codex')
-    const originalConfig = [
-      'approval_policy = "never"',
-      'model = "external-model"',
-      'model_provider = "external_provider"',
-      '',
-      '[model_providers.external_provider]',
-      'name = "External Provider"',
-      'wire_api = "responses"',
-      'base_url = "https://external.example.com/v1"',
-      '',
-      '[feature]',
-      'fast_mode = true',
-      'notify = true'
-    ].join('\n') + '\n'
+    const originalConfig =
+      [
+        'approval_policy = "never"',
+        'model = "external-model"',
+        'model_provider = "external_provider"',
+        '',
+        '[model_providers.external_provider]',
+        'name = "External Provider"',
+        'wire_api = "responses"',
+        'base_url = "https://external.example.com/v1"',
+        '',
+        '[feature]',
+        'fast_mode = true',
+        'notify = true'
+      ].join('\n') + '\n'
 
     await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
     await writeFile(join(defaultHome, 'config.toml'), originalConfig, 'utf8')
@@ -1041,11 +1084,7 @@ describe('createCodexServices', () => {
     const defaultCodexHome = join(process.env.HOME ?? '', '.codex')
 
     await mkdir(defaultCodexHome, { recursive: true })
-    await writeFile(
-      join(defaultCodexHome, 'config.toml'),
-      'approval_policy = "never"\n',
-      'utf8'
-    )
+    await writeFile(join(defaultCodexHome, 'config.toml'), 'approval_policy = "never"\n', 'utf8')
     await writeFile(
       join(defaultCodexHome, 'auth.json'),
       `${JSON.stringify({ OPENAI_API_KEY: 'old-secret' }, null, 2)}\n`,
@@ -1090,6 +1129,50 @@ describe('createCodexServices', () => {
           value.endsWith('codex-instance-homes/local-gateway')
         )
       ).toBe(false)
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('保留 ChatGPT 登录直连本地服务时把网关 Key 写入 config.toml', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const port = await getFreePort()
+    const defaultCodexHome = join(process.env.HOME ?? '', '.codex')
+
+    await services.settings.update({
+      preserveChatGptAuthOnDirectProviderOpen: true,
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: ['group-1'],
+        allowedAccountIds: [],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      await services.codex.openLocalGateway(env.workspacePath)
+      const config = await readFile(join(defaultCodexHome, 'config.toml'), 'utf8')
+      const auth = await readFile(join(defaultCodexHome, 'auth.json'), 'utf8')
+
+      expect(auth).toContain('"auth_mode": "chatgpt"')
+      expect(auth).toContain('"OPENAI_API_KEY": null')
+      expect(auth).not.toContain('gateway-secret-a')
+      expect(config).toContain('model_provider = "Local Gateway"')
+      expect(config).toContain('[model_providers."Local Gateway"]')
+      expect(config).toContain('name = "Local Gateway"')
+      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/v1"`)
+      expect(config).toContain('experimental_bearer_token = "gateway-secret-a"')
     } finally {
       await services.gateway.stop()
     }
@@ -1323,8 +1406,9 @@ describe('createCodexServices', () => {
       expect(response.status).toBe(200)
       expect(platform.fetch).toHaveBeenCalledOnce()
       expect(
-        new Headers((platform.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]?.headers)
-          .get('chatgpt-account-id')
+        new Headers((platform.fetch as ReturnType<typeof vi.fn>).mock.calls[0][1]?.headers).get(
+          'chatgpt-account-id'
+        )
       ).toBe('acct-a')
     } finally {
       await services.gateway.stop()

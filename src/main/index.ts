@@ -1019,7 +1019,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:skill-library-read-file', (_, skillId: string, filePath: string) =>
     codexServices.skillLibrary.readFile(skillId, filePath)
   )
-  ipcMain.handle('codex:skill-library-create', (_, input) => codexServices.skillLibrary.create(input))
+  ipcMain.handle('codex:skill-library-create', (_, input) =>
+    codexServices.skillLibrary.create(input)
+  )
   ipcMain.handle('codex:skill-library-update', (_, skillId: string, input) =>
     codexServices.skillLibrary.update(skillId, input)
   )

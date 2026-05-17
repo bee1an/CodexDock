@@ -143,9 +143,7 @@ export class ConfigGuard {
 
     if (staleCurrentBackupPaths.length) {
       const stalePaths = new Set(staleCurrentBackupPaths)
-      state.backups = state.backups.filter(
-        (backup) => !stalePaths.has(backup.backupPath)
-      )
+      state.backups = state.backups.filter((backup) => !stalePaths.has(backup.backupPath))
     }
 
     const ts = Date.now()

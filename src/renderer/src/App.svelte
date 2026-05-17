@@ -99,6 +99,7 @@
       theme: 'light',
       checkForUpdatesOnStartup: true,
       codexDesktopExecutablePath: '',
+      preserveChatGptAuthOnDirectProviderOpen: false,
       showLocalMockData: true,
       statsDisplay: defaultStatsDisplaySettings(),
       toolbarIconMovable: true,
@@ -1597,6 +1598,16 @@
     )
   }
 
+  const updatePreserveChatGptAuthOnDirectProviderOpen = async (enabled: boolean): Promise<void> => {
+    if (Boolean(snapshot.settings.preserveChatGptAuthOnDirectProviderOpen) === enabled) {
+      return
+    }
+
+    await runAction('settings:preserve-chatgpt-auth-provider-open', () =>
+      window.codexApp.updateSettings({ preserveChatGptAuthOnDirectProviderOpen: enabled })
+    )
+  }
+
   const toggleStatusAccount = async (accountId: string): Promise<void> => {
     const nextIds = snapshot.settings.statusBarAccountIds.includes(accountId)
       ? snapshot.settings.statusBarAccountIds.filter((id) => id !== accountId)
@@ -1927,6 +1938,7 @@
               {installUpdate}
               {openExternalLink}
               {updateCodexDesktopExecutablePath}
+              {updatePreserveChatGptAuthOnDirectProviderOpen}
               showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
             />
           </div>

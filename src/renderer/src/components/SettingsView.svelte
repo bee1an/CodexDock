@@ -17,6 +17,9 @@
   export let updateShowLocalMockData: (enabled: boolean) => void
   export let updateLanguage: (language: AppLanguage) => void
   export let updateCodexDesktopExecutablePath: (value: string) => Promise<void>
+  export let updatePreserveChatGptAuthOnDirectProviderOpen: (
+    enabled: boolean
+  ) => Promise<void> = async () => {}
   export let checkForUpdates: () => void
   export let downloadUpdate: () => Promise<void>
   export let installUpdate: () => Promise<void>
@@ -153,6 +156,24 @@
           </label>
         </div>
       {/if}
+
+      <div class="settings-row flex items-start gap-3 rounded-[0.45rem] border px-3 py-2.5">
+        <label class="inline-flex min-w-0 items-start gap-2 text-xs text-muted-strong">
+          <Checkbox
+            checked={settings.preserveChatGptAuthOnDirectProviderOpen === true}
+            onCheckedChange={(checked) =>
+              void updatePreserveChatGptAuthOnDirectProviderOpen(checked)}
+          />
+          <span class="grid gap-1">
+            <span class="font-medium text-carbon"
+              >{copy.preserveChatGptAuthOnDirectProviderOpen}</span
+            >
+            <span class="leading-4 text-muted-strong">
+              {copy.preserveChatGptAuthOnDirectProviderOpenDescription}
+            </span>
+          </span>
+        </label>
+      </div>
     </div>
   </section>
 

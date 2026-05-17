@@ -485,10 +485,14 @@ describe('trashCodexSession', () => {
     const instances = [instance('__default__', '', codexHome, true)]
     const platform = mockPlatform()
 
-    const result = await trashCodexSession(instances, {
-      instanceId: '__default__',
-      filePath
-    }, platform)
+    const result = await trashCodexSession(
+      instances,
+      {
+        instanceId: '__default__',
+        filePath
+      },
+      platform
+    )
 
     expect(result.session.id).toBe('trash-test')
     expect(result.session.status).toBe('active')
@@ -508,10 +512,14 @@ describe('trashCodexSession', () => {
     const instances = [instance('__default__', '', codexHome, true)]
     const platform = mockPlatform()
 
-    const result = await trashCodexSession(instances, {
-      instanceId: '__default__',
-      filePath
-    }, platform)
+    const result = await trashCodexSession(
+      instances,
+      {
+        instanceId: '__default__',
+        filePath
+      },
+      platform
+    )
 
     expect(result.session.id).toBe('archived-trash')
     expect(result.session.status).toBe('archived')

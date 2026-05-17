@@ -520,8 +520,7 @@
         variant="primary"
         size="sm"
         onclick={() => editDialogProvider && void handleSaveProvider(editDialogProvider)}
-        disabled={!!savingProviderId ||
-          !providerDrafts[editDialogProvider.id].baseUrl.trim()}
+        disabled={!!savingProviderId || !providerDrafts[editDialogProvider.id].baseUrl.trim()}
       >
         <span
           class={`${savingProviderId ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-check'} h-3.5 w-3.5`}

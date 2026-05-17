@@ -68,10 +68,7 @@
   export let copyPromptContent: (promptId: string) => Promise<string>
   export let listPromptCategories: () => Promise<PromptCategoryList>
   export let createPromptCategory: (name: string) => Promise<PromptCategoryList>
-  export let renamePromptCategory: (
-    oldName: string,
-    newName: string
-  ) => Promise<PromptCategoryList>
+  export let renamePromptCategory: (oldName: string, newName: string) => Promise<PromptCategoryList>
   export let removePromptCategory: (name: string) => Promise<PromptCategoryList>
   export let addPromptAttachment: (
     promptId: string,
@@ -96,7 +93,9 @@
         size="sm"
         selected={activeTab === 'skills'}
         ariaPressed={activeTab === 'skills'}
-        onclick={() => { activeTab = 'skills' }}
+        onclick={() => {
+          activeTab = 'skills'
+        }}
       >
         <span class="i-lucide-sparkles h-3.5 w-3.5"></span>
         <span>{copy.stashSkillsTab}</span>
@@ -106,7 +105,9 @@
         size="sm"
         selected={activeTab === 'prompts'}
         ariaPressed={activeTab === 'prompts'}
-        onclick={() => { activeTab = 'prompts' }}
+        onclick={() => {
+          activeTab = 'prompts'
+        }}
       >
         <span class="i-lucide-file-text h-3.5 w-3.5"></span>
         <span>{copy.stashPromptsTab}</span>

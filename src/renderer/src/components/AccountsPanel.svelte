@@ -170,9 +170,7 @@
   export let copyCodexSessionToProvider: (
     input: CopyCodexSessionToProviderInput
   ) => Promise<CopyCodexSessionToProviderResult>
-  export let trashCodexSession: (
-    input: TrashCodexSessionInput
-  ) => Promise<TrashCodexSessionResult>
+  export let trashCodexSession: (input: TrashCodexSessionInput) => Promise<TrashCodexSessionResult>
   export let listCodexSkills: () => Promise<CodexSkillsResult>
   export let readCodexSkillDetail: (
     instanceId: string,
@@ -203,6 +201,9 @@
   export let installUpdate: () => Promise<void> = async () => {}
   export let openExternalLink: (url?: string) => void = () => {}
   export let updateCodexDesktopExecutablePath: (value: string) => Promise<void> = async () => {}
+  export let updatePreserveChatGptAuthOnDirectProviderOpen: (
+    enabled: boolean
+  ) => Promise<void> = async () => {}
   export let showCodexDesktopExecutablePath = false
 
   let currentView:
@@ -605,14 +606,16 @@
       removeSkillLibrary={(id) => window.codexApp.removeSkillLibrary(id)}
       listSkillLibraryCategories={() => window.codexApp.listSkillLibraryCategories()}
       createSkillLibraryCategory={(name) => window.codexApp.createSkillLibraryCategory(name)}
-      renameSkillLibraryCategory={(old, name) => window.codexApp.renameSkillLibraryCategory(old, name)}
+      renameSkillLibraryCategory={(old, name) =>
+        window.codexApp.renameSkillLibraryCategory(old, name)}
       removeSkillLibraryCategory={(name) => window.codexApp.removeSkillLibraryCategory(name)}
       installSkillLibrary={(input) => window.codexApp.installSkillLibrary(input)}
       {listCodexSkills}
       importSkillLibraryDirWithDialog={() => window.codexApp.importSkillLibraryDirWithDialog()}
       exportSkillLibraryDirWithDialog={() => window.codexApp.exportSkillLibraryDirWithDialog()}
       collectSkillLibrary={(input) => window.codexApp.collectSkillLibrary(input)}
-      readSkillLibraryFile={(skillId, filePath) => window.codexApp.readSkillLibraryFile(skillId, filePath)}
+      readSkillLibraryFile={(skillId, filePath) =>
+        window.codexApp.readSkillLibraryFile(skillId, filePath)}
       listPrompts={(input) => window.codexApp.listPrompts(input)}
       getPromptDetail={(id) => window.codexApp.getPromptDetail(id)}
       createPrompt={(input) => window.codexApp.createPrompt(input)}
@@ -641,6 +644,7 @@
       {updateShowLocalMockData}
       {updateLanguage}
       {updateCodexDesktopExecutablePath}
+      {updatePreserveChatGptAuthOnDirectProviderOpen}
       {checkForUpdates}
       {downloadUpdate}
       {installUpdate}

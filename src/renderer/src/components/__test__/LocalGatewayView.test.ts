@@ -77,9 +77,7 @@ describe('LocalGatewayView', () => {
     await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayOpenCodex }))
     expect(openLocalGatewayInCodex).toHaveBeenCalledOnce()
 
-    await fireEvent.click(
-      screen.getByRole('button', { name: copy.localGatewayOpenCodexIsolated })
-    )
+    await fireEvent.click(screen.getByRole('button', { name: copy.localGatewayOpenCodexIsolated }))
     expect(openLocalGatewayIsolatedInCodex).toHaveBeenCalledOnce()
   })
 
