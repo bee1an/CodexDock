@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.9 - 2026-05-17
+
+This patch release adds an opt-in direct launch mode for keeping ChatGPT login active with custom providers and the local gateway.
+
+- Added a Settings toggle for preserving ChatGPT authentication when opening Codex directly from custom providers or the local gateway.
+- Improved direct provider and local gateway launches so API keys can be written to `config.toml` as `experimental_bearer_token` while `auth.json` stays in ChatGPT mode.
+- Updated `cdock settings` parsing and output so the new launch preference can be inspected and changed from the CLI alongside the desktop app.
+
 ## 0.4.8 - 2026-05-15
 
 This release expands stash and session management while refining local gateway routing, launch flows, and desktop workspaces.
