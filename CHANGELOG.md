@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.10 - 2026-05-19
+
+This release adds per-account usage charts, centralizes config.toml handling, and introduces per-group account ordering.
+
+- Added per-account usage chart showing 30-day token consumption and cost breakdown by bound account, with unknown model costs treated as zero in totals.
+- Added per-group account ordering with drag-sort support in the desktop accounts list.
+- Centralized `config.toml` parsing and serialization into a dedicated module with repair fallback for malformed files.
+- Improved local gateway error responses to distinguish between no available account and no available provider (503 `no_account` vs `no_provider`).
+- Added persistent gateway log column visibility so column preferences survive across sessions.
+- Fixed free-plan quota scoring to evaluate the primary rate-limit window instead of the secondary window.
+
 ## 0.4.9 - 2026-05-17
 
 This patch release adds an opt-in direct launch mode for keeping ChatGPT login active with custom providers and the local gateway.
