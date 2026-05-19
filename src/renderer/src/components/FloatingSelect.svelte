@@ -22,6 +22,7 @@
   export let activeOptionClass = ''
   export let inactiveOptionClass = ''
   export let title: string | undefined = undefined
+  export let iconClass: string | undefined = undefined
 
   let triggerNode: HTMLButtonElement | null = null
   let open = false
@@ -167,7 +168,13 @@
     onclick={toggleMenu}
     onkeydown={handleTriggerKeydown}
   >
-    <span class="block truncate text-center">{selectedOption.label}</span>
+    <slot name="trigger">
+      {#if iconClass}
+        <span class="{iconClass} h-3.5 w-3.5" aria-hidden="true"></span>
+      {:else}
+        <span class="block truncate text-center">{selectedOption.label}</span>
+      {/if}
+    </slot>
   </button>
 
   <AppPopover

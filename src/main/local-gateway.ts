@@ -54,6 +54,7 @@ type GatewayLogMeta = Pick<
 >
 
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
+const NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE = 'No available Codex account for local gateway.'
 
 function logTargetFromAccount(account: AccountSummary): string {
   return account.email || account.name || account.id
@@ -99,6 +100,10 @@ function openAiError(
       }
     }
   }
+}
+
+function isNoAvailableCodexAccountError(error: unknown): boolean {
+  return error instanceof Error && error.message === NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE
 }
 
 async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
@@ -1159,7 +1164,7 @@ export class CodexLocalGatewayService {
         return
       }
       await writeFetchResponse(response, upstream)
-    } catch {
+    } catch (error) {
       const providerName = await this.proxyProviderProtocol(
         'openai',
         request,
@@ -1172,7 +1177,9 @@ export class CodexLocalGatewayService {
         writeJson(
           response,
           503,
-          openAiError('No available provider for local gateway.', 503, 'no_provider').body
+          isNoAvailableCodexAccountError(error)
+            ? openAiError(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE, 503, 'no_account').body
+            : openAiError('No available provider for local gateway.', 503, 'no_provider').body
         )
       }
     }
@@ -1729,7 +1736,7 @@ export class CodexLocalGatewayService {
     while (true) {
       const account = await this.selectAccountForCodexRequest(stickyKey, attemptedAccountIds)
       if (!account) {
-        throw new Error('No available Codex account for local gateway.')
+        throw new Error(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE)
       }
 
       attemptedAccountIds.add(account.id)

@@ -259,9 +259,9 @@ describe('LocalGatewayView', () => {
       }
     })
 
-    const expandSpan = screen.getByText(copy.localGatewayExpandDetail)
-    const expandBtn = expandSpan.closest('button')!
-    expandBtn.click()
+    const pathCell = screen.getByText('/v1/chat/completions')
+    const row = pathCell.closest('tr')!
+    row.click()
     await waitFor(() => {
       expect(screen.getByText('Upstream request failed')).toBeTruthy()
     })

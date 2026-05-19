@@ -222,7 +222,22 @@ function createTemplateImport(options: {
   primaryResetAt?: string
   secondaryUsedPercent?: number
   secondaryResetAt?: string
+  includeSecondaryQuota?: boolean
 }): string {
+  const secondaryQuotaExtra =
+    options.includeSecondaryQuota === false
+      ? {}
+      : {
+          codex_7d_reset_after_seconds: 604800,
+          codex_7d_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
+          codex_7d_used_percent: options.secondaryUsedPercent ?? 40,
+          codex_7d_window_minutes: 10080,
+          codex_secondary_reset_after_seconds: 604800,
+          codex_secondary_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
+          codex_secondary_used_percent: options.secondaryUsedPercent ?? 40,
+          codex_secondary_window_minutes: 10080
+        }
+
   return JSON.stringify({
     exported_at: '2026-03-24T08:00:00.000Z',
     proxies: [],
@@ -262,20 +277,13 @@ function createTemplateImport(options: {
           codex_5h_reset_at: options.primaryResetAt ?? '2026-03-24T10:00:00.000Z',
           codex_5h_used_percent: options.primaryUsedPercent ?? 20,
           codex_5h_window_minutes: 300,
-          codex_7d_reset_after_seconds: 604800,
-          codex_7d_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
-          codex_7d_used_percent: options.secondaryUsedPercent ?? 40,
-          codex_7d_window_minutes: 10080,
           codex_primary_over_secondary_percent:
             (options.primaryUsedPercent ?? 20) - (options.secondaryUsedPercent ?? 40),
           codex_primary_reset_after_seconds: 7200,
           codex_primary_reset_at: options.primaryResetAt ?? '2026-03-24T10:00:00.000Z',
           codex_primary_used_percent: options.primaryUsedPercent ?? 20,
           codex_primary_window_minutes: 300,
-          codex_secondary_reset_after_seconds: 604800,
-          codex_secondary_reset_at: options.secondaryResetAt ?? '2026-03-31T08:00:00.000Z',
-          codex_secondary_used_percent: options.secondaryUsedPercent ?? 40,
-          codex_secondary_window_minutes: 10080,
+          ...secondaryQuotaExtra,
           codex_usage_updated_at: '2026-03-24T08:00:00.000Z',
           email: options.email,
           privacy_mode: 'training_off'
@@ -921,7 +929,7 @@ describe('createCodexServices', () => {
     const backupsAfterProvider = await readdir(backupDir)
 
     const account = (await services.getSnapshot()).accounts[0]
-    await services.codex.open(account.id, env.workspacePath)
+    await services.codex.open(account!.id, env.workspacePath)
     const restoredConfig = await readFile(join(defaultHome, 'config.toml'), 'utf8')
     expect(restoredConfig).toBe('')
     await expect(readdir(backupDir)).resolves.toEqual(backupsAfterProvider)
@@ -933,6 +941,94 @@ describe('createCodexServices', () => {
     await expect(readdir(backupDir)).resolves.toEqual(backupsAfterProvider)
     await services.codex.open(account.id, env.workspacePath)
     await expect(readdir(backupDir)).resolves.toEqual(backupsAfterProvider)
+  })
+
+  it('合并 Provider 启动配置时覆盖旧 model_provider 且修复重复键', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+    const defaultHome = join(process.env.HOME ?? '', '.codex')
+    const brokenConfig =
+      [
+        'approval_policy = "never"',
+        'model = "legacy-model"',
+        'model_provider = "legacy"',
+        'model_provider = "legacy-duplicate"',
+        '',
+        '[model_providers.legacy]',
+        'name = "Legacy"',
+        'wire_api = "responses"',
+        'base_url = "https://legacy.example.com/v1"',
+        '',
+        '[feature]',
+        'fast_mode = false',
+        'model_provider = "nested-legacy"',
+        'notify = true'
+      ].join('\n') + '\n'
+    const countRootModelProvider = (config: string): number =>
+      config.match(/^model_provider\s*=/gmu)?.length ?? 0
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await mkdir(defaultHome, { recursive: true })
+    await writeFile(join(defaultHome, 'config.toml'), brokenConfig, 'utf8')
+    await services.accounts.importCurrent()
+
+    const created = await services.providers.create({
+      name: 'Bee',
+      baseUrl: 'https://api.bee1an.us.kg/v1',
+      apiKey: 'provider-secret',
+      model: 'gpt-5.4',
+      fastMode: true
+    })
+    const providerId = created.providers[0]?.id
+    expect(providerId).toBeTruthy()
+
+    await services.providers.open(providerId!, env.workspacePath)
+
+    const directConfig = await readFile(join(defaultHome, 'config.toml'), 'utf8')
+    expect(countRootModelProvider(directConfig)).toBe(1)
+    expect(directConfig).toContain('approval_policy = "never"')
+    expect(directConfig).toContain('notify = true')
+    expect(directConfig).toContain('fast_mode = true')
+    expect(directConfig).toContain('model = "gpt-5.4"')
+    expect(directConfig).toContain('model_provider = "custom"')
+    expect(directConfig).toContain('base_url = "https://api.bee1an.us.kg/v1"')
+    expect(directConfig).not.toContain('legacy-duplicate')
+    expect(directConfig).not.toContain('nested-legacy')
+    expect(directConfig).not.toContain('[model_providers.legacy]')
+
+    const account = (await services.getSnapshot()).accounts[0]
+    await writeFile(join(defaultHome, 'config.toml'), brokenConfig, 'utf8')
+    await services.codex.open(account!.id, env.workspacePath)
+    const accountConfig = await readFile(join(defaultHome, 'config.toml'), 'utf8')
+    expect(countRootModelProvider(accountConfig)).toBe(0)
+    expect(accountConfig).toContain('approval_policy = "never"')
+    expect(accountConfig).toContain('notify = true')
+    expect(accountConfig).not.toContain('model =')
+    expect(accountConfig).not.toContain('model_provider')
+    expect(accountConfig).not.toContain('model_providers')
+    expect(accountConfig).not.toContain('fast_mode')
+
+    await writeFile(join(defaultHome, 'config.toml'), brokenConfig, 'utf8')
+    const multiResult = await services.codex.openFromService({
+      target: 'provider',
+      providerId: providerId!,
+      multi: true,
+      workspacePath: env.workspacePath
+    })
+    const multiConfig = await readFile(join(multiResult.codexHome, 'config.toml'), 'utf8')
+
+    expect(countRootModelProvider(multiConfig)).toBe(1)
+    expect(multiConfig).toContain('approval_policy = "never"')
+    expect(multiConfig).toContain('notify = true')
+    expect(multiConfig).toContain('model_provider = "custom"')
+    expect(multiConfig).toContain('base_url = "https://api.bee1an.us.kg/v1"')
+    expect(multiConfig).not.toContain('legacy-duplicate')
+    expect(multiConfig).not.toContain('nested-legacy')
+    expect(multiConfig).not.toContain('[model_providers.legacy]')
   })
 
   it('保留 ChatGPT 登录直连自定义 Provider 时把 API Key 写入 config.toml', async () => {
@@ -1410,6 +1506,126 @@ describe('createCodexServices', () => {
           'chatgpt-account-id'
         )
       ).toBe('acct-a')
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('routes local gateway traffic through free accounts with primary-only quota', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+      return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    const snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-free',
+        email: 'free@example.com',
+        planType: 'free',
+        primaryUsedPercent: 10,
+        includeSecondaryQuota: false
+      })
+    )
+    const account = snapshot.accounts[0]
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [account.id],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as { accountId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.accountId).toBe('acct-free')
+      expect(platform.fetch).toHaveBeenCalledOnce()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('returns no_account when allowed Codex accounts have no available quota', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async (url: string | URL | Request) => {
+      throw new Error(`Unexpected fetch: ${String(url)}`)
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    const snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-free',
+        email: 'free@example.com',
+        planType: 'free',
+        primaryUsedPercent: 100,
+        includeSecondaryQuota: false
+      })
+    )
+    const account = snapshot.accounts[0]
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [account.id],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as {
+        error?: { code?: string; message?: string }
+      }
+
+      expect(response.status).toBe(503)
+      expect(payload.error?.code).toBe('no_account')
+      expect(payload.error?.message).toBe('No available Codex account for local gateway.')
+      expect(platform.fetch).not.toHaveBeenCalled()
     } finally {
       await services.gateway.stop()
     }

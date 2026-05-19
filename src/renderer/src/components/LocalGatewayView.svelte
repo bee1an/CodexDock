@@ -12,7 +12,7 @@
     PortOccupant
   } from '../../../shared/codex'
   import { accountEmail, type LocalizedCopy } from './app-view'
-  import { floatingAnchor, portal, stopFloatingPointerPropagation } from './floating'
+  import { floatingAnchor, portal, stopFloatingPointerPropagation, eventTargetsFloatingRoot } from './floating'
   import AppButton from './AppButton.svelte'
   import Checkbox from './Checkbox.svelte'
   import AppDialog from './AppDialog.svelte'
@@ -47,6 +47,8 @@
   export let killingPortOccupant = false
   export let killPortOccupant: () => Promise<void> = async () => {}
   export let updatePort: (port: number) => Promise<void> = async () => {}
+  export let visibleColumns: string[] | undefined = undefined
+  export let updateVisibleColumns: (columns: string[]) => Promise<void> = async () => {}
 
   let allowedGroupsBusy = false
   let allowedAccountsBusy = false
@@ -240,18 +242,23 @@
     return labels[col]
   }
 
-  let visibleColumns: Set<LogColumn> = new SvelteSet(allColumns)
+  let visibleColumnSet: Set<LogColumn> = new SvelteSet(
+    visibleColumns?.length
+      ? allColumns.filter((col) => visibleColumns!.includes(col))
+      : allColumns
+  )
   let showColumnMenu = false
   let columnMenuAnchorRect: DOMRect | null = null
 
   const toggleColumn = (col: LogColumn): void => {
-    if (visibleColumns.has(col)) {
-      if (visibleColumns.size <= 1) return
-      visibleColumns.delete(col)
+    if (visibleColumnSet.has(col)) {
+      if (visibleColumnSet.size <= 1) return
+      visibleColumnSet.delete(col)
     } else {
-      visibleColumns.add(col)
+      visibleColumnSet.add(col)
     }
-    visibleColumns = visibleColumns
+    visibleColumnSet = visibleColumnSet
+    void updateVisibleColumns([...visibleColumnSet])
   }
 
   const formatBytes = (bytes: number | undefined): string => {
@@ -473,6 +480,18 @@
   onMount(() => {
     void refreshGatewayStatus()
     pollTimer = setInterval(() => void refreshGatewayStatus(), 2000)
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      if (!eventTargetsFloatingRoot(event)) {
+        showColumnMenu = false
+        columnMenuAnchorRect = null
+      }
+    }
+    window.addEventListener('pointerdown', handlePointerDown, true)
+
+    return () => {
+      window.removeEventListener('pointerdown', handlePointerDown, true)
+    }
   })
 
   onDestroy(() => {
@@ -1170,7 +1189,7 @@
                   type="button"
                   onclick={() => toggleColumn(col)}
                 >
-                  <Checkbox checked={visibleColumns.has(col)} />
+                  <Checkbox checked={visibleColumnSet.has(col)} />
                   <span>{columnLabel(col)}</span>
                 </button>
               {/each}
@@ -1187,67 +1206,67 @@
                 class="sticky top-0 z-10 gateway-table-head text-[10px] font-medium uppercase tracking-[0.08em] text-faint"
               >
                 <tr>
-                  {#if visibleColumns.has('time')}
+                  {#if visibleColumnSet.has('time')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogTime}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('method')}
+                  {#if visibleColumnSet.has('method')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogMethod}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('path')}
+                  {#if visibleColumnSet.has('path')}
                     <th class="px-3 py-2 font-normal w-full min-w-[180px] max-w-[280px]"
                       >{copy.localGatewayLogPath}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('target')}
+                  {#if visibleColumnSet.has('target')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogTarget}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('provider')}
+                  {#if visibleColumnSet.has('provider')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogProvider}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('model')}
+                  {#if visibleColumnSet.has('model')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogModel}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('client')}
+                  {#if visibleColumnSet.has('client')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogClient}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('requestBytes')}
+                  {#if visibleColumnSet.has('requestBytes')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
                       >{copy.localGatewayLogRequestBytes}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('responseBytes')}
+                  {#if visibleColumnSet.has('responseBytes')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
                       >{copy.localGatewayLogResponseBytes}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('contentType')}
+                  {#if visibleColumnSet.has('contentType')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap"
                       >{copy.localGatewayLogContentType}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('tokens')}
+                  {#if visibleColumnSet.has('tokens')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
                       >{copy.localGatewayLogTokens}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('latency')}
+                  {#if visibleColumnSet.has('latency')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
                       >{copy.localGatewayLogLatency}</th
                     >
                   {/if}
-                  {#if visibleColumns.has('status')}
+                  {#if visibleColumnSet.has('status')}
                     <th class="px-3 py-2 font-normal whitespace-nowrap text-right"
                       >{copy.localGatewayLogStatus}</th
                     >
@@ -1256,14 +1275,26 @@
               </thead>
               <tbody class="divide-y gateway-divide">
                 {#each visibleLogs as log (log.id)}
-                  <tr class="gateway-table-row transition-colors duration-140">
-                    {#if visibleColumns.has('time')}
+                  <tr
+                    class="gateway-table-row transition-colors duration-140"
+                    class:cursor-pointer={!!logDetail(log)}
+                    onclick={() => {
+                      if (!logDetail(log)) return
+                      if (expandedLogIds[log.id]) {
+                        const { [log.id]: _, ...rest } = expandedLogIds // eslint-disable-line @typescript-eslint/no-unused-vars
+                        expandedLogIds = rest
+                      } else {
+                        expandedLogIds = { ...expandedLogIds, [log.id]: true }
+                      }
+                    }}
+                  >
+                    {#if visibleColumnSet.has('time')}
                       <td
                         class="px-3 py-1.5 font-mono text-[11px] text-muted-strong whitespace-nowrap tabular-nums"
                         >{formatLogTime(log.timestamp)}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('method')}
+                    {#if visibleColumnSet.has('method')}
                       <td class="px-3 py-1.5 whitespace-nowrap">
                         <span
                           class={`gateway-method-pill rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[9px] font-bold leading-none ${methodClass(log.method)}`}
@@ -1271,63 +1302,63 @@
                         >
                       </td>
                     {/if}
-                    {#if visibleColumns.has('path')}
+                    {#if visibleColumnSet.has('path')}
                       <td
                         class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[280px]"
                         title={log.path}
                         translate="no">{log.path}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('target')}
+                    {#if visibleColumnSet.has('target')}
                       <td
                         class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[160px]"
                         title={log.target ?? '—'}>{log.target ?? '—'}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('provider')}
+                    {#if visibleColumnSet.has('provider')}
                       <td
                         class="px-3 py-1.5 text-muted-strong truncate max-w-[120px]"
                         title={log.provider ?? '—'}>{log.provider ?? '—'}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('model')}
+                    {#if visibleColumnSet.has('model')}
                       <td
                         class="px-3 py-1.5 font-mono text-[11px] text-carbon truncate max-w-[140px]"
                         title={log.model ?? '—'}
                         translate="no">{log.model ?? '—'}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('client')}
+                    {#if visibleColumnSet.has('client')}
                       <td
                         class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[140px]"
                         title={log.client ?? '—'}>{log.client ?? '—'}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('requestBytes')}
+                    {#if visibleColumnSet.has('requestBytes')}
                       <td
                         class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
                         >{formatBytes(log.requestBytes)}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('responseBytes')}
+                    {#if visibleColumnSet.has('responseBytes')}
                       <td
                         class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
                         >{formatBytes(log.responseBytes)}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('contentType')}
+                    {#if visibleColumnSet.has('contentType')}
                       <td
                         class="px-3 py-1.5 text-[11px] text-muted-strong truncate max-w-[140px]"
                         title={log.responseContentType ?? '—'}>{log.responseContentType ?? '—'}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('tokens')}
+                    {#if visibleColumnSet.has('tokens')}
                       <td
                         class="px-3 py-1.5 text-right font-mono text-[11px] text-muted-strong tabular-nums"
                         >{formatNumber(log.tokens ?? 0)}</td
                       >
                     {/if}
-                    {#if visibleColumns.has('latency')}
+                    {#if visibleColumnSet.has('latency')}
                       <td class="px-3 py-1.5 text-right whitespace-nowrap">
                         <span
                           class={`font-mono text-[11px] tabular-nums ${latencyClass(log.durationMs)}`}
@@ -1335,7 +1366,7 @@
                         >
                       </td>
                     {/if}
-                    {#if visibleColumns.has('status')}
+                    {#if visibleColumnSet.has('status')}
                       <td class="px-3 py-1.5 text-right whitespace-nowrap">
                         <span
                           class={`gateway-status-code rounded-[0.28rem] border px-1.5 py-0.5 font-mono text-[10px] font-bold tabular-nums ${statusClass(log.status)}`}
@@ -1344,46 +1375,17 @@
                       </td>
                     {/if}
                   </tr>
-                  {#if logDetail(log)}
+                  {#if logDetail(log) && expandedLogIds[log.id]}
                     <tr class="gateway-log-detail-row">
-                      <td colspan={visibleColumns.size} class="px-3 pb-2">
-                        <button
-                          type="button"
-                          class="gateway-log-detail-toggle flex items-center gap-1 text-[10px] font-medium text-muted-strong hover:text-carbon"
-                          onclick={() => {
-                            if (expandedLogIds[log.id]) {
-                              const { [log.id]: _, ...rest } = expandedLogIds // eslint-disable-line @typescript-eslint/no-unused-vars
-                              expandedLogIds = rest
-                            } else {
-                              expandedLogIds = { ...expandedLogIds, [log.id]: true }
-                            }
-                          }}
-                          aria-expanded={!!expandedLogIds[log.id]}
+                      <td colspan={visibleColumnSet.size} class="px-3 pb-2 pt-0">
+                        <div
+                          class="gateway-log-detail flex min-w-0 items-start gap-2 rounded-[0.35rem] border px-2.5 py-2"
                         >
-                          <span
-                            class="i-lucide-alert-circle h-3.5 w-3.5 flex-none text-danger/70"
-                            aria-hidden="true"
-                          ></span>
-                          <span
-                            >{expandedLogIds[log.id]
-                              ? copy.localGatewayCollapseDetail
-                              : copy.localGatewayExpandDetail}</span
+                          <code
+                            class="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-carbon"
+                            >{logDetail(log)}</code
                           >
-                          <span
-                            class={`h-3 w-3 transition-transform ${expandedLogIds[log.id] ? 'i-lucide-chevron-up' : 'i-lucide-chevron-down'}`}
-                            aria-hidden="true"
-                          ></span>
-                        </button>
-                        {#if expandedLogIds[log.id]}
-                          <div
-                            class="gateway-log-detail mt-1 flex min-w-0 items-start gap-2 rounded-[0.35rem] border px-2.5 py-2"
-                          >
-                            <code
-                              class="min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-[11px] leading-5 text-carbon"
-                              >{logDetail(log)}</code
-                            >
-                          </div>
-                        {/if}
+                        </div>
                       </td>
                     </tr>
                   {/if}
