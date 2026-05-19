@@ -129,6 +129,14 @@ export const messages = {
     tokenStatsSelectedTarget: '当前统计目标',
     tokenStatsDefaultFallback: '无运行实例，回退 default',
     tokenStatsNoData: '暂无本地用量数据',
+    accountUsageOverview: '账号用量 / 消耗',
+    accountUsageOverviewDescription:
+      '按已绑定账号的实例汇总近 30 天 token；未绑定账号的实例无法可靠归属。',
+    accountUsageAttributionHint:
+      '说明：Codex 本地 token 日志不包含稳定账号标识，只能按实例绑定账号归属统计；未绑定实例不会计入账号用量。',
+    accountUsageUnavailable:
+      '暂无可归属到账号的用量数据。请先将实例绑定账号，或使用账号隔离实例启动 Codex。',
+    accountUsageNoData: '暂无账号用量数据',
     skills: 'Skills',
     skillsTitle: 'Skill 管理',
     skillsDescription: '管理各实例下的 Skills，支持实例间复制。',
@@ -865,6 +873,14 @@ export const messages = {
     tokenStatsSelectedTarget: 'Selected target',
     tokenStatsDefaultFallback: 'No running instance, falling back to default',
     tokenStatsNoData: 'No local usage data yet',
+    accountUsageOverview: 'Account usage / consumption',
+    accountUsageOverviewDescription:
+      'Aggregates 30-day tokens by instances bound to accounts. Unbound instances cannot be attributed reliably.',
+    accountUsageAttributionHint:
+      'Note: local Codex token logs do not include a stable account identifier. Account usage is attributed only through instance-account bindings; unbound instances are excluded.',
+    accountUsageUnavailable:
+      'No usage data can be attributed to accounts yet. Bind instances to accounts or launch Codex with isolated account instances.',
+    accountUsageNoData: 'No account usage data yet',
     skills: 'Skills',
     skillsTitle: 'Skill management',
     skillsDescription: 'Manage skills across instances with copy support.',

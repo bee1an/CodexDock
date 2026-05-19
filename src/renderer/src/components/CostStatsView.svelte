@@ -15,6 +15,7 @@
     type ChartConfiguration
   } from 'chart.js'
   import type {
+    AccountSummary,
     AppLanguage,
     CodexInstanceSummary,
     StatsDisplaySettings,
@@ -24,8 +25,15 @@
     TokenCostSummary
   } from '../../../shared/codex'
   import { normalizeStatsDisplaySettings } from '../../../shared/codex'
-  import { buildInstanceConsumptionEntries } from './cost-stats-data'
-  import type { LocalizedCopy } from './app-view'
+  import {
+    buildAccountConsumptionEntries,
+    buildInstanceConsumptionEntries
+  } from './cost-stats-data'
+  import type {
+    AccountConsumptionEntry,
+    InstanceConsumptionEntry
+  } from './cost-stats-data'
+  import { type LocalizedCopy } from './app-view'
   import AppButton from './AppButton.svelte'
   import AppPopover from './AppPopover.svelte'
   import Checkbox from './Checkbox.svelte'
@@ -48,6 +56,7 @@
 
   export let copy: LocalizedCopy
   export let language: AppLanguage
+  export let accounts: AccountSummary[] = []
   export let codexInstances: CodexInstanceSummary[] = []
   export let tokenCostByInstanceId: Record<string, TokenCostSummary> = {}
   export let tokenCostErrorByInstanceId: Record<string, string> = {}
@@ -74,18 +83,23 @@
   let snapshotError = ''
   let warningMessages: string[] = []
   let modelBreakdowns: TokenCostModelBreakdown[] = []
+  let accountUsageRows: AccountConsumptionEntry[] = []
   let instanceUsageRows: InstanceUsageRow[] = []
   let chartDaily: TokenCostDetail['daily'] = []
   let trendCanvas: HTMLCanvasElement | null = null
   let modelCanvas: HTMLCanvasElement | null = null
+  let accountCanvas: HTMLCanvasElement | null = null
   let instanceCanvas: HTMLCanvasElement | null = null
   let trendChart: Chart<'line', number[], string> | null = null
   let modelChart: Chart<'bar', number[], string> | null = null
+  let accountChart: Chart<'bar', number[], string> | null = null
   let instanceChart: Chart<'bar', number[], string> | null = null
   let trendChartSyncKey = ''
   let modelChartSyncKey = ''
+  let accountChartSyncKey = ''
   let instanceChartSyncKey = ''
   let modelChartHeight = 280
+  let accountChartHeight = 280
   let instanceChartHeight = 280
   let statsDisplayDraft = normalizeStatsDisplaySettings(statsDisplay)
   let showStatsDisplayPopover = false
@@ -158,6 +172,9 @@
     return segments.at(-1) || instanceId
   }
 
+  const formatAccountLabel = (account: AccountSummary): string =>
+    account.email ?? account.name ?? account.accountId ?? account.id
+
   const formatDayLabel = (value: string): string => {
     const [, month = '0', day = '0'] = value.split('-')
     return `${Number(month)}/${Number(day)}`
@@ -175,7 +192,6 @@
   interface CostRollup {
     total: number
     hasKnown: boolean
-    hasUnknown: boolean
   }
 
   interface InstanceUsageRow {
@@ -190,19 +206,14 @@
 
   const createCostRollup = (): CostRollup => ({
     total: 0,
-    hasKnown: false,
-    hasUnknown: false
+    hasKnown: false
   })
 
   const addCostToRollup = (
     rollup: CostRollup,
-    costUSD: number | null,
-    totalTokens: number
+    costUSD: number | null
   ): void => {
     if (costUSD === null) {
-      if (totalTokens > 0) {
-        rollup.hasUnknown = true
-      }
       return
     }
 
@@ -211,10 +222,6 @@
   }
 
   const finalizeCostRollup = (rollup: CostRollup): number | null => {
-    if (rollup.hasUnknown) {
-      return null
-    }
-
     if (!rollup.hasKnown) {
       return null
     }
@@ -344,7 +351,7 @@
       for (const breakdown of entry.modelBreakdowns) {
         const existing = byModel[breakdown.modelName]
         const cost = existing?.cost ?? createCostRollup()
-        addCostToRollup(cost, breakdown.costUSD, breakdown.totalTokens)
+        addCostToRollup(cost, breakdown.costUSD)
         byModel[breakdown.modelName] = {
           modelName: breakdown.modelName,
           totalTokens: (existing?.totalTokens ?? 0) + breakdown.totalTokens,
@@ -630,6 +637,128 @@
     modelChart = new Chart(context, config)
   }
 
+  const syncAccountChart = (): void => {
+    if (!accountCanvas) {
+      return
+    }
+
+    if (!accountUsageRows.length) {
+      accountChart?.destroy()
+      accountChart = null
+      return
+    }
+
+    const context = accountCanvas.getContext('2d')
+    if (!context) {
+      return
+    }
+
+    const accent = readCssVar('--success', '#16a34a')
+    const ink = readCssVar('--ink', '#18181b')
+    const muted = readCssVar('--muted-strong', '#6b7280')
+    const line = readCssVar('--line', 'rgba(24, 24, 27, 0.1)')
+    const surface = readCssVar('--panel-strong', '#ffffff')
+
+    const config: ChartConfiguration<'bar', number[], string> = {
+      type: 'bar',
+      data: {
+        labels: accountUsageRows.map((entry) => entry.label),
+        datasets: [
+          {
+            label: copy.tokens,
+            data: accountUsageRows.map((entry) => entry.last30DaysTokens),
+            backgroundColor: withAlpha(accent, 0.72),
+            borderColor: accent,
+            borderWidth: 1,
+            borderRadius: 6,
+            borderSkipped: false,
+            barThickness: 16,
+            maxBarThickness: 18
+          }
+        ]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: {
+          duration: 240
+        },
+        plugins: {
+          legend: {
+            display: false
+          },
+          tooltip: {
+            backgroundColor: surface,
+            borderColor: line,
+            borderWidth: 1,
+            titleColor: ink,
+            bodyColor: ink,
+            padding: 12,
+            displayColors: false,
+            callbacks: {
+              title: (items) => items[0]?.label ?? '',
+              label: (context) => {
+                const item = accountUsageRows[context.dataIndex]
+                if (!item) return ''
+                const totalAll = accountUsageRows.reduce(
+                  (sum, row) => sum + row.last30DaysTokens,
+                  0
+                )
+                const pct =
+                  totalAll > 0 ? ((item.last30DaysTokens / totalAll) * 100).toFixed(1) : '0.0'
+                return `${copy.last30Days} ${copy.tokens}: ${formatTokens(item.last30DaysTokens)} (${pct}%)`
+              },
+              afterLabel: (context) => {
+                const item = accountUsageRows[context.dataIndex]
+                if (!item) return ''
+                return [
+                  copy.costReference(formatCost(item.last30DaysCostUSD)),
+                  `${copy.today}: ${formatTokens(item.sessionTokens)} / ${formatCost(item.sessionCostUSD)}`,
+                  `${copy.instanceCount(item.instanceCount)} · ${formatUpdatedAt(item.updatedAt)}`
+                ]
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            beginAtZero: true,
+            grid: {
+              color: withAlpha(line, 0.55)
+            },
+            ticks: {
+              color: muted,
+              maxTicksLimit: 5,
+              callback: (value) => formatTokens(Number(value))
+            }
+          },
+          y: {
+            grid: {
+              display: false
+            },
+            ticks: {
+              color: ink,
+              font: {
+                size: 11,
+                weight: 600
+              }
+            }
+          }
+        }
+      }
+    }
+
+    if (accountChart) {
+      accountChart.data = config.data
+      accountChart.options = config.options ?? {}
+      accountChart.update()
+      return
+    }
+
+    accountChart = new Chart(context, config)
+  }
+
   const syncInstanceChart = (): void => {
     if (!instanceCanvas) {
       return
@@ -789,6 +918,7 @@
         : new MutationObserver(() => {
             syncTrendChart()
             syncModelChart()
+            syncAccountChart()
             syncInstanceChart()
           })
 
@@ -799,6 +929,7 @@
 
     syncTrendChart()
     syncModelChart()
+    syncAccountChart()
     syncInstanceChart()
     return () => {
       observer?.disconnect()
@@ -806,6 +937,8 @@
       trendChart = null
       modelChart?.destroy()
       modelChart = null
+      accountChart?.destroy()
+      accountChart = null
       instanceChart?.destroy()
       instanceChart = null
     }
@@ -849,6 +982,12 @@
     { value: 'tokens', label: copy.trendMetricTokens },
     { value: 'cost', label: copy.trendMetricCost }
   ]
+  $: accountUsageRows = buildAccountConsumptionEntries({
+    tokenCostByInstanceId,
+    instances: codexInstances,
+    accounts,
+    resolveLabel: (accountId, account) => (account ? formatAccountLabel(account) : accountId)
+  })
   $: instanceUsageRows = buildInstanceConsumptionEntries({
     tokenCostByInstanceId,
     instances: codexInstances,
@@ -876,8 +1015,7 @@
   $: dailyAvgCost = chartDaily.length
     ? (() => {
         const totalCost = chartDaily.reduce((sum, e) => sum + (e.costUSD ?? 0), 0)
-        const hasAnyCost = chartDaily.some((e) => e.costUSD !== null)
-        return hasAnyCost ? totalCost / 30 : null
+        return totalCost / 30
       })()
     : null
   $: peakDayEntry = chartDaily.length
@@ -888,11 +1026,12 @@
     if (!chartDaily.length) return copy.costStatusNoCost
     const hasKnown = chartDaily.some((e) => e.costUSD !== null)
     const hasUnknown = modelBreakdowns.some((m) => m.costUSD === null)
-    if (!hasKnown) return copy.costStatusNoCost
     if (hasUnknown) return copy.costStatusPartialUnknown
+    if (!hasKnown) return copy.costStatusNoCost
     return copy.costStatusAllKnown
   })()
   $: modelChartHeight = Math.max(280, modelBreakdowns.length * 38)
+  $: accountChartHeight = Math.max(280, accountUsageRows.length * 38)
   $: instanceChartHeight = Math.max(280, instanceUsageRows.length * 38)
   $: trendChartSyncKey = [
     language,
@@ -914,6 +1053,15 @@
       (entry) => `${entry.modelName}:${entry.totalTokens}:${entry.costUSD ?? ''}`
     )
   ].join('|')
+  $: accountChartSyncKey = [
+    language,
+    copy.accountUsageOverview,
+    copy.tokens,
+    copy.cost,
+    ...accountUsageRows.map(
+      (entry) => `${entry.label}:${entry.last30DaysTokens}:${entry.last30DaysCostUSD ?? ''}`
+    )
+  ].join('|')
   $: instanceChartSyncKey = [
     language,
     copy.instanceUsage,
@@ -929,6 +1077,10 @@
     modelChart.destroy()
     modelChart = null
   }
+  $: if (!accountCanvas && accountChart) {
+    accountChart.destroy()
+    accountChart = null
+  }
   $: if (!instanceCanvas && instanceChart) {
     instanceChart.destroy()
     instanceChart = null
@@ -938,6 +1090,9 @@
   }
   $: if (modelCanvas && modelChartSyncKey) {
     syncModelChart()
+  }
+  $: if (accountCanvas && accountChartSyncKey) {
+    syncAccountChart()
   }
   $: if (instanceCanvas && instanceChartSyncKey) {
     syncInstanceChart()
@@ -1235,6 +1390,70 @@
     </div>
   </section>
 
+  <section
+    class="stats-surface flex flex-col rounded-[0.45rem] border px-4 py-4 sm:px-5"
+    use:reveal={{ delay: 0.04 }}
+  >
+    <div class="flex items-center justify-between gap-3 border-b border-arcticMist/70 pb-3">
+      <div>
+        <h4 class="text-sm font-semibold tracking-tight text-carbon">
+          {copy.accountUsageOverview}
+        </h4>
+        <p class="mt-1 text-xs text-muted-strong">{copy.accountUsageOverviewDescription}</p>
+      </div>
+      <span class="i-lucide-users-round h-4 w-4 text-muted-strong opacity-60"></span>
+    </div>
+
+    <div
+      class="mt-3 rounded-[0.4rem] border border-arcticMist/70 bg-snow/35 px-3 py-2 text-xs leading-5 text-muted-strong"
+    >
+      {copy.accountUsageAttributionHint}
+    </div>
+
+    {#if accountUsageRows.length}
+      <div class="stats-chart-shell mt-4 rounded-[0.35rem] border px-3 py-4 sm:px-4">
+        <div class="stats-model-chart-canvas" style={`min-height: ${accountChartHeight}px`}>
+          <canvas bind:this={accountCanvas} aria-label={copy.accountUsageOverview}></canvas>
+        </div>
+      </div>
+
+      <div class="mt-3 grid gap-2.5">
+        {#each accountUsageRows as row (row.accountId)}
+          <article
+            class="account-usage-row grid gap-3 rounded-[0.45rem] border px-3.5 py-3 sm:grid-cols-[minmax(0,1fr)_auto_auto] sm:items-center sm:px-4"
+          >
+            <div class="min-w-0">
+              <p class="truncate text-sm font-semibold text-carbon" title={row.label}>
+                {row.label}
+              </p>
+              <p class="mt-1 text-[11px] text-muted-strong">
+                {copy.instanceCount(row.instanceCount)} · {copy.updatedAt}: {formatUpdatedAt(
+                  row.updatedAt
+                )}
+              </p>
+            </div>
+            <div class="grid gap-1 text-sm tabular-nums text-carbon sm:text-right">
+              <span class="font-semibold">{formatTokens(row.last30DaysTokens)}</span>
+              <span class="text-[11px] text-muted-strong">{copy.last30Days} {copy.tokens}</span>
+            </div>
+            <div class="grid gap-1 text-sm tabular-nums text-carbon sm:text-right">
+              <span class="font-semibold">{formatCost(row.last30DaysCostUSD)}</span>
+              <span class="text-[11px] text-muted-strong">{copy.cost}</span>
+            </div>
+          </article>
+        {/each}
+      </div>
+    {:else}
+      <div class="mt-4 stats-empty-state">
+        <span class="i-lucide-users h-8 w-8 opacity-20"></span>
+        <p class="text-sm font-semibold text-carbon">{copy.accountUsageNoData}</p>
+        <p class="max-w-md text-sm font-medium text-muted-strong">
+          {copy.accountUsageUnavailable}
+        </p>
+      </div>
+    {/if}
+  </section>
+
   <div class="grid gap-4">
     {#if !statsDisplayDraft.modelBreakdown && !statsDisplayDraft.dailyTrend && !statsDisplayDraft.instanceUsage}
       <div class="stats-empty-state">
@@ -1411,6 +1630,27 @@
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
       0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+  }
+
+  .account-usage-row {
+    border-color: color-mix(in srgb, var(--line-strong) 58%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 92%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 36%, transparent);
+  }
+
+  .account-usage-row {
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .account-usage-row:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 82%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 98%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 52%, transparent),
+      0 1px 4px color-mix(in srgb, var(--edge-dark) 12%, transparent);
   }
 
   .stats-metric-block {

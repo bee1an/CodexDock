@@ -14,7 +14,7 @@ import type {
 const DEFAULT_CODEX_INSTANCE_ID = '__default__'
 const ALL_TOKEN_COST_INSTANCE_ID = '__all__'
 const UNKNOWN_TOKEN_COST_MODEL = 'unknown'
-const CACHE_VERSION = 1
+const CACHE_VERSION = 2
 const DEFAULT_REFRESH_MIN_INTERVAL_MS = 60_000
 
 type PackedUsage = [input: number, cached: number, output: number]

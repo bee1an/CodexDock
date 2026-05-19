@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { buildInstanceConsumptionEntries } from '../cost-stats-data'
+import { buildAccountConsumptionEntries, buildInstanceConsumptionEntries } from '../cost-stats-data'
 
 describe('cost stats data helpers', () => {
   it('按近 30 天 token 对实例汇总排序并保留实例名称', () => {
@@ -72,5 +72,92 @@ describe('cost stats data helpers', () => {
         resolveLabel: (instanceId) => instanceId
       })
     ).toEqual([])
+  })
+
+  it('按绑定账号汇总实例 token，并将未知成本按 0 计入账号成本', () => {
+    expect(
+      buildAccountConsumptionEntries({
+        tokenCostByInstanceId: {
+          'inst-a': {
+            sessionTokens: 20,
+            sessionCostUSD: null,
+            last30DaysTokens: 80,
+            last30DaysCostUSD: null,
+            updatedAt: '2026-04-21T00:00:00.000Z'
+          },
+          'inst-b': {
+            sessionTokens: 40,
+            sessionCostUSD: 0.0004,
+            last30DaysTokens: 180,
+            last30DaysCostUSD: 0.0018,
+            updatedAt: '2026-04-22T00:00:00.000Z'
+          },
+          unbound: {
+            sessionTokens: 100,
+            sessionCostUSD: 0.001,
+            last30DaysTokens: 200,
+            last30DaysCostUSD: 0.002,
+            updatedAt: '2026-04-22T00:00:00.000Z'
+          }
+        },
+        instances: [
+          {
+            id: 'inst-a',
+            name: 'A',
+            codexHome: '/tmp/instances/a',
+            bindAccountId: 'acct-1',
+            extraArgs: '',
+            isDefault: false,
+            createdAt: '2026-04-21T00:00:00.000Z',
+            updatedAt: '2026-04-21T00:00:00.000Z',
+            running: false,
+            initialized: true
+          },
+          {
+            id: 'inst-b',
+            name: 'B',
+            codexHome: '/tmp/instances/b',
+            bindAccountId: 'acct-1',
+            extraArgs: '',
+            isDefault: false,
+            createdAt: '2026-04-21T00:00:00.000Z',
+            updatedAt: '2026-04-21T00:00:00.000Z',
+            running: true,
+            initialized: true
+          },
+          {
+            id: 'unbound',
+            name: 'Unbound',
+            codexHome: '/tmp/instances/unbound',
+            extraArgs: '',
+            isDefault: false,
+            createdAt: '2026-04-21T00:00:00.000Z',
+            updatedAt: '2026-04-21T00:00:00.000Z',
+            running: true,
+            initialized: true
+          }
+        ],
+        accounts: [
+          {
+            id: 'acct-1',
+            email: 'acct@example.com',
+            groupIds: [],
+            createdAt: '2026-04-21T00:00:00.000Z',
+            updatedAt: '2026-04-21T00:00:00.000Z'
+          }
+        ],
+        resolveLabel: (_accountId, account) => account?.email ?? 'unknown'
+      })
+    ).toMatchObject([
+      {
+        accountId: 'acct-1',
+        label: 'acct@example.com',
+        sessionTokens: 60,
+        sessionCostUSD: 0.0004,
+        last30DaysTokens: 260,
+        last30DaysCostUSD: 0.0018,
+        instanceCount: 2
+      }
+    ])
   })
 })
