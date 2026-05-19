@@ -1,11 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { join, relative, resolve, sep } from 'node:path'
 import { promises as fs } from 'node:fs'
-import { parse as parseToml, stringify as stringifyToml } from '@iarna/toml'
 
 import type { ConfigGuard } from './codex-config-guard'
 
 import type { CodexAuthPayload } from './codex-auth'
+import {
+  parseCodexConfigToml,
+  stringifyCodexConfigToml,
+  stripManagedCodexConfigToml
+} from './codex-config-toml'
 import type { PersistedCodexInstance, PersistedDefaultCodexInstance } from './codex-instances'
 import {
   launchCodexDesktop,
@@ -167,7 +171,7 @@ export function createCodexServicesInstanceRuntime(
 
     try {
       const raw = await fs.readFile(join(codexHome, 'config.toml'), 'utf8')
-      const config = raw.trim() ? (parseToml(raw) as Record<string, unknown>) : {}
+      const config = parseCodexConfigToml(raw).config
       for (const providerId of collectProviderIdsFromConfig(config, providers)) {
         addUniqueProviderId(ids, providerId)
       }
@@ -518,14 +522,11 @@ export function createCodexServicesInstanceRuntime(
       throw error
     }
 
-    let nextConfig: Record<string, unknown>
     let shouldWrite = false
-    try {
-      nextConfig = rawConfig.trim() ? (parseToml(rawConfig) as Record<string, unknown>) : {}
-    } catch {
-      nextConfig = {}
-      shouldWrite = true
-    }
+    const strippedConfig = stripManagedCodexConfigToml(rawConfig)
+    const parsedConfig = parseCodexConfigToml(strippedConfig)
+    const nextConfig = parsedConfig.config
+    shouldWrite = parsedConfig.repaired || strippedConfig !== rawConfig
 
     shouldWrite = removeConfigKey(nextConfig, 'model') || shouldWrite
     shouldWrite = removeConfigKey(nextConfig, 'model_provider') || shouldWrite
@@ -534,7 +535,7 @@ export function createCodexServicesInstanceRuntime(
     const feature = nextConfig['feature']
     if (feature && typeof feature === 'object' && !Array.isArray(feature)) {
       const nextFeature = { ...(feature as Record<string, unknown>) }
-      if (removeConfigKey(nextFeature, 'fast_mode')) {
+      if (removeConfigKey(nextFeature, 'fast_mode') || Object.keys(nextFeature).length === 0) {
         shouldWrite = true
         if (Object.keys(nextFeature).length) {
           nextConfig['feature'] = nextFeature
@@ -548,18 +549,13 @@ export function createCodexServicesInstanceRuntime(
       return
     }
 
-    const tomlContent = Object.keys(nextConfig).length
-      ? stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])
-      : ''
-    if (tomlContent) {
-      parseToml(tomlContent)
-    }
+    const tomlContent = stringifyCodexConfigToml(nextConfig)
 
     await configGuard.guardBeforeWrite(configPath)
     await fs.mkdir(defaultCodexHome, { recursive: true })
     const tmpConfig = `${configPath}.${process.pid}.${randomUUID()}.tmp`
     try {
-      await fs.writeFile(tmpConfig, tomlContent ? `${tomlContent}\n` : '', 'utf8')
+      await fs.writeFile(tmpConfig, tomlContent, 'utf8')
       await fs.rename(tmpConfig, configPath)
     } finally {
       await fs.rm(tmpConfig, { force: true })

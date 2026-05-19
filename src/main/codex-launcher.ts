@@ -3,10 +3,14 @@ import { randomUUID } from 'node:crypto'
 import { promises as fs } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { parse as parseToml, stringify as stringifyToml } from '@iarna/toml'
 
 import type { CodexAuthPayload } from './codex-auth'
 import type { CustomProviderSummary } from '../shared/codex'
+import {
+  parseCodexConfigToml,
+  stringifyCodexConfigToml,
+  stripManagedCodexConfigToml
+} from './codex-config-toml'
 
 const execFile = promisify(execFileCallback)
 const macosCodexAppBinary = '/Applications/Codex.app/Contents/MacOS/Codex'
@@ -422,7 +426,7 @@ export async function writeProviderConfigToCodexHome(
 
   try {
     const raw = await fs.readFile(configPath, 'utf8')
-    nextConfig = raw.trim() ? (parseToml(raw) as Record<string, unknown>) : {}
+    nextConfig = parseCodexConfigToml(stripManagedCodexConfigToml(raw)).config
   } catch {
     nextConfig = {}
   }
@@ -456,11 +460,7 @@ export async function writeProviderConfigToCodexHome(
   await fs.mkdir(codexHome, { recursive: true })
   const tmpConfigPath = `${configPath}.${process.pid}.${randomUUID()}.tmp`
   try {
-    await fs.writeFile(
-      tmpConfigPath,
-      `${stringifyToml(nextConfig as Parameters<typeof stringifyToml>[0])}\n`,
-      'utf8'
-    )
+    await fs.writeFile(tmpConfigPath, stringifyCodexConfigToml(nextConfig), 'utf8')
     await fs.rename(tmpConfigPath, configPath)
   } finally {
     await fs.rm(tmpConfigPath, { force: true })
