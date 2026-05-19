@@ -27,6 +27,7 @@ export interface LocalGatewaySettings {
   allowedGroupIds: string[]
   allowedAccountIds: string[]
   allowedProviderIds: string[]
+  visibleColumns?: string[]
 }
 
 export interface LocalGatewayStatus {
@@ -343,6 +344,11 @@ export interface AccountGroup {
   name: string
   createdAt: string
   updatedAt: string
+  /**
+   * Account ids in this group sorted in user-defined order. Acts as a hint:
+   * accounts not listed here fall back to the global account order.
+   */
+  orderedAccountIds?: string[]
 }
 
 export interface UpdateAccountTokensInput {
@@ -905,7 +911,10 @@ export function normalizeLocalGatewaySettings(
     modelMappings: normalizeModelMappings(settings?.modelMappings),
     allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds),
     allowedAccountIds: normalizeAllowedAccountIds(settings?.allowedAccountIds),
-    allowedProviderIds
+    allowedProviderIds,
+    visibleColumns: Array.isArray(settings?.visibleColumns)
+      ? settings.visibleColumns.filter((c): c is string => typeof c === 'string' && c.trim() !== '')
+      : undefined
   }
 }
 
@@ -1081,7 +1090,7 @@ function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
   const hasSecondaryWindow = Boolean(rateLimits?.secondary)
   const requiresWeeklyQuota = supportsWeeklyQuota(rateLimits)
   const hasRequiredWindows = freePlan
-    ? hasSecondaryWindow
+    ? hasPrimaryWindow
     : hasPrimaryWindow && (!requiresWeeklyQuota || hasSecondaryWindow)
   const primaryRemaining = rateLimits?.primary
     ? remainingPercent(rateLimits.primary.usedPercent)
@@ -1092,7 +1101,7 @@ function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
       ? -1
       : primaryRemaining
   const hasAvailableQuota = freePlan
-    ? hasRequiredWindows && secondaryRemaining > 0
+    ? hasRequiredWindows && primaryRemaining > 0
     : hasRequiredWindows && primaryRemaining > 0 && secondaryRemaining > 0
 
   return {
@@ -1101,12 +1110,12 @@ function accountQuotaScore(rateLimits?: AccountRateLimits): AccountQuotaScore {
     hasAvailableQuota,
     bottleneckRemaining: hasRequiredWindows
       ? freePlan
-        ? secondaryRemaining
+        ? primaryRemaining
         : Math.min(primaryRemaining, secondaryRemaining)
       : -1,
     combinedRemaining: hasRequiredWindows
       ? freePlan
-        ? secondaryRemaining
+        ? primaryRemaining
         : requiresWeeklyQuota
           ? primaryRemaining + secondaryRemaining
           : primaryRemaining

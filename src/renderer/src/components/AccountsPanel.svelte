@@ -145,7 +145,13 @@
   export let killingLocalGatewayPortOccupant = false
   export let killLocalGatewayPortOccupant: () => Promise<void> = async () => {}
   export let updateLocalGatewayPort: (port: number) => Promise<void> = async () => {}
+  export let localGatewayVisibleColumns: string[] | undefined = undefined
+  export let updateLocalGatewayVisibleColumns: (columns: string[]) => Promise<void> = async () => {}
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
+  export let reorderAccountsInGroup: (
+    groupId: string,
+    accountIds: string[]
+  ) => Promise<void> = async () => {}
   export let createGroup: (name: string) => Promise<void>
   export let updateGroup: (group: AccountGroup, name: string) => Promise<void>
   export let deleteGroup: (group: AccountGroup) => Promise<void>
@@ -689,6 +695,7 @@
       {tagVisibility}
       {updateTagVisibility}
       {reorderAccounts}
+      {reorderAccountsInGroup}
       updateAccountGroups={updateAccountGroupsWithProtection}
       {updateAccountHealth}
       {refreshAccountUsage}
@@ -724,6 +731,8 @@
       {killingLocalGatewayPortOccupant}
       killPortOccupant={killLocalGatewayPortOccupant}
       updatePort={updateLocalGatewayPort}
+      visibleColumns={localGatewayVisibleColumns}
+      updateVisibleColumns={updateLocalGatewayVisibleColumns}
     />
   {:else if currentView === 'providers'}
     <AccountsProvidersView

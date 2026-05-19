@@ -61,6 +61,27 @@ describe('accounts panel account helpers', () => {
     ])
   })
 
+  it('honors orderedAccountIds for in-group sort', () => {
+    const groupAccounts = [
+      { ...accounts[0], id: 'acct-a', groupIds: ['group-3'] },
+      { ...accounts[0], id: 'acct-b', groupIds: ['group-3'] },
+      { ...accounts[0], id: 'acct-c', groupIds: ['group-3'] }
+    ]
+    const groupsWithOrder = [
+      ...groups,
+      {
+        id: 'group-3',
+        name: '排序',
+        createdAt: '2026-04-21T00:00:00.000Z',
+        updatedAt: '2026-04-21T00:00:00.000Z',
+        orderedAccountIds: ['acct-c', 'acct-a']
+      }
+    ]
+    expect(
+      visibleAccountsForFilter(groupAccounts, 'group-3', groupsWithOrder).map((a) => a.id)
+    ).toEqual(['acct-c', 'acct-a', 'acct-b'])
+  })
+
   it('normalizes selected ids against the visible account set', () => {
     expect(
       normalizeSelectedAccountIds(

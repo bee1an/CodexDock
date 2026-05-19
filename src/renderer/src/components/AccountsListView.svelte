@@ -60,6 +60,7 @@
     stopFloatingPointerPropagation
   } from './floating'
   import AppButton from './AppButton.svelte'
+  import AppPopover from './AppPopover.svelte'
   import AccountDetailsPanel from './AccountDetailsPanel.svelte'
   import Checkbox from './Checkbox.svelte'
   import {
@@ -102,6 +103,8 @@
   export let openEditTokensDialog: (account: AccountSummary) => void
   export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
+  export let reorderAccountsInGroup: (groupId: string, accountIds: string[]) => Promise<void> =
+    async () => {}
   export let updateAccountGroups: (account: AccountSummary, groupIds: string[]) => Promise<void>
   export let updateAccountHealth: (
     account: AccountSummary,
@@ -121,8 +124,9 @@
   export let updatePollingInterval: (minutes: number) => void = () => {}
 
   let expandedAccountIds: string[] = []
-  let showPollingMenu = false
+  let pollingMenuOpen = false
   let pollingMenuAnchorRect: DOMRect | null = null
+  let pollingTriggerNode: HTMLElement | null = null
   let tokensByAccountId: Record<string, AccountTokensDetail> = {}
   let tokensLoadingAccountId = ''
   let tokensErrorByAccountId: Record<string, string> = {}
@@ -202,7 +206,10 @@
     activeGroupFilter = 'all'
   }
 
-  $: visibleAccounts = visibleAccountsForFilter(accounts, activeGroupFilter)
+  $: visibleAccounts = visibleAccountsForFilter(accounts, activeGroupFilter, groups)
+  $: dragSortDisabled =
+    activeGroupFilter === ungroupedFilterId ||
+    (activeGroupFilter !== 'all' && !groups.some((group) => group.id === activeGroupFilter))
   $: quotaSummary = aggregateAccountQuotas(visibleAccounts, usageByAccountId)
 
   $: {
@@ -281,7 +288,6 @@
     closeAccountActionMenu()
     closeAccountGroupMenu()
     closeUsageErrorPopover()
-    closePollingMenu()
     tagVisibilityMenuAnchorRect =
       (event.currentTarget as HTMLElement | null)?.getBoundingClientRect() ?? null
     tagVisibilityMenuOpen = true
@@ -292,33 +298,6 @@
     tagVisibilityMenuAnchorRect = null
   }
 
-  function togglePollingMenu(event: MouseEvent): void {
-    event.stopPropagation()
-
-    if (showPollingMenu) {
-      closePollingMenu()
-      return
-    }
-
-    const trigger = event.currentTarget as HTMLElement | null
-    if (!trigger) {
-      return
-    }
-
-    closeAccountActionMenu()
-    closeAccountGroupMenu()
-    closeUsageErrorPopover()
-    closeTagVisibilityMenu()
-    pollingMenuAnchorRect =
-      trigger.closest<HTMLElement>('[data-polling-menu-trigger]')?.getBoundingClientRect() ??
-      trigger.getBoundingClientRect()
-    showPollingMenu = true
-  }
-
-  function closePollingMenu(): void {
-    showPollingMenu = false
-    pollingMenuAnchorRect = null
-  }
 
   function toggleTagSetting(key: keyof TagVisibilitySettings): void {
     const current = tagVisibility[key] !== false
@@ -611,14 +590,17 @@
     sortDraggedAccountId = event.detail.info.id
     sortableAccounts = event.detail.items
 
-    if (activeGroupFilter !== 'all') {
-      sortInteractionActive = false
-      sortDraggedAccountId = ''
-      return
-    }
+    const orderedIds = event.detail.items.map((account) => sortableAccountId(account))
 
     try {
-      await reorderAccounts(event.detail.items.map((account) => sortableAccountId(account)))
+      if (activeGroupFilter === 'all') {
+        await reorderAccounts(orderedIds)
+      } else if (
+        activeGroupFilter !== ungroupedFilterId &&
+        groups.some((group) => group.id === activeGroupFilter)
+      ) {
+        await reorderAccountsInGroup(activeGroupFilter, orderedIds)
+      }
     } finally {
       sortInteractionActive = false
       sortDraggedAccountId = ''
@@ -632,7 +614,6 @@
         closeAccountGroupMenu()
         closeUsageErrorPopover()
         closeTagVisibilityMenu()
-        closePollingMenu()
       }
     }
     const handleScroll = (): void => {
@@ -640,7 +621,6 @@
       closeAccountGroupMenu()
       closeUsageErrorPopover()
       closeTagVisibilityMenu()
-      closePollingMenu()
     }
 
     window.addEventListener('pointerdown', handlePointerDown, true)
@@ -659,7 +639,6 @@
     closeAccountGroupMenu()
     closeUsageErrorPopover()
     closeTagVisibilityMenu()
-    closePollingMenu()
   }}
 />
 
@@ -808,51 +787,56 @@
         class={`${refreshingAllUsage ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-cw'} h-3.5 w-3.5`}
       ></span>
     </AppButton>
-    <div class="relative inline-flex" data-polling-menu-trigger="">
+    <div class="relative">
       <AppButton
         variant="secondary"
         size="xs"
-        onclick={togglePollingMenu}
+        onclick={(e) => {
+          if (pollingMenuOpen) {
+            pollingMenuOpen = false
+            pollingMenuAnchorRect = null
+            return
+          }
+          pollingTriggerNode = e.currentTarget as HTMLElement
+          pollingMenuAnchorRect = pollingTriggerNode.getBoundingClientRect()
+          pollingMenuOpen = true
+        }}
         ariaLabel={copy.pollingInterval}
         title={copy.pollingInterval}
       >
         <span class="i-lucide-timer h-3.5 w-3.5"></span>
       </AppButton>
-
-      {#if showPollingMenu}
-        <div
-          use:portal
-          use:floatingAnchor={{
-            anchorRect: pollingMenuAnchorRect,
-            minWidth: 128,
-            matchAnchorWidth: false,
-            align: 'end'
-          }}
-          use:stopFloatingPointerPropagation
-          data-floating-root=""
-          transition:fly={{ y: -6, duration: 200 }}
-          class="polling-menu theme-soft-panel z-[999] min-w-[8rem] rounded-[0.45rem] border border-[var(--card-border)] py-1 shadow-md"
-        >
-          <p class="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-faint">
-            {copy.pollingInterval}
-          </p>
-          {#each pollingOptions as option (option)}
-            <button
-              class="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-xs text-carbon transition-colors hover:bg-[var(--surface-soft)]"
-              type="button"
-              onclick={() => {
-                updatePollingInterval(option)
-                closePollingMenu()
-              }}
-            >
-              <span
-                class={`h-3 w-3 ${usagePollingMinutes === option ? 'i-lucide-check text-success' : ''}`}
-              ></span>
-              <span>{option} {copy.minutes}</span>
-            </button>
-          {/each}
-        </div>
-      {/if}
+      <AppPopover
+        open={pollingMenuOpen}
+        anchorRect={pollingMenuAnchorRect}
+        align="end"
+        ignoreNode={pollingTriggerNode}
+        class="min-w-[8rem] rounded-[0.55rem] p-1"
+        onclose={() => {
+          pollingMenuOpen = false
+          pollingMenuAnchorRect = null
+        }}
+      >
+        <p class="px-3 py-1 text-[10px] font-medium uppercase tracking-wide text-faint">
+          {copy.pollingInterval}
+        </p>
+        {#each pollingOptions as option (option)}
+          <button
+            class="flex w-full items-center gap-2 border-0 bg-transparent px-3 py-1.5 text-left text-xs text-carbon transition-colors hover:bg-[var(--surface-soft)] rounded-[0.35rem]"
+            type="button"
+            onclick={() => {
+              updatePollingInterval(option)
+              pollingMenuOpen = false
+              pollingMenuAnchorRect = null
+            }}
+          >
+            <span
+              class={`h-3 w-3 ${usagePollingMinutes === option ? 'i-lucide-check text-success' : ''}`}
+            ></span>
+            <span>{option} {copy.minutes}</span>
+          </button>
+        {/each}
+      </AppPopover>
     </div>
     <AppButton
       variant="secondary"
@@ -1065,7 +1049,7 @@
         dragDisabled:
           loginActionBusy ||
           groupMutationBusy ||
-          activeGroupFilter !== 'all' ||
+          dragSortDisabled ||
           sortableAccounts.length < 2,
         autoAriaDisabled: false,
         zoneItemTabIndex: -1,
@@ -1132,14 +1116,14 @@
               />
             </label>
             <button
-              class={`account-drag-button self-center ${activeGroupFilter === 'all' ? 'cursor-grab active:cursor-grabbing' : ''}`}
+              class={`account-drag-button self-center ${dragSortDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
               type="button"
               use:dragHandle
               aria-label={`${copy.dragSortHandle} · ${accountEmail(account, copy)}`}
               title={copy.dragSortHandle}
               disabled={loginActionBusy ||
                 groupMutationBusy ||
-                activeGroupFilter !== 'all' ||
+                dragSortDisabled ||
                 sortableAccounts.length < 2}
             >
               <span class="i-lucide-grip-vertical h-4 w-4"></span>

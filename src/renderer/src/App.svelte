@@ -860,6 +860,18 @@
     )
   }
 
+  const updateLocalGatewayVisibleColumns = async (columns: string[]): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-columns', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          visibleColumns: columns
+        }
+      })
+    )
+  }
+
   const getProvider = async (providerId: string): Promise<CustomProviderDetail> =>
     window.codexApp.getProvider(providerId)
 
@@ -1241,6 +1253,21 @@
     await runAction('accounts:reorder', () => window.codexApp.reorderAccounts(accountIds), {
       preserveUsageState: true
     })
+  }
+
+  const reorderAccountsInGroup = async (
+    groupId: string,
+    accountIds: string[]
+  ): Promise<void> => {
+    if (!groupId || !accountIds.length) {
+      return
+    }
+
+    await runAction(
+      `accounts:reorder-in-group:${groupId}`,
+      () => window.codexApp.reorderAccountsInGroup(groupId, accountIds),
+      { preserveUsageState: true }
+    )
   }
 
   const createGroup = async (name: string): Promise<void> => {
@@ -1874,12 +1901,15 @@
                 []}
               {updateLocalGatewayAllowedProviders}
               {updateLocalGatewayPort}
+              localGatewayVisibleColumns={snapshot.settings.localGateway?.visibleColumns}
+              {updateLocalGatewayVisibleColumns}
               {localGatewayPortOccupant}
               {killingLocalGatewayPortOccupant}
               {killLocalGatewayPortOccupant}
               {openProviderInCodex}
               {openProviderIsolatedInCodex}
               {reorderAccounts}
+              {reorderAccountsInGroup}
               {createGroup}
               {updateGroup}
               {deleteGroup}

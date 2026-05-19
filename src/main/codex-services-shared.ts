@@ -392,6 +392,7 @@ export interface CodexServices {
     activateBest(): Promise<AppSnapshot>
     refreshExpiringSession(accountId: string): Promise<boolean>
     reorder(accountIds: string[]): Promise<AppSnapshot>
+    reorderInGroup(groupId: string, accountIds: string[]): Promise<AppSnapshot>
     remove(accountId: string): Promise<AppSnapshot>
     removeMany(accountIds: string[]): Promise<AppSnapshot>
     updateGroups(accountId: string, groupIds: string[]): Promise<AppSnapshot>

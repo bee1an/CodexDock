@@ -743,6 +743,13 @@ app.whenReady().then(async () => {
     await codexServices.accounts.reorder(accountIds)
     return refreshTrayTitle()
   })
+  ipcMain.handle(
+    'codex:reorder-accounts-in-group',
+    async (_, groupId: string, accountIds: string[]) => {
+      await codexServices.accounts.reorderInGroup(groupId, accountIds)
+      return refreshTrayTitle()
+    }
+  )
   ipcMain.handle('codex:remove-account', async (_, accountId: string) => {
     await codexServices.accounts.remove(accountId)
     return refreshTrayTitle()

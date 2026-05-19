@@ -197,6 +197,74 @@ describe('CodexAccountStore', () => {
     )
   })
 
+  it('persists per-group account order without touching the global account list', async () => {
+    const store = await createStore()
+    await store.importAuthPayload(createAuthPayload('a'))
+    await store.importAuthPayload(createAuthPayload('b'))
+    await store.importAuthPayload(createAuthPayload('c'))
+    const group = await store.createGroup('alpha')
+    await store.updateAccountGroups('a', [group.id])
+    await store.updateAccountGroups('b', [group.id])
+    await store.updateAccountGroups('c', [group.id])
+
+    const beforeOrder = (await store.getSnapshot(false)).accounts.map((account) => account.id)
+
+    await store.reorderAccountsInGroup(group.id, ['c', 'a', 'b'])
+
+    const snapshot = await store.getSnapshot(false)
+    expect(snapshot.accounts.map((account) => account.id)).toEqual(beforeOrder)
+    expect(snapshot.groups[0]?.orderedAccountIds).toEqual(['c', 'a', 'b'])
+  })
+
+  it('rejects in-group reorder with non-member accounts', async () => {
+    const store = await createStore()
+    await store.importAuthPayload(createAuthPayload('a'))
+    await store.importAuthPayload(createAuthPayload('b'))
+    const group = await store.createGroup('alpha')
+    await store.updateAccountGroups('a', [group.id])
+
+    await expect(store.reorderAccountsInGroup(group.id, ['a', 'b'])).rejects.toThrow(
+      `Account b is not a member of group ${group.id}.`
+    )
+  })
+
+  it('rejects in-group reorder for missing groups', async () => {
+    const store = await createStore()
+    await store.importAuthPayload(createAuthPayload('a'))
+
+    await expect(store.reorderAccountsInGroup('missing-group', ['a'])).rejects.toThrow(
+      'Group not found.'
+    )
+  })
+
+  it('drops removed accounts from group orderedAccountIds', async () => {
+    const store = await createStore()
+    await store.importAuthPayload(createAuthPayload('a'))
+    await store.importAuthPayload(createAuthPayload('b'))
+    const group = await store.createGroup('alpha')
+    await store.updateAccountGroups('a', [group.id])
+    await store.updateAccountGroups('b', [group.id])
+    await store.reorderAccountsInGroup(group.id, ['b', 'a'])
+
+    await store.removeAccount('b')
+
+    expect((await store.getSnapshot(false)).groups[0]?.orderedAccountIds).toEqual(['a'])
+  })
+
+  it('drops accounts from orderedAccountIds when leaving the group', async () => {
+    const store = await createStore()
+    await store.importAuthPayload(createAuthPayload('a'))
+    await store.importAuthPayload(createAuthPayload('b'))
+    const group = await store.createGroup('alpha')
+    await store.updateAccountGroups('a', [group.id])
+    await store.updateAccountGroups('b', [group.id])
+    await store.reorderAccountsInGroup(group.id, ['b', 'a'])
+
+    await store.updateAccountGroups('b', [])
+
+    expect((await store.getSnapshot(false)).groups[0]?.orderedAccountIds).toEqual(['a'])
+  })
+
   it('creates, renames, and deletes groups while syncing account group bindings', async () => {
     const store = await createStore()
     const account = await store.importAuthPayload(createAuthPayload('a'))

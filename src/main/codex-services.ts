@@ -354,6 +354,10 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         await store.reorderAccounts(accountIds)
         return getSnapshot()
       },
+      reorderInGroup: async (groupId, accountIds) => {
+        await store.reorderAccountsInGroup(groupId, accountIds)
+        return getSnapshot()
+      },
       refreshExpiringSession: refreshExpiringAccountSession,
       remove: async (accountId) => {
         await store.removeAccount(accountId)

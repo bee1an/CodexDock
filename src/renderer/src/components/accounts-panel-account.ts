@@ -6,7 +6,8 @@ export const ungroupedFilterId = '__ungrouped__'
 
 export function visibleAccountsForFilter(
   accounts: AccountSummary[],
-  activeGroupFilter: string
+  activeGroupFilter: string,
+  groups: AccountGroup[] = []
 ): AccountSummary[] {
   if (activeGroupFilter === 'all') {
     return accounts
@@ -16,7 +17,25 @@ export function visibleAccountsForFilter(
     return accounts.filter((account) => account.groupIds.length === 0)
   }
 
-  return accounts.filter((account) => account.groupIds.includes(activeGroupFilter))
+  const members = accounts.filter((account) => account.groupIds.includes(activeGroupFilter))
+  const orderedIds = groups.find((group) => group.id === activeGroupFilter)?.orderedAccountIds
+  if (!orderedIds?.length) {
+    return members
+  }
+
+  const indexById = new Map<string, number>()
+  orderedIds.forEach((accountId, index) => {
+    if (!indexById.has(accountId)) {
+      indexById.set(accountId, index)
+    }
+  })
+  const fallbackIndex = orderedIds.length
+  return [...members].sort((a, b) => {
+    const ai = indexById.get(a.id) ?? fallbackIndex
+    const bi = indexById.get(b.id) ?? fallbackIndex
+    if (ai !== bi) return ai - bi
+    return accounts.indexOf(a) - accounts.indexOf(b)
+  })
 }
 
 export function normalizeSelectedAccountIds(

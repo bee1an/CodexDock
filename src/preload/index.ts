@@ -80,6 +80,8 @@ const codexApp = {
   activateBestAccount: () => ipcRenderer.invoke('codex:activate-best-account'),
   reorderAccounts: (accountIds: string[]) =>
     ipcRenderer.invoke('codex:reorder-accounts', accountIds),
+  reorderAccountsInGroup: (groupId: string, accountIds: string[]) =>
+    ipcRenderer.invoke('codex:reorder-accounts-in-group', groupId, accountIds),
   removeAccount: (accountId: string) => ipcRenderer.invoke('codex:remove-account', accountId),
   removeAccounts: (accountIds: string[]) => ipcRenderer.invoke('codex:remove-accounts', accountIds),
   updateAccountGroups: (accountId: string, groupIds: string[]) =>

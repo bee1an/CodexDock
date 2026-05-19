@@ -762,6 +762,23 @@ export class CodexAccountStore {
         throw new Error('One or more groups do not exist.')
       }
 
+      const previousGroupIds = new Set(account.groupIds)
+      const nextGroupIdSet = new Set(nextGroupIds)
+      const removedGroupIds = [...previousGroupIds].filter(
+        (groupId) => !nextGroupIdSet.has(groupId)
+      )
+      if (removedGroupIds.length) {
+        const removedSet = new Set(removedGroupIds)
+        state.groups = state.groups.map((group) =>
+          removedSet.has(group.id) && group.orderedAccountIds?.includes(accountId)
+            ? {
+                ...group,
+                orderedAccountIds: group.orderedAccountIds.filter((id) => id !== accountId)
+              }
+            : group
+        )
+      }
+
       account.groupIds = nextGroupIds
       account.updatedAt = new Date().toISOString()
       await this.writeState(state)
@@ -915,6 +932,15 @@ export class CodexAccountStore {
         delete state.wakeSchedulesByAccountId[accountId]
       }
 
+      state.groups = state.groups.map((group) =>
+        group.orderedAccountIds?.includes(accountId)
+          ? {
+              ...group,
+              orderedAccountIds: group.orderedAccountIds.filter((id) => id !== accountId)
+            }
+          : group
+      )
+
       const gateway = state.settings.localGateway
       if (gateway && Array.isArray(gateway.allowedAccountIds) && gateway.allowedAccountIds.length) {
         const nextAllowed = gateway.allowedAccountIds.filter((item) => item !== accountId)
@@ -960,6 +986,37 @@ export class CodexAccountStore {
       state.accounts = state.accounts.map((account) =>
         uniqueAccountIds.has(account.id) ? reorderedAccounts[nextVisibleIndex++] : account
       )
+      await this.writeState(state)
+    })
+  }
+
+  async reorderAccountsInGroup(groupId: string, accountIds: string[]): Promise<void> {
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+
+      const group = state.groups.find((item) => item.id === groupId)
+      if (!group) {
+        throw new Error('Group not found.')
+      }
+
+      const uniqueAccountIds = new Set(accountIds)
+      if (uniqueAccountIds.size !== accountIds.length) {
+        throw new Error('Account reorder payload contains duplicate accounts.')
+      }
+
+      const accountsById = new Map(state.accounts.map((account) => [account.id, account]))
+      for (const accountId of accountIds) {
+        const account = accountsById.get(accountId)
+        if (!account) {
+          throw new Error(`Account not found: ${accountId}`)
+        }
+        if (!account.groupIds.includes(groupId)) {
+          throw new Error(`Account ${accountId} is not a member of group ${groupId}.`)
+        }
+      }
+
+      group.orderedAccountIds = accountIds
+      group.updatedAt = new Date().toISOString()
       await this.writeState(state)
     })
   }

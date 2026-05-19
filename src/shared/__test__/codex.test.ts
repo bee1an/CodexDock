@@ -463,26 +463,26 @@ describe('codex shared helpers', () => {
     ).toBe(true)
   })
 
-  it('treats free accounts as weekly-only quota accounts', () => {
-    const accounts = [createAccount('free-a', { email: 'free@example.com' })]
-    const usageByAccountId = {
-      'free-a': createUsage({
-        planType: 'free',
-        primary: null,
-        secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: null }
-      })
-    }
-
-    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('free-a')
-  })
-
-  it('does not select free accounts without weekly quota', () => {
+  it('treats free accounts as primary quota accounts', () => {
     const accounts = [createAccount('free-a', { email: 'free@example.com' })]
     const usageByAccountId = {
       'free-a': createUsage({
         planType: 'free',
         primary: { usedPercent: 20, windowDurationMins: 300, resetsAt: null },
         secondary: null
+      })
+    }
+
+    expect(resolveBestAccount(accounts, usageByAccountId)?.id).toBe('free-a')
+  })
+
+  it('does not select free accounts without primary quota', () => {
+    const accounts = [createAccount('free-a', { email: 'free@example.com' })]
+    const usageByAccountId = {
+      'free-a': createUsage({
+        planType: 'free',
+        primary: null,
+        secondary: { usedPercent: 20, windowDurationMins: 10080, resetsAt: null }
       })
     }
 

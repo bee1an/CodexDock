@@ -81,6 +81,7 @@ interface CodexDesktopApi {
   activateAccount: (accountId: string) => Promise<AppSnapshot>
   activateBestAccount: () => Promise<AppSnapshot>
   reorderAccounts: (accountIds: string[]) => Promise<AppSnapshot>
+  reorderAccountsInGroup: (groupId: string, accountIds: string[]) => Promise<AppSnapshot>
   removeAccount: (accountId: string) => Promise<AppSnapshot>
   removeAccounts: (accountIds: string[]) => Promise<AppSnapshot>
   updateAccountGroups: (accountId: string, groupIds: string[]) => Promise<AppSnapshot>
