@@ -15,15 +15,19 @@ import type { CodexProviderStore } from './codex-providers'
 import type { StoredAuthRefreshResult } from './codex-services-shared'
 import { getTcpPortOccupant } from './codex-auth-shared'
 import {
+  GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
   isLocalMockAccount,
   isAccountHealthBlocking,
   localGatewayBaseUrl,
   maskLocalGatewayApiKey,
   normalizeLocalGatewaySettings,
   resolveBestAccount,
+  type AccountHealth,
+  type AccountRateLimits,
   type AccountSummary,
   type CustomProviderProtocol,
   type CustomProviderSummary,
+  type GatewayUsageRecordInput,
   type LocalGatewayLogEntry,
   type LocalGatewayModelMapping,
   type LocalGatewaySettings,
@@ -51,7 +55,9 @@ type GatewayLogMeta = Pick<
   | 'responseBytes'
   | 'requestContentType'
   | 'responseContentType'
->
+> & {
+  instanceId?: string
+}
 
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 const NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE = 'No available Codex account for local gateway.'
@@ -63,6 +69,21 @@ const CHATGPT_HOSTS = ['https://chatgpt.com', 'https://chat.openai.com'] as cons
 
 function generateGatewayApiKey(): string {
   return `sk-cdock-${randomBytes(24).toString('base64url')}`
+}
+
+const INSTANCE_PATH_PREFIX_PATTERN = /^\/inst\/([^/]+)(\/.*)?$/
+
+function extractInstanceIdFromPath(url: URL): string | null {
+  const match = INSTANCE_PATH_PREFIX_PATTERN.exec(url.pathname)
+  if (!match) {
+    return null
+  }
+  const rawId = decodeURIComponent(match[1] ?? '').trim()
+  if (!rawId) {
+    return null
+  }
+  url.pathname = match[2] ?? '/'
+  return rawId
 }
 
 function normalizeChatGptBaseUrl(baseUrl: string): string {
@@ -239,25 +260,45 @@ function setResponseHeaders(response: ServerResponse, upstream: Response): void 
   })
 }
 
-async function writeFetchResponse(response: ServerResponse, upstream: Response): Promise<void> {
+async function writeFetchResponse(
+  response: ServerResponse,
+  upstream: Response,
+  onUsage?: UsageCallback
+): Promise<void> {
   response.statusCode = upstream.status
   setResponseHeaders(response, upstream)
 
   if (!upstream.body) {
-    response.end(Buffer.from(await upstream.arrayBuffer()))
+    const body = Buffer.from(await upstream.arrayBuffer())
+    if (onUsage) {
+      await extractUsageFromResponseText(body.toString('utf8'), onUsage)
+    }
+    response.end(body)
     return
   }
 
   const reader = upstream.body.getReader()
+  const decoder = onUsage ? new TextDecoder() : null
+  let usageBuffer = ''
   try {
     while (true) {
       const { done, value } = await reader.read()
       if (done) {
         break
       }
+      if (decoder && onUsage) {
+        usageBuffer += decoder.decode(value, { stream: true })
+        usageBuffer = await drainUsageBlocks(usageBuffer, onUsage)
+      }
       const ok = response.write(Buffer.from(value))
       if (!ok) {
         await new Promise<void>((resolve) => response.once('drain', resolve))
+      }
+    }
+    if (decoder && onUsage) {
+      const tail = `${usageBuffer}${decoder.decode()}`.trim()
+      if (tail) {
+        await extractUsageFromResponseText(tail, onUsage)
       }
     }
   } finally {
@@ -352,6 +393,181 @@ async function authFailureReasonFromResponse(upstream: Response): Promise<string
     .catch(() => '')
   const message = logMessageFromResponseBody(raw)
   return message ? `${fallback} ${message}` : fallback
+}
+
+interface CodexRateLimitClassification {
+  quotaExhausted: boolean
+  retryAt?: string
+  reason: string
+}
+
+function parseEpochOrIsoMs(value: unknown, nowMs: number): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (value <= 0) {
+      return null
+    }
+    return value > 1_000_000_000_000 ? value : value * 1000
+  }
+
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const numeric = Number(trimmed)
+  if (Number.isFinite(numeric) && numeric > 0) {
+    return numeric > 1_000_000_000_000 ? numeric : numeric * 1000
+  }
+
+  const parsed = Date.parse(trimmed)
+  return Number.isNaN(parsed) || parsed <= nowMs ? null : parsed
+}
+
+function parseRelativeSecondsMs(value: unknown, nowMs: number): number | null {
+  const seconds =
+    typeof value === 'number'
+      ? value
+      : typeof value === 'string'
+        ? Number(value.trim())
+        : Number.NaN
+  if (!Number.isFinite(seconds) || seconds <= 0) {
+    return null
+  }
+  return nowMs + seconds * 1000
+}
+
+function pickLaterMs(left: number | null, right: number | null): number | null {
+  if (left == null) return right
+  if (right == null) return left
+  return Math.max(left, right)
+}
+
+function pickEarlierMs(left: number | null, right: number | null): number | null {
+  if (left == null) return right
+  if (right == null) return left
+  return Math.min(left, right)
+}
+
+function retryAtIsoFromMs(value: number | null, nowMs: number): string | undefined {
+  return value && value > nowMs ? new Date(value).toISOString() : undefined
+}
+
+function retryAtFromHeaders(headers: Headers, nowMs: number): number | null {
+  let retryAt = parseRelativeSecondsMs(headers.get('retry-after'), nowMs)
+  retryAt ??= parseEpochOrIsoMs(headers.get('retry-after'), nowMs)
+
+  for (const name of [
+    'x-ratelimit-reset',
+    'x-ratelimit-reset-requests',
+    'x-ratelimit-reset-tokens',
+    'ratelimit-reset'
+  ]) {
+    retryAt = pickEarlierMs(retryAt, parseEpochOrIsoMs(headers.get(name), nowMs))
+  }
+
+  return retryAt
+}
+
+function parseJsonText(text: string): unknown {
+  const trimmed = text.trim()
+  if (!trimmed || (!trimmed.startsWith('{') && !trimmed.startsWith('['))) {
+    return null
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown
+  } catch {
+    return null
+  }
+}
+
+function quotaSignalFromText(value: string): boolean {
+  return /rate[_ -]?limit[_ -]?exceeded|insufficient[_ -]?quota|quota[_ -]?exceeded|usage[_ -]?limit|limit[_ -]?reached|quota|exhausted|depleted/i.test(
+    value
+  )
+}
+
+function collectRateLimitBodyInfo(
+  value: unknown,
+  nowMs: number,
+  depth = 0
+): { quotaSignal: boolean; retryAtMs: number | null } {
+  if (depth > 8 || value == null) {
+    return { quotaSignal: false, retryAtMs: null }
+  }
+
+  if (typeof value === 'string') {
+    return { quotaSignal: quotaSignalFromText(value), retryAtMs: null }
+  }
+
+  if (typeof value !== 'object') {
+    return { quotaSignal: false, retryAtMs: null }
+  }
+
+  if (Array.isArray(value)) {
+    return value.reduce(
+      (acc, item) => {
+        const next = collectRateLimitBodyInfo(item, nowMs, depth + 1)
+        return {
+          quotaSignal: acc.quotaSignal || next.quotaSignal,
+          retryAtMs: pickEarlierMs(acc.retryAtMs, next.retryAtMs)
+        }
+      },
+      { quotaSignal: false, retryAtMs: null as number | null }
+    )
+  }
+
+  let quotaSignal = false
+  let retryAtMs: number | null = null
+  const record = value as Record<string, unknown>
+  for (const [key, entry] of Object.entries(record)) {
+    const normalizedKey = key.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (normalizedKey === 'limitreached' && entry === true) {
+      quotaSignal = true
+    }
+    if (normalizedKey === 'usedpercent' && Number(entry) >= 100) {
+      quotaSignal = true
+    }
+    if (
+      ['code', 'type', 'message', 'detail', 'error'].includes(normalizedKey) &&
+      typeof entry === 'string' &&
+      quotaSignalFromText(entry)
+    ) {
+      quotaSignal = true
+    }
+    if (['resetat', 'resetsat', 'retryat'].includes(normalizedKey)) {
+      retryAtMs = pickEarlierMs(retryAtMs, parseEpochOrIsoMs(entry, nowMs))
+    }
+    if (
+      ['resetafterseconds', 'retryafterseconds', 'resetafter', 'retryafter'].includes(normalizedKey)
+    ) {
+      retryAtMs = pickEarlierMs(retryAtMs, parseRelativeSecondsMs(entry, nowMs))
+    }
+
+    const nested = collectRateLimitBodyInfo(entry, nowMs, depth + 1)
+    quotaSignal ||= nested.quotaSignal
+    retryAtMs = pickEarlierMs(retryAtMs, nested.retryAtMs)
+  }
+
+  return { quotaSignal, retryAtMs }
+}
+
+function storedExhaustedQuotaResetMs(
+  rateLimits: AccountRateLimits | undefined,
+  nowMs: number
+): number | null {
+  let retryAtMs: number | null = null
+  for (const window of [rateLimits?.primary, rateLimits?.secondary]) {
+    if (!window || window.usedPercent < 100 || !window.resetsAt) {
+      continue
+    }
+    retryAtMs = pickLaterMs(retryAtMs, parseEpochOrIsoMs(window.resetsAt, nowMs))
+  }
+  return retryAtMs
 }
 
 function errorMessage(error: unknown, fallback: string): string {
@@ -611,11 +827,15 @@ function geminiToResponsesPayload(
   }
 }
 
-async function collectResponsesText(upstream: Response): Promise<string> {
+async function collectResponsesText(upstream: Response, onUsage?: UsageCallback): Promise<string> {
   const chunks: string[] = []
-  await streamResponsesTextDeltas(upstream, (delta) => {
-    chunks.push(delta)
-  })
+  await streamResponsesTextDeltas(
+    upstream,
+    (delta) => {
+      chunks.push(delta)
+    },
+    onUsage
+  )
   return chunks.join('')
 }
 
@@ -634,7 +854,74 @@ async function writeSse(response: ServerResponse, payload: unknown, event?: stri
   }
 }
 
-function textDeltaFromResponsesSseBlock(block: string): string {
+interface ResponsesUsageResult {
+  model?: string
+  inputTokens: number
+  cachedTokens: number
+  outputTokens: number
+}
+
+type UsageCallback = (usage: ResponsesUsageResult) => void | Promise<void>
+
+function numberFromUsage(value: unknown): number {
+  return Math.max(0, Math.trunc(Number(value) || 0))
+}
+
+function cachedTokensFromUsage(usage: Record<string, unknown>): number {
+  const direct = usage.cached_input_tokens ?? usage.cache_read_input_tokens
+  if (direct != null) {
+    return numberFromUsage(direct)
+  }
+
+  const inputDetails = usage.input_tokens_details
+  if (inputDetails && typeof inputDetails === 'object' && !Array.isArray(inputDetails)) {
+    const details = inputDetails as Record<string, unknown>
+    return numberFromUsage(details.cached_tokens ?? details.cache_read_tokens)
+  }
+
+  const promptDetails = usage.prompt_tokens_details
+  if (promptDetails && typeof promptDetails === 'object' && !Array.isArray(promptDetails)) {
+    const details = promptDetails as Record<string, unknown>
+    return numberFromUsage(details.cached_tokens ?? details.cache_read_tokens)
+  }
+
+  return 0
+}
+
+function sseBoundary(buffer: string): { index: number; length: number } | null {
+  const lf = buffer.indexOf('\n\n')
+  const crlf = buffer.indexOf('\r\n\r\n')
+  if (lf < 0 && crlf < 0) {
+    return null
+  }
+  if (lf < 0) {
+    return { index: crlf, length: 4 }
+  }
+  if (crlf < 0 || lf < crlf) {
+    return { index: lf, length: 2 }
+  }
+  return { index: crlf, length: 4 }
+}
+
+function usageFromResponseRecord(response: Record<string, unknown>): ResponsesUsageResult | null {
+  const usage = response.usage as Record<string, unknown> | undefined
+  if (!usage || typeof usage !== 'object') {
+    return null
+  }
+
+  const inputTokens = numberFromUsage(usage.input_tokens ?? usage.prompt_tokens)
+  const cachedTokens = cachedTokensFromUsage(usage)
+  const outputTokens = numberFromUsage(usage.output_tokens ?? usage.completion_tokens)
+  const model = typeof response.model === 'string' ? response.model : undefined
+
+  if (inputTokens === 0 && outputTokens === 0) {
+    return null
+  }
+
+  return { model, inputTokens, cachedTokens, outputTokens }
+}
+
+function parseResponsesSseBlock(block: string): { event: string; data: string } | null {
   const dataLines: string[] = []
   let event = ''
   for (const line of block.split(/\r?\n/)) {
@@ -648,26 +935,95 @@ function textDeltaFromResponsesSseBlock(block: string): string {
 
   const data = dataLines.join('\n')
   if (!data || data === '[DONE]') {
-    return ''
+    return null
   }
+  return { event, data }
+}
 
-  try {
-    const parsed = JSON.parse(data) as Record<string, unknown>
-    if (
-      (event === 'response.output_text.delta' || event === 'response.text.delta') &&
-      typeof parsed.delta === 'string'
-    ) {
-      return parsed.delta
-    }
-  } catch {
-    return ''
+function textDeltaFromParsedBlock(event: string, parsed: Record<string, unknown>): string {
+  if (
+    (event === 'response.output_text.delta' || event === 'response.text.delta') &&
+    typeof parsed.delta === 'string'
+  ) {
+    return parsed.delta
   }
   return ''
 }
 
+function textDeltaFromResponsesSseBlock(block: string): string {
+  const parsed = parseResponsesSseBlock(block)
+  if (!parsed) {
+    return ''
+  }
+  try {
+    const json = JSON.parse(parsed.data) as Record<string, unknown>
+    return textDeltaFromParsedBlock(parsed.event, json)
+  } catch {
+    return ''
+  }
+}
+
+function extractUsageFromSseBlock(block: string): ResponsesUsageResult | null {
+  const parsed = parseResponsesSseBlock(block)
+  if (!parsed) {
+    return null
+  }
+
+  try {
+    const json = JSON.parse(parsed.data) as Record<string, unknown>
+    const isCompleted = parsed.event === 'response.completed' || json.type === 'response.completed'
+    if (!isCompleted) {
+      return null
+    }
+
+    const response = json.response as Record<string, unknown> | undefined
+    if (!response || typeof response !== 'object') {
+      return null
+    }
+
+    return usageFromResponseRecord(response)
+  } catch {
+    return null
+  }
+}
+
+function extractUsageFromJsonText(text: string): ResponsesUsageResult | null {
+  try {
+    const json = JSON.parse(text) as Record<string, unknown>
+    const response =
+      json.response && typeof json.response === 'object'
+        ? (json.response as Record<string, unknown>)
+        : json
+    return usageFromResponseRecord(response)
+  } catch {
+    return null
+  }
+}
+
+async function extractUsageFromResponseText(text: string, onUsage: UsageCallback): Promise<void> {
+  const usage = extractUsageFromSseBlock(text) ?? extractUsageFromJsonText(text)
+  if (usage) {
+    await onUsage(usage)
+  }
+}
+
+async function drainUsageBlocks(buffer: string, onUsage: UsageCallback): Promise<string> {
+  let boundary = sseBoundary(buffer)
+  while (boundary) {
+    const block = buffer.slice(0, boundary.index).trim()
+    buffer = buffer.slice(boundary.index + boundary.length)
+    if (block) {
+      await extractUsageFromResponseText(block, onUsage)
+    }
+    boundary = sseBoundary(buffer)
+  }
+  return buffer
+}
+
 async function streamResponsesTextDeltas(
   upstream: Response,
-  onDelta: (delta: string) => void | Promise<void>
+  onDelta: (delta: string) => void | Promise<void>,
+  onUsage?: UsageCallback
 ): Promise<void> {
   if (!upstream.body) {
     return
@@ -683,22 +1039,38 @@ async function streamResponsesTextDeltas(
         break
       }
       buffer += decoder.decode(value, { stream: true })
-      let boundary = buffer.indexOf('\n\n')
-      while (boundary >= 0) {
-        const block = buffer.slice(0, boundary).trim()
-        buffer = buffer.slice(boundary + 2)
-        const delta = textDeltaFromResponsesSseBlock(block)
-        if (delta) {
-          await onDelta(delta)
+      let boundary = sseBoundary(buffer)
+      while (boundary) {
+        const block = buffer.slice(0, boundary.index).trim()
+        buffer = buffer.slice(boundary.index + boundary.length)
+        if (block) {
+          const delta = textDeltaFromResponsesSseBlock(block)
+          if (delta) {
+            await onDelta(delta)
+          }
+          if (onUsage) {
+            const usage = extractUsageFromSseBlock(block)
+            if (usage) {
+              await onUsage(usage)
+            }
+          }
         }
-        boundary = buffer.indexOf('\n\n')
+        boundary = sseBoundary(buffer)
       }
     }
 
-    const tail = `${buffer}${decoder.decode()}`
-    const delta = textDeltaFromResponsesSseBlock(tail.trim())
-    if (delta) {
-      await onDelta(delta)
+    const tail = `${buffer}${decoder.decode()}`.trim()
+    if (tail) {
+      const delta = textDeltaFromResponsesSseBlock(tail)
+      if (delta) {
+        await onDelta(delta)
+      }
+      if (onUsage) {
+        const usage = extractUsageFromSseBlock(tail)
+        if (usage) {
+          await onUsage(usage)
+        }
+      }
     }
   } finally {
     reader.releaseLock()
@@ -734,8 +1106,33 @@ export class CodexLocalGatewayService {
       openCodexFromService: (
         input?: OpenCodexFromServiceInput
       ) => Promise<OpenCodexFromServiceResult>
+      onAccountUsage?: (input: GatewayUsageRecordInput) => void | Promise<void>
     }
   ) {}
+
+  private makeUsageCallback(
+    account: AccountSummary,
+    requestModel: string | undefined,
+    instanceId: string,
+    logMeta?: GatewayLogMeta
+  ): UsageCallback {
+    return async (usage) => {
+      try {
+        const totalTokens = usage.inputTokens + usage.outputTokens
+        logMeta && (logMeta.tokens = (logMeta.tokens ?? 0) + totalTokens)
+        await this.options.onAccountUsage?.({
+          accountId: account.id,
+          instanceId,
+          model: usage.model || requestModel || 'unknown',
+          inputTokens: usage.inputTokens,
+          cachedTokens: usage.cachedTokens,
+          outputTokens: usage.outputTokens
+        })
+      } catch {
+        // Never let usage recording break the request flow.
+      }
+    }
+  }
 
   async status(): Promise<LocalGatewayStatus> {
     await this.ensureLogsLoaded()
@@ -918,8 +1315,13 @@ export class CodexLocalGatewayService {
 
   private async handleRequest(request: IncomingMessage, response: ServerResponse): Promise<void> {
     const url = new URL(request.url ?? '/', 'http://localhost')
+    const extractedInstanceId = extractInstanceIdFromPath(url)
+    if (extractedInstanceId) {
+      request.url = `${url.pathname}${url.search}`
+    }
+    const instanceId = extractedInstanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID
     const startedAt = Date.now()
-    const logMeta: GatewayLogMeta = {}
+    const logMeta: GatewayLogMeta = { instanceId }
     if (url.pathname !== '/health') {
       const captured = installResponseBodyCapture(response)
       logMeta.client = request.headers['user-agent'] || undefined
@@ -1163,7 +1565,16 @@ export class CodexLocalGatewayService {
         else await writeFetchResponse(response, upstream)
         return
       }
-      await writeFetchResponse(response, upstream)
+      await writeFetchResponse(
+        response,
+        upstream,
+        this.makeUsageCallback(
+          account,
+          logMeta.model,
+          logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+          logMeta
+        )
+      )
     } catch (error) {
       const providerName = await this.proxyProviderProtocol(
         'openai',
@@ -1277,7 +1688,15 @@ export class CodexLocalGatewayService {
       return
     }
 
-    const text = await collectResponsesText(result.upstream)
+    const text = await collectResponsesText(
+      result.upstream,
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
+      )
+    )
     const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
     writeJson(response, 200, {
       id: `chatcmpl-cdock-${Date.now()}`,
@@ -1378,15 +1797,24 @@ export class CodexLocalGatewayService {
       model,
       choices: [{ index: 0, delta: { role: 'assistant' }, finish_reason: null }]
     })
-    await streamResponsesTextDeltas(result.upstream, (delta) => {
-      writeSse(response, {
-        id,
-        object: 'chat.completion.chunk',
-        created,
-        model,
-        choices: [{ index: 0, delta: { content: delta }, finish_reason: null }]
-      })
-    })
+    await streamResponsesTextDeltas(
+      result.upstream,
+      (delta) => {
+        writeSse(response, {
+          id,
+          object: 'chat.completion.chunk',
+          created,
+          model,
+          choices: [{ index: 0, delta: { content: delta }, finish_reason: null }]
+        })
+      },
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
+      )
+    )
     await writeSse(response, {
       id,
       object: 'chat.completion.chunk',
@@ -1454,7 +1882,15 @@ export class CodexLocalGatewayService {
       return
     }
 
-    const text = await collectResponsesText(result.upstream)
+    const text = await collectResponsesText(
+      result.upstream,
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
+      )
+    )
     const model = typeof jsonBody.model === 'string' ? jsonBody.model : 'codex'
     writeJson(response, 200, {
       id: `msg_cdock_${Date.now()}`,
@@ -1547,17 +1983,26 @@ export class CodexLocalGatewayService {
       },
       'content_block_start'
     )
-    await streamResponsesTextDeltas(result.upstream, (delta) => {
-      writeSse(
-        response,
-        {
-          type: 'content_block_delta',
-          index: 0,
-          delta: { type: 'text_delta', text: delta }
-        },
-        'content_block_delta'
+    await streamResponsesTextDeltas(
+      result.upstream,
+      (delta) => {
+        writeSse(
+          response,
+          {
+            type: 'content_block_delta',
+            index: 0,
+            delta: { type: 'text_delta', text: delta }
+          },
+          'content_block_delta'
+        )
+      },
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
       )
-    })
+    )
     await writeSse(response, { type: 'content_block_stop', index: 0 }, 'content_block_stop')
     await writeSse(
       response,
@@ -1644,7 +2089,15 @@ export class CodexLocalGatewayService {
       return
     }
 
-    const text = await collectResponsesText(result.upstream)
+    const text = await collectResponsesText(
+      result.upstream,
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
+      )
+    )
     const model = geminiModelFromPath(pathname) ?? 'codex'
     writeJson(response, 200, {
       candidates: [
@@ -1709,19 +2162,28 @@ export class CodexLocalGatewayService {
     response.statusCode = 200
     response.setHeader('content-type', 'text/event-stream; charset=utf-8')
     response.setHeader('cache-control', 'no-cache')
-    await streamResponsesTextDeltas(result.upstream, (delta) => {
-      writeSse(response, {
-        candidates: [
-          {
-            content: {
-              role: 'model',
-              parts: [{ text: delta }]
-            },
-            index: 0
-          }
-        ]
-      })
-    })
+    await streamResponsesTextDeltas(
+      result.upstream,
+      (delta) => {
+        writeSse(response, {
+          candidates: [
+            {
+              content: {
+                role: 'model',
+                parts: [{ text: delta }]
+              },
+              index: 0
+            }
+          ]
+        })
+      },
+      this.makeUsageCallback(
+        result.account,
+        logMeta.model,
+        logMeta.instanceId ?? GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
+        logMeta
+      )
+    )
     response.end()
   }
 
@@ -1732,10 +2194,14 @@ export class CodexLocalGatewayService {
   ): Promise<{ upstream: Response; account: AccountSummary }> {
     const stickyKey = stickyKeyFromRequest(request.headers, jsonBody)
     const attemptedAccountIds = new Set<string>()
+    let lastRateLimitAttempt: { upstream: Response; account: AccountSummary } | null = null
 
     while (true) {
       const account = await this.selectAccountForCodexRequest(stickyKey, attemptedAccountIds)
       if (!account) {
+        if (lastRateLimitAttempt) {
+          return lastRateLimitAttempt
+        }
         throw new Error(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE)
       }
 
@@ -1754,6 +2220,25 @@ export class CodexLocalGatewayService {
         if (stickyKey) {
           this.evictSticky(stickyKey)
         }
+        continue
+      }
+
+      if (attempt.upstream.status === 429) {
+        const rateLimit = await this.classifyCodexRateLimitResponse(
+          attempt.account,
+          attempt.upstream
+        )
+        if (rateLimit.quotaExhausted && rateLimit.retryAt) {
+          await this.markGatewayAccountRateLimited(
+            attempt.account.id,
+            rateLimit.reason,
+            rateLimit.retryAt,
+            attempt.upstream.status
+          )
+        } else if (stickyKey) {
+          this.evictSticky(stickyKey)
+        }
+        lastRateLimitAttempt = { upstream: attempt.upstream, account: attempt.account }
         continue
       }
 
@@ -2058,11 +2543,11 @@ export class CodexLocalGatewayService {
   }
 
   private evictStickyForUnhealthyAccounts(
-    accountHealthByAccountId: Record<string, { status?: string }>
+    accountHealthByAccountId: Record<string, AccountHealth>
   ): void {
     const unhealthyAccountIds = new Set(
       Object.entries(accountHealthByAccountId)
-        .filter(([, health]) => health.status === 'auth_error')
+        .filter(([, health]) => isAccountHealthBlocking(health))
         .map(([accountId]) => accountId)
     )
     if (!unhealthyAccountIds.size) {
@@ -2073,6 +2558,39 @@ export class CodexLocalGatewayService {
       if (target.kind === 'account' && unhealthyAccountIds.has(target.id)) {
         this.stickyTargets.delete(key)
       }
+    }
+  }
+
+  private async classifyCodexRateLimitResponse(
+    account: AccountSummary,
+    upstream: Response
+  ): Promise<CodexRateLimitClassification> {
+    const nowMs = Date.now()
+    const rawBody = await upstream
+      .clone()
+      .text()
+      .catch(() => '')
+    const parsedBody = parseJsonText(rawBody)
+    const bodyInfo = collectRateLimitBodyInfo(parsedBody ?? rawBody, nowMs)
+    const headerRetryAtMs = retryAtFromHeaders(upstream.headers, nowMs)
+    const snapshot = await this.options.store.getSnapshot(false)
+    const storedRetryAtMs = storedExhaustedQuotaResetMs(
+      snapshot.usageByAccountId[account.id],
+      nowMs
+    )
+    const retryAtMs = bodyInfo.retryAtMs ?? storedRetryAtMs ?? headerRetryAtMs
+    const retryAt = retryAtIsoFromMs(retryAtMs, nowMs)
+    const message = logMessageFromResponseBody(rawBody)
+    const quotaExhausted = Boolean(bodyInfo.quotaSignal && retryAt)
+
+    return {
+      quotaExhausted,
+      retryAt,
+      reason: quotaExhausted
+        ? `Codex quota exhausted until ${retryAt}. ${message ?? 'Upstream returned HTTP 429.'}`
+        : message
+          ? `Upstream returned HTTP 429. ${message}`
+          : 'Upstream returned HTTP 429.'
     }
   }
 
@@ -2089,6 +2607,29 @@ export class CodexLocalGatewayService {
       status: httpStatus ?? 200,
       durationMs: 0,
       message: `Marked account ${accountId} as auth_error: ${truncateLogMessage(reason, 320)}`
+    })
+  }
+
+  private async markGatewayAccountRateLimited(
+    accountId: string,
+    reason: string,
+    retryAt: string,
+    httpStatus?: number
+  ): Promise<void> {
+    await this.options.store.markAccountRateLimited(
+      accountId,
+      reason,
+      'gateway',
+      retryAt,
+      httpStatus
+    )
+    this.evictStickyForAccount(accountId)
+    await this.pushLog({
+      method: 'SYSTEM',
+      path: 'account-health',
+      status: httpStatus ?? 200,
+      durationMs: 0,
+      message: `Marked account ${accountId} as rate_limited until ${retryAt}: ${truncateLogMessage(reason, 320)}`
     })
   }
 

@@ -25,10 +25,14 @@ import {
   type CodexInstanceSummary,
   type AccountTokenRefreshLogEntry,
   type AccountTokenRefreshResult,
+  autoWakeTargetAccountIds,
+  canAutoWakeAccount,
   canRunWakeRequest,
   isAccountHealthBlocking,
   isLocalMockAccount,
   resolveBestAccount,
+  type AutoWakeAccountResult,
+  type WakeAccountSource,
   type WakeAccountRateLimitsResult
 } from '../shared/codex'
 import type {
@@ -40,6 +44,7 @@ import type {
 import { DEFAULT_CODEX_INSTANCE_ID, customProviderLabel } from './codex-services-shared'
 import { createCodexServicesAuthRuntime } from './codex-services-auth-runtime'
 import { createCodexCostUsageService } from './codex-cost-usage'
+import { createCodexGatewayUsageService } from './codex-gateway-usage'
 import { createCodexServicesDiagnosticsRuntime } from './codex-services-diagnostics-runtime'
 import { createCodexServicesInstanceRuntime } from './codex-services-instance-runtime'
 import { ConfigGuard } from './codex-config-guard'
@@ -58,6 +63,30 @@ import { decodeJwtPayload } from '../shared/openai-auth'
 
 export type { CodexServices, CreateCodexServicesOptions } from './codex-services-shared'
 export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
+
+const WAKE_CONCURRENCY_LIMIT = 6
+
+async function mapWithConcurrencyLimit<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = []
+  let nextIndex = 0
+  const workerCount = Math.min(Math.max(1, limit), items.length)
+
+  await Promise.all(
+    Array.from({ length: workerCount }, async (): Promise<void> => {
+      while (nextIndex < items.length) {
+        const currentIndex = nextIndex
+        nextIndex += 1
+        results[currentIndex] = await task(items[currentIndex] as T, currentIndex)
+      }
+    })
+  )
+
+  return results
+}
 
 export function createCodexServices(options: CreateCodexServicesOptions): CodexServices {
   const configGuard = new ConfigGuard(options.userDataPath, options.platform)
@@ -110,6 +139,9 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     userDataPath: options.userDataPath,
     listInstances: () => instanceRuntime.listCodexInstances()
   })
+  const gatewayUsageService = createCodexGatewayUsageService({
+    userDataPath: options.userDataPath
+  })
   const diagnosticsRuntime = createCodexServicesDiagnosticsRuntime(context, instanceRuntime)
   const skillService = createCodexSkillService()
   const promptService = createCodexPromptService(options.promptDataPath ?? options.userDataPath, {
@@ -124,7 +156,12 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     platform: options.platform,
     refreshAuthForUse: authRuntime.refreshAuthForUse,
     refreshStoredAuthGuarded: authRuntime.refreshStoredAuthGuarded,
-    openCodexFromService: (input) => instanceRuntime.openFromService(input)
+    openCodexFromService: (input) => instanceRuntime.openFromService(input),
+    onAccountUsage: (input) =>
+      gatewayUsageService.record(input).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error)
+        console.error('[gateway] failed to record account usage', message)
+      })
   })
 
   const {
@@ -162,11 +199,52 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
   const getSnapshot = async (): Promise<AppSnapshot> => {
     const snapshot = await getBaseSnapshot()
     const costSnapshot = await costUsageService.readSnapshotSummaries(snapshot.codexInstances)
+    const accountIds = snapshot.accounts.map((account) => account.id)
+    const gatewaySnapshot = await gatewayUsageService.readSnapshotSummaries(accountIds)
     const localGatewayStatus = await localGatewayService.status()
     return {
       ...snapshot,
       ...costSnapshot,
+      ...gatewaySnapshot,
       localGatewayStatus
+    }
+  }
+
+  const recordWakeState = async (
+    accountId: string,
+    source: WakeAccountSource,
+    status: 'success' | 'error' | 'skipped',
+    message: string,
+    lastWakeAt?: string
+  ): Promise<void> => {
+    await store.patchAccountWakeState(accountId, {
+      ...(lastWakeAt ? { lastWakeAt } : {}),
+      lastWakeSource: source,
+      lastStatus: status,
+      lastMessage: message
+    })
+  }
+
+  const autoWakeMessage = (reason: string): string => {
+    switch (reason) {
+      case 'missing_first_window':
+        return 'Skipped: missing first window quota.'
+      case 'missing_first_window_reset':
+        return 'Skipped: missing first window reset time or duration.'
+      case 'first_window_not_initial':
+        return 'Skipped: first window quota is not close to the initial value.'
+      case 'first_window_reset_not_initial':
+        return 'Skipped: first window reset time is not close to the full window.'
+      case 'second_window_depleted':
+        return 'Skipped: second window quota is unavailable.'
+      case 'wake_cooldown':
+        return 'Skipped: account is still in wake cooldown.'
+      case 'account_health_blocked':
+        return 'Skipped: account health is blocking wake.'
+      case 'eligible':
+        return 'Eligible for auto wake.'
+      default:
+        return `Skipped: ${reason}.`
     }
   }
 
@@ -262,6 +340,9 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
             runningTokenCostSummary: null,
             runningTokenCostInstanceIds: []
           }
+      const gatewaySnapshot = includeTokenCost
+        ? await gatewayUsageService.readSnapshotSummaries(snapshot.accounts.map((a) => a.id))
+        : { gatewayUsageByAccountId: {} as Record<string, never> }
 
       return {
         ...snapshot,
@@ -269,6 +350,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
         codexInstances,
         codexInstanceDefaults: instanceStore.getDefaults(),
         ...costSnapshot,
+        ...gatewaySnapshot,
         localGatewayStatus: await localGatewayService.status()
       }
     } catch {
@@ -276,7 +358,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     }
   }
 
-  return {
+  const services: CodexServices = {
     getSnapshot,
     accounts: {
       list: getSnapshot,
@@ -620,57 +702,189 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       },
       wake: async (accountId, input) => {
         const resolvedAccountId = await resolveAccountIdOrThrow(accountId)
+        const source = input?.source ?? 'manual'
         const account = await store.getAccountSummary(resolvedAccountId)
-        if (isLocalMockAccount(account)) {
-          return wakeMockUsage(resolvedAccountId, input)
-        }
+        let stateAccountId = resolvedAccountId
 
-        const auth = await store.getStoredAuthPayload(resolvedAccountId)
-        const currentUsage = await readUsageForAuthResult(resolvedAccountId, account, auth)
-        const currentAccountId = currentUsage.accountId
-        const currentRateLimits = currentUsage.rateLimits
-
-        if (!canRunWakeRequest(currentRateLimits)) {
-          return {
-            rateLimits: currentRateLimits,
-            requestResult: null
+        try {
+          if (isLocalMockAccount(account)) {
+            const result = await wakeMockUsage(resolvedAccountId, input)
+            await recordWakeState(
+              resolvedAccountId,
+              source,
+              result.requestResult ? 'success' : 'skipped',
+              result.requestResult?.body?.trim() ||
+                'Wake skipped because quota is unavailable or another wake request was already running.',
+              result.requestResult ? new Date().toISOString() : undefined
+            )
+            return result
           }
-        }
 
-        const wakeResult = await wakeUsageGuarded(currentAccountId, async () => {
-          const currentAccount = await store.getAccountSummary(currentAccountId)
-          const latestAuth = await store.getStoredAuthPayload(currentAccountId)
-          const wakeUsage = await wakeUsageForAuth(
-            currentAccountId,
-            currentAccount,
-            latestAuth,
-            input
-          )
-          const finalAccount = await store.getAccountSummary(wakeUsage.accountId)
-          const finalAuth = await store.getStoredAuthPayload(wakeUsage.accountId)
+          const auth = await store.getStoredAuthPayload(resolvedAccountId)
+          const currentUsage = await readUsageForAuthResult(resolvedAccountId, account, auth)
+          const currentAccountId = currentUsage.accountId
+          stateAccountId = currentAccountId
+          const currentRateLimits = currentUsage.rateLimits
 
-          return {
-            rateLimits: await readUsageForAuth(wakeUsage.accountId, finalAccount, finalAuth),
-            requestResult: wakeUsage.requestResult
-          }
-        })
-
-        if (!wakeResult) {
-          return {
-            rateLimits: await readUsageForAuth(
+          if (!canRunWakeRequest(currentRateLimits)) {
+            await recordWakeState(
               currentAccountId,
-              await store.getAccountSummary(currentAccountId),
-              await store.getStoredAuthPayload(currentAccountId)
-            ),
-            requestResult: null
+              source,
+              'skipped',
+              'Wake skipped because quota is unavailable.'
+            )
+            return {
+              rateLimits: currentRateLimits,
+              requestResult: null
+            }
           }
-        }
 
-        return wakeResult
+          const wakeResult = await wakeUsageGuarded(currentAccountId, async () => {
+            const currentAccount = await store.getAccountSummary(currentAccountId)
+            const latestAuth = await store.getStoredAuthPayload(currentAccountId)
+            const wakeUsage = await wakeUsageForAuth(
+              currentAccountId,
+              currentAccount,
+              latestAuth,
+              input
+            )
+            stateAccountId = wakeUsage.accountId
+            const finalAccount = await store.getAccountSummary(wakeUsage.accountId)
+            const finalAuth = await store.getStoredAuthPayload(wakeUsage.accountId)
+
+            return {
+              rateLimits: await readUsageForAuth(wakeUsage.accountId, finalAccount, finalAuth),
+              requestResult: wakeUsage.requestResult
+            }
+          })
+
+          if (!wakeResult) {
+            await recordWakeState(
+              currentAccountId,
+              source,
+              'skipped',
+              'Wake skipped because another wake request was already running.'
+            )
+            return {
+              rateLimits: await readUsageForAuth(
+                currentAccountId,
+                await store.getAccountSummary(currentAccountId),
+                await store.getStoredAuthPayload(currentAccountId)
+              ),
+              requestResult: null
+            }
+          }
+
+          await recordWakeState(
+            stateAccountId,
+            source,
+            wakeResult.requestResult ? 'success' : 'skipped',
+            wakeResult.requestResult?.body?.trim() ||
+              'Wake skipped because quota is unavailable or another wake request was already running.',
+            wakeResult.requestResult ? new Date().toISOString() : undefined
+          )
+          return wakeResult
+        } catch (error) {
+          await recordWakeState(
+            stateAccountId,
+            source,
+            'error',
+            error instanceof Error ? error.message : String(error)
+          )
+          throw error
+        }
+      },
+      auto: async (accountId, source = 'auto') => {
+        const snapshot = await getSnapshot()
+        const resolvedTargetAccountId = accountId
+          ? await resolveAccountIdOrThrow(accountId)
+          : undefined
+        const autoWakeAccountIds = resolvedTargetAccountId
+          ? []
+          : autoWakeTargetAccountIds(snapshot.accounts, snapshot.groups, snapshot.settings)
+        const targets = resolvedTargetAccountId
+          ? [snapshot.accounts.find((account) => account.id === resolvedTargetAccountId)]
+          : snapshot.accounts.filter((account) => autoWakeAccountIds.includes(account.id))
+        const checkedAt = new Date().toISOString()
+
+        const results = (
+          await mapWithConcurrencyLimit(
+            targets,
+            WAKE_CONCURRENCY_LIMIT,
+            async (account): Promise<AutoWakeAccountResult | null> => {
+              if (!account) {
+                return null
+              }
+
+              if (isAccountHealthBlocking(snapshot.accountHealthByAccountId[account.id])) {
+                const decision = { canWake: false, reason: 'account_health_blocked' }
+                const message = autoWakeMessage(decision.reason)
+                await recordWakeState(account.id, source, 'skipped', message)
+                return {
+                  accountId: account.id,
+                  status: 'skipped',
+                  message,
+                  decision
+                }
+              }
+
+              try {
+                const rateLimits = await services.usage.read(account.id)
+                const latestSnapshot = await getSnapshot()
+                const decision = canAutoWakeAccount(
+                  rateLimits,
+                  latestSnapshot.wakeStateByAccountId?.[account.id],
+                  latestSnapshot.settings
+                )
+
+                if (!decision.canWake) {
+                  const message = autoWakeMessage(decision.reason)
+                  await recordWakeState(account.id, source, 'skipped', message)
+                  return {
+                    accountId: account.id,
+                    status: 'skipped',
+                    message,
+                    decision,
+                    rateLimits
+                  }
+                }
+
+                const result = await services.usage.wake(account.id, { source })
+                const message = result.requestResult?.body?.trim() || autoWakeMessage('eligible')
+                return {
+                  accountId: account.id,
+                  status: result.requestResult ? 'success' : 'skipped',
+                  message,
+                  decision,
+                  requestResult: result.requestResult,
+                  rateLimits: result.rateLimits
+                }
+              } catch (error) {
+                const message = error instanceof Error ? error.message : String(error)
+                const decision = { canWake: false, reason: 'error' }
+                await recordWakeState(account.id, source, 'error', message)
+                return {
+                  accountId: account.id,
+                  status: 'error',
+                  message,
+                  decision
+                }
+              }
+            }
+          )
+        ).filter((result): result is AutoWakeAccountResult => Boolean(result))
+
+        return {
+          checkedAt,
+          results
+        }
       }
     },
     cost: {
       read: (input) => costUsageService.read(input)
+    },
+    gatewayUsage: {
+      read: (input) => gatewayUsageService.read(input)
     },
     gateway: {
       start: async () => {
@@ -836,4 +1050,6 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       install: async (input) => skillLibraryService.install(input, await listCodexInstances())
     }
   }
+
+  return services
 }

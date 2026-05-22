@@ -42,6 +42,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
     runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {},
     ...overrides
   }
 }

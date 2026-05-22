@@ -31,6 +31,14 @@ const SETTING_KEYS: CliSettingsKey[] = [
   'language',
   'theme',
   'checkForUpdatesOnStartup',
+  'autoWakeOnStartup',
+  'autoWakeTargetMode',
+  'autoWakeGroupIds',
+  'autoWakeAccountIds',
+  'autoWakeIncludeUngrouped',
+  'autoWakeFirstWindowRemainingThresholdPercent',
+  'autoWakeResetToleranceMinutes',
+  'autoWakeCooldownWindowRatio',
   'showLocalMockData',
   'preserveChatGptAuthOnDirectProviderOpen',
   'codexDesktopExecutablePath',
@@ -191,6 +199,54 @@ export function parseSettingsValue(
         throw new CliError('checkForUpdatesOnStartup must be true or false', EXIT_USAGE)
       }
       return rawValue === 'true'
+    case 'autoWakeOnStartup':
+      if (rawValue !== 'true' && rawValue !== 'false') {
+        throw new CliError('autoWakeOnStartup must be true or false', EXIT_USAGE)
+      }
+      return rawValue === 'true'
+    case 'autoWakeTargetMode':
+      if (rawValue !== 'all' && rawValue !== 'selected') {
+        throw new CliError('autoWakeTargetMode must be all or selected', EXIT_USAGE)
+      }
+      return rawValue
+    case 'autoWakeGroupIds':
+    case 'autoWakeAccountIds':
+      return rawValue
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean)
+    case 'autoWakeIncludeUngrouped':
+      if (rawValue !== 'true' && rawValue !== 'false') {
+        throw new CliError('autoWakeIncludeUngrouped must be true or false', EXIT_USAGE)
+      }
+      return rawValue === 'true'
+    case 'autoWakeFirstWindowRemainingThresholdPercent': {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+        throw new CliError(
+          'autoWakeFirstWindowRemainingThresholdPercent must be a number from 0 to 100',
+          EXIT_USAGE
+        )
+      }
+      return parsed
+    }
+    case 'autoWakeResetToleranceMinutes': {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new CliError(
+          'autoWakeResetToleranceMinutes must be a non-negative number',
+          EXIT_USAGE
+        )
+      }
+      return parsed
+    }
+    case 'autoWakeCooldownWindowRatio': {
+      const parsed = Number(rawValue)
+      if (!Number.isFinite(parsed) || parsed < 0) {
+        throw new CliError('autoWakeCooldownWindowRatio must be a non-negative number', EXIT_USAGE)
+      }
+      return parsed
+    }
     case 'showLocalMockData':
       if (rawValue !== 'true' && rawValue !== 'false') {
         throw new CliError('showLocalMockData must be true or false', EXIT_USAGE)

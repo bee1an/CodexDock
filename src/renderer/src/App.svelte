@@ -1,17 +1,19 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import brandMark from './assets/brand-mark.png'
-  import AccountsPanel from './components/AccountsPanel.svelte'
-  import AppButton from './components/AppButton.svelte'
-  import AppDialog from './components/AppDialog.svelte'
-  import AppInput from './components/AppInput.svelte'
-  import { reveal, toastReveal } from './components/gsap-motion'
-  import EditAccountTokensDialog from './components/EditAccountTokensDialog.svelte'
-  import RefreshAccountTokensDialog from './components/RefreshAccountTokensDialog.svelte'
-  import HeroPanel from './components/HeroPanel.svelte'
-  import TrayPanel from './components/TrayPanel.svelte'
-  import WakeDialog from './components/WakeDialog.svelte'
+  import WorkspaceShell from './shell/WorkspaceShell.svelte'
+  import AppButton from '$lib/ui/AppButton.svelte'
+  import AppDialog from '$lib/ui/AppDialog.svelte'
+  import AppInput from '$lib/ui/AppInput.svelte'
+  import { reveal, toastReveal } from '$lib/motion/gsap-motion'
+  import EditAccountTokensDialog from './dialogs/EditAccountTokensDialog.svelte'
+  import RefreshAccountTokensDialog from './dialogs/RefreshAccountTokensDialog.svelte'
+  import HeroPanel from './shell/HeroPanel.svelte'
+  import TrayPanel from './shell/TrayPanel.svelte'
+  import WakeDialog from './dialogs/WakeDialog.svelte'
+  import WakeAllDialog from './dialogs/WakeAllDialog.svelte'
   import {
+    accountEmail,
     accountLabel,
     accountScopedRecord,
     loginTone,
@@ -20,8 +22,8 @@
     preserveAccountScopedRecord,
     statusBarAccounts,
     usageErrorKind
-  } from './components/app-view'
-  import { isValidWakeScheduleTime, normalizeWakeScheduleTimes } from './components/wake-schedule'
+  } from '$lib/view/app-view'
+  import { isValidWakeScheduleTime, normalizeWakeScheduleTimes } from '$lib/view/wake-schedule'
 
   import type {
     AppLanguage,
@@ -33,6 +35,7 @@
     AccountTransferFormat,
     AccountRateLimits,
     AccountSummary,
+    AppSettings,
     AppSnapshot,
     CustomProviderDetail,
     CreateCustomProviderInput,
@@ -55,6 +58,7 @@
     defaultWakeModel,
     defaultStatsDisplaySettings,
     formatRelativeReset,
+    isFreePlan,
     normalizeStatsDisplaySettings,
     resolveBestAccount,
     shouldAutoPollUsage,
@@ -63,6 +67,10 @@
 
   type WakeDialogStatus = 'idle' | 'running' | 'success' | 'skipped' | 'error'
   type WakeDialogTab = 'session' | 'schedule'
+  type WakeAllSubmitOptions = {
+    forceWake?: boolean
+    selectedCount?: number
+  }
   type TransitionMotionState = 'closed' | 'open' | 'closing'
   type ThemeTransitionOrigin = {
     x?: number
@@ -79,6 +87,30 @@
   }
   type ApplySnapshotOptions = {
     preserveUsageState?: boolean
+  }
+
+  const wakeConcurrencyLimit = 6
+
+  async function mapWithConcurrencyLimit<T, R>(
+    items: T[],
+    limit: number,
+    task: (item: T, index: number) => Promise<R>
+  ): Promise<R[]> {
+    const results: R[] = []
+    let nextIndex = 0
+    const workerCount = Math.min(Math.max(1, limit), items.length)
+
+    await Promise.all(
+      Array.from({ length: workerCount }, async (): Promise<void> => {
+        while (nextIndex < items.length) {
+          const currentIndex = nextIndex
+          nextIndex += 1
+          results[currentIndex] = await task(items[currentIndex] as T, currentIndex)
+        }
+      })
+    )
+
+    return results
   }
 
   let snapshot: AppSnapshot = {
@@ -98,6 +130,14 @@
       language: 'zh-CN',
       theme: 'light',
       checkForUpdatesOnStartup: true,
+      autoWakeOnStartup: false,
+      autoWakeTargetMode: 'all',
+      autoWakeGroupIds: [],
+      autoWakeAccountIds: [],
+      autoWakeIncludeUngrouped: false,
+      autoWakeFirstWindowRemainingThresholdPercent: 96,
+      autoWakeResetToleranceMinutes: 5,
+      autoWakeCooldownWindowRatio: 0.1,
       codexDesktopExecutablePath: '',
       preserveChatGptAuthOnDirectProviderOpen: false,
       showLocalMockData: true,
@@ -108,18 +148,25 @@
         host: '127.0.0.1',
         port: 11456,
         apiKey: '',
+        autoStart: false,
         stickyTtlMinutes: 360,
-        requestTimeoutMs: 120_000
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [],
+        allowedProviderIds: []
       }
     },
     usageByAccountId: {},
     usageErrorByAccountId: {},
     accountHealthByAccountId: {},
     wakeSchedulesByAccountId: {},
+    wakeStateByAccountId: {},
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
     runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {},
     localGatewayStatus: {
       running: false,
       baseUrl: 'http://127.0.0.1:11456',
@@ -176,6 +223,13 @@
   let wakeRequestResult: WakeAccountRequestResult | null = null
   let wakeRequestError = ''
   let wakeRawResponseBody = ''
+  let wakeAllDialogOpen = false
+  let wakeAllPromptDraft = 'ping'
+  let wakeAllModelDraft = defaultWakeModel
+  let wakeAllRunning = false
+  let wakeAllLogs: string[] = []
+  let wakeAllAwakenedLabels: string[] = []
+  let wakeAllError = ''
   let showExportFormatDialog = false
   let renderExportFormatDialog = false
   let exportDialogMotionState: TransitionMotionState = 'closed'
@@ -572,6 +626,42 @@
     wakeDialogLogs = [...wakeDialogLogs, `[${wakeTimestamp()}] ${message}`]
   }
 
+  const pushWakeAllLog = (message: string): void => {
+    wakeAllLogs = [...wakeAllLogs, `[${wakeTimestamp()}] ${message}`]
+  }
+
+  const pushWakeAllAwakenedLabel = (label: string): void => {
+    if (wakeAllAwakenedLabels.includes(label)) {
+      return
+    }
+
+    wakeAllAwakenedLabels = [...wakeAllAwakenedLabels, label]
+  }
+
+  const wakeAllTargetAccounts = (accountIds: string[]): AccountSummary[] => {
+    return snapshot.accounts.filter((account) => accountIds.includes(account.id))
+  }
+
+  const openWakeAllDialog = (): void => {
+    if (wakeAllRunning || !snapshot.accounts.length) {
+      return
+    }
+
+    wakeAllDialogOpen = true
+    wakeAllError = ''
+    wakeAllLogs = []
+    wakeAllAwakenedLabels = []
+  }
+
+  const closeWakeAllDialog = (): void => {
+    if (wakeAllRunning) {
+      return
+    }
+
+    wakeAllDialogOpen = false
+    wakeAllError = ''
+  }
+
   const resetWakeDialogState = (): void => {
     wakeDialogStatus = 'idle'
     wakeDialogLogs = []
@@ -595,6 +685,9 @@
 
   const currentWakeScheduleDialog = (): AccountWakeSchedule | null =>
     wakeDialogAccount ? (snapshot.wakeSchedulesByAccountId[wakeDialogAccount.id] ?? null) : null
+
+  const wakeDialogAccountIsFree = (): boolean =>
+    Boolean(wakeDialogAccount && isFreePlan(usageByAccountId[wakeDialogAccount.id]))
 
   const inlineUpdateSummary = (): string => {
     switch (updateState.status) {
@@ -855,6 +948,18 @@
         localGateway: {
           ...(currentGateway ?? {}),
           port
+        }
+      })
+    )
+  }
+
+  const updateLocalGatewayAutoStart = async (autoStart: boolean): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-auto-start', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          autoStart
         }
       })
     )
@@ -1255,10 +1360,7 @@
     })
   }
 
-  const reorderAccountsInGroup = async (
-    groupId: string,
-    accountIds: string[]
-  ): Promise<void> => {
+  const reorderAccountsInGroup = async (groupId: string, accountIds: string[]): Promise<void> => {
     if (!groupId || !accountIds.length) {
       return
     }
@@ -1389,10 +1491,11 @@
     }
 
     wakeDialogAccount = account
-    wakeDialogTab = initialTab
+    wakeDialogTab =
+      initialTab === 'schedule' && isFreePlan(usageByAccountId[account.id]) ? 'session' : initialTab
     resetWakeDialogState()
     hydrateWakeScheduleDrafts(account)
-    void pushWakeLog(copyForLanguage().wakeQuotaLogReady(accountLabel(account, copyForLanguage())))
+    void pushWakeLog(copyForLanguage().wakeQuotaLogReady(accountEmail(account, copyForLanguage())))
   }
 
   const handleGlobalKeydown = (event: KeyboardEvent): void => {
@@ -1417,6 +1520,11 @@
 
   const saveWakeSchedule = async (): Promise<void> => {
     if (!wakeDialogAccount || wakeScheduleSaving || wakingAccountId) {
+      return
+    }
+
+    if (isFreePlan(usageByAccountId[wakeDialogAccount.id])) {
+      wakeScheduleError = copyForLanguage().wakeScheduleFreeUnsupported
       return
     }
 
@@ -1516,6 +1624,49 @@
     }
   }
 
+  const wakeRateLimitResetConcurrent = async (
+    account: AccountSummary,
+    input?: WakeAccountRateLimitsInput
+  ): Promise<WakeAccountRequestResult | null> => {
+    if (usageLoadingByAccountId[account.id]) {
+      return null
+    }
+
+    usageLoadingByAccountId = {
+      ...usageLoadingByAccountId,
+      [account.id]: true
+    }
+    clearUsageError(account.id)
+
+    try {
+      const result = await window.codexApp.wakeAccountRateLimits(account.id, input)
+      usageByAccountId = {
+        ...usageByAccountId,
+        [account.id]: result.rateLimits
+      }
+      snapshot = {
+        ...snapshot,
+        usageByAccountId: {
+          ...snapshot.usageByAccountId,
+          [account.id]: result.rateLimits
+        }
+      }
+      return result.requestResult
+    } catch (error) {
+      if (usageErrorKind(error instanceof Error ? error.message : undefined) === 'expired') {
+        clearUsageData(account.id)
+      }
+
+      usageErrorByAccountId = {
+        ...usageErrorByAccountId,
+        [account.id]: localizeKnownError(error, copyForLanguage().readRateLimitFailed)
+      }
+      throw error
+    } finally {
+      clearUsageLoading(account.id)
+    }
+  }
+
   const submitWakeDialog = async (): Promise<void> => {
     if (!wakeDialogAccount) {
       return
@@ -1571,6 +1722,124 @@
     }
   }
 
+  const submitAutoWakeDialog = async (): Promise<void> => {
+    if (!wakeDialogAccount || wakingAccountId) {
+      return
+    }
+
+    const account = wakeDialogAccount
+    resetWakeDialogState()
+    wakeDialogStatus = 'running'
+    wakingAccountId = account.id
+    await pushWakeLog(copyForLanguage().wakeQuotaLogRequesting)
+
+    try {
+      const result = await window.codexApp.autoWakeAccountRateLimits(account.id)
+      const entry = result.results.find((item) => item.accountId === account.id)
+      if (!entry) {
+        wakeDialogStatus = 'skipped'
+        await pushWakeLog(copyForLanguage().wakeQuotaLogSkipped)
+        return
+      }
+
+      await pushWakeLog(copyForLanguage().wakeQuotaLogAutoDecision(entry.message))
+      wakeRequestResult = entry.requestResult ?? null
+      wakeRawResponseBody = entry.requestResult?.body ?? ''
+      wakeDialogStatus = entry.status === 'success' ? 'success' : entry.status
+      if (entry.status === 'success') {
+        await pushWakeLog(copyForLanguage().wakeQuotaLogCompleted)
+      }
+      applySnapshot(await window.codexApp.getSnapshot(), { preserveUsageState: true })
+    } catch (error) {
+      wakeRequestError = localizeKnownError(error, copyForLanguage().readRateLimitFailed)
+      wakeDialogStatus = 'error'
+      await pushWakeLog(copyForLanguage().wakeQuotaLogFailed(wakeRequestError))
+    } finally {
+      if (wakingAccountId === account.id) {
+        wakingAccountId = ''
+      }
+    }
+  }
+
+  const submitWakeAllDialog = async (
+    accountIds: string[],
+    options: WakeAllSubmitOptions = {}
+  ): Promise<void> => {
+    if (wakeAllRunning || !snapshot.accounts.length) {
+      return
+    }
+
+    const forceWake = Boolean(options.forceWake)
+    const accounts = wakeAllTargetAccounts(accountIds)
+    if (!accounts.length) {
+      wakeAllError =
+        forceWake || !options.selectedCount
+          ? copyForLanguage().wakeAllNoTarget
+          : copyForLanguage().wakeAllNoSmartTarget
+      return
+    }
+
+    wakeAllRunning = true
+    wakeAllError = ''
+    wakeAllLogs = []
+    wakeAllAwakenedLabels = []
+    pushWakeAllLog(
+      forceWake
+        ? copyForLanguage().wakeAllLogStart(accounts.length)
+        : copyForLanguage().wakeAllLogSmartStart(accounts.length)
+    )
+    pushWakeAllLog(copyForLanguage().wakeQuotaLogStart(wakeAllModelDraft || defaultWakeModel))
+    pushWakeAllLog(copyForLanguage().wakeQuotaLogPrompt(wakeAllPromptDraft || 'ping'))
+
+    try {
+      const outcomes = await mapWithConcurrencyLimit(
+        accounts,
+        wakeConcurrencyLimit,
+        async (account) => {
+          const label = accountEmail(account, copyForLanguage())
+          pushWakeAllLog(copyForLanguage().wakeAllLogAccountStart(label))
+          try {
+            const requestResult = await wakeRateLimitResetConcurrent(account, {
+              prompt: wakeAllPromptDraft,
+              model: wakeAllModelDraft,
+              source: forceWake ? 'manual' : 'auto'
+            })
+
+            if (requestResult) {
+              pushWakeAllAwakenedLabel(label)
+              pushWakeAllLog(
+                copyForLanguage().wakeAllLogAccountSuccess(label, requestResult.status)
+              )
+              return 'success'
+            }
+
+            pushWakeAllLog(copyForLanguage().wakeAllLogAccountSkipped(label))
+            return 'skipped'
+          } catch (error) {
+            pushWakeAllLog(
+              copyForLanguage().wakeAllLogAccountFailed(
+                label,
+                localizeKnownError(error, copyForLanguage().readRateLimitFailed)
+              )
+            )
+            return 'failed'
+          }
+        }
+      )
+
+      const succeeded = outcomes.filter((outcome) => outcome === 'success').length
+      const skipped = outcomes.filter((outcome) => outcome === 'skipped').length
+      const failed = outcomes.filter((outcome) => outcome === 'failed').length
+
+      applySnapshot(await window.codexApp.getSnapshot(), { preserveUsageState: true })
+      pushWakeAllLog(copyForLanguage().wakeAllLogSummary(succeeded, skipped, failed))
+    } catch (error) {
+      wakeAllError = localizeKnownError(error, copyForLanguage().actionFailed)
+    } finally {
+      wakeAllRunning = false
+    }
+  }
+
   const updatePollingInterval = async (minutes: number): Promise<void> => {
     await runAction('settings:usage-polling', () =>
       window.codexApp.updateSettings({ usagePollingMinutes: minutes })
@@ -1602,6 +1871,10 @@
     await runAction('settings:update-check', () =>
       window.codexApp.updateSettings({ checkForUpdatesOnStartup: enabled })
     )
+  }
+
+  const updateAutoWakeSettings = async (settings: Partial<AppSettings>): Promise<void> => {
+    await runAction('settings:auto-wake', () => window.codexApp.updateSettings(settings))
   }
 
   const updateShowLocalMockData = async (enabled: boolean): Promise<void> => {
@@ -1824,7 +2097,7 @@
             class="flex h-0 min-h-0 flex-1 flex-col overflow-hidden"
             use:reveal={{ delay: 0.05 }}
           >
-            <AccountsPanel
+            <WorkspaceShell
               {panelClass}
               copy={copyForLanguage()}
               workspaceVersion={appMeta.version}
@@ -1863,6 +2136,7 @@
               tokenCostErrorByInstanceId={snapshot.tokenCostErrorByInstanceId}
               runningTokenCostSummary={snapshot.runningTokenCostSummary}
               runningTokenCostInstanceIds={snapshot.runningTokenCostInstanceIds}
+              gatewayUsageByAccountId={snapshot.gatewayUsageByAccountId ?? {}}
               statsDisplay={normalizeStatsDisplaySettings(snapshot.settings.statsDisplay)}
               wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
               loginActionBusy={loginActionBusy()}
@@ -1901,6 +2175,8 @@
                 []}
               {updateLocalGatewayAllowedProviders}
               {updateLocalGatewayPort}
+              localGatewayAutoStart={snapshot.settings.localGateway?.autoStart === true}
+              {updateLocalGatewayAutoStart}
               localGatewayVisibleColumns={snapshot.settings.localGateway?.visibleColumns}
               {updateLocalGatewayVisibleColumns}
               {localGatewayPortOccupant}
@@ -1921,6 +2197,8 @@
               tagVisibility={snapshot.settings.tagVisibility ?? {}}
               {updateTagVisibility}
               {openWakeDialog}
+              {openWakeAllDialog}
+              wakeAllBusy={wakeAllRunning}
               {openEditTokensDialog}
               {openRefreshTokensDialog}
               getAccountTokens={(accountId) => window.codexApp.getAccountTokens(accountId)}
@@ -1963,6 +2241,7 @@
               {updateTheme}
               {updatePollingInterval}
               {updateCheckForUpdatesOnStartup}
+              {updateAutoWakeSettings}
               {checkForUpdates}
               {downloadUpdate}
               {installUpdate}
@@ -2213,7 +2492,7 @@
   <WakeDialog
     copy={copyForLanguage()}
     language={snapshot.settings.language}
-    accountLabelText={accountLabel(wakeDialogAccount, copyForLanguage())}
+    accountLabelText={accountEmail(wakeDialogAccount, copyForLanguage())}
     bind:activeTab={wakeDialogTab}
     bind:sessionPrompt={wakePromptDraft}
     bind:sessionModel={wakeModelDraft}
@@ -2224,6 +2503,8 @@
     rawResponseBody={wakeRawResponseBody}
     sessionBusy={Boolean(wakingAccountId)}
     schedule={currentWakeScheduleDialog()}
+    scheduleDisabled={wakeDialogAccountIsFree()}
+    scheduleDisabledReason={copyForLanguage().wakeScheduleFreeUnsupported}
     bind:scheduleEnabled={wakeScheduleEnabledDraft}
     bind:scheduleTimes={wakeScheduleTimesDraft}
     bind:schedulePrompt={wakeSchedulePromptDraft}
@@ -2232,8 +2513,29 @@
     scheduleSaving={wakeScheduleSaving}
     onClose={closeWakeDialog}
     onSubmitSession={submitWakeDialog}
+    onSubmitAuto={submitAutoWakeDialog}
     onSaveSchedule={saveWakeSchedule}
     onDeleteSchedule={deleteWakeSchedule}
+  />
+{/if}
+
+{#if wakeAllDialogOpen}
+  <WakeAllDialog
+    copy={copyForLanguage()}
+    accounts={snapshot.accounts}
+    groups={snapshot.groups}
+    settings={snapshot.settings}
+    rateLimitsByAccountId={usageByAccountId}
+    wakeStateByAccountId={snapshot.wakeStateByAccountId ?? {}}
+    accountHealthByAccountId={snapshot.accountHealthByAccountId}
+    bind:prompt={wakeAllPromptDraft}
+    bind:model={wakeAllModelDraft}
+    logs={wakeAllLogs}
+    awakenedLabels={wakeAllAwakenedLabels}
+    error={wakeAllError}
+    running={wakeAllRunning}
+    onClose={closeWakeAllDialog}
+    onSubmitAll={submitWakeAllDialog}
   />
 {/if}
 

@@ -742,6 +742,160 @@ async function execute(
       printUsage(rateLimits, silent)
       return { code: EXIT_OK, payload: toCliResult(rateLimits) }
     }
+    case 'wake': {
+      const wakeNowUsage =
+        'Usage: cdock wake now [account-id|--all] [--model <model>] [--prompt <text>]'
+      switch (subcommand) {
+        case 'now': {
+          let accountId: string | undefined
+          let model: string | undefined
+          let prompt: string | undefined
+          let all = false
+          for (let index = 0; index < rest.length; index += 1) {
+            const arg = rest[index]
+            const value = rest[index + 1]
+            if (arg === '--all') {
+              all = true
+              continue
+            }
+            if (arg === '--model') {
+              if (!value) throw new CliError('Missing value for --model', EXIT_USAGE)
+              model = value
+              index += 1
+              continue
+            }
+            if (arg === '--prompt') {
+              if (!value) throw new CliError('Missing value for --prompt', EXIT_USAGE)
+              prompt = value
+              index += 1
+              continue
+            }
+            if (arg?.startsWith('--')) {
+              throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+            }
+            if (accountId) {
+              throw new CliError(wakeNowUsage, EXIT_USAGE)
+            }
+            accountId = arg
+          }
+
+          if (all) {
+            if (accountId) {
+              throw new CliError(wakeNowUsage, EXIT_USAGE)
+            }
+
+            const snapshot = await runtime.services.accounts.list()
+            const results: Array<{
+              accountId: string
+              status: 'success' | 'skipped' | 'error'
+              message: string
+              requestResult?: unknown
+              rateLimits?: unknown
+            }> = []
+            for (const account of snapshot.accounts) {
+              try {
+                const result = await runtime.services.usage.wake(account.id, {
+                  model,
+                  prompt,
+                  source: 'manual'
+                })
+                results.push({
+                  accountId: account.id,
+                  status: result.requestResult ? 'success' : 'skipped',
+                  message: result.requestResult
+                    ? `Wake completed: ${result.requestResult.status}`
+                    : 'Wake skipped',
+                  requestResult: result.requestResult,
+                  rateLimits: result.rateLimits
+                })
+              } catch (error) {
+                results.push({
+                  accountId: account.id,
+                  status: 'error',
+                  message: error instanceof Error ? error.message : String(error)
+                })
+              }
+            }
+            const payload = {
+              checkedAt: new Date().toISOString(),
+              results
+            }
+            printIfNeeded(
+              `Wake all completed: ${results.filter((item) => item.status === 'success').length} succeeded, ${results.filter((item) => item.status === 'skipped').length} skipped, ${results.filter((item) => item.status === 'error').length} failed`,
+              silent
+            )
+            return { code: EXIT_OK, payload: toCliResult(payload) }
+          }
+
+          const result = await runtime.services.usage.wake(accountId, {
+            model,
+            prompt,
+            source: 'manual'
+          })
+          printIfNeeded(
+            result.requestResult
+              ? `Wake completed: ${result.requestResult.status}`
+              : 'Wake skipped: quota unavailable or another wake is running',
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'auto': {
+          let accountId: string | undefined
+          let all = false
+          for (let index = 0; index < rest.length; index += 1) {
+            const arg = rest[index]
+            if (arg === '--all') {
+              all = true
+              continue
+            }
+            if (arg?.startsWith('--')) {
+              throw new CliError(`Unknown option: ${arg}`, EXIT_USAGE)
+            }
+            if (accountId) {
+              throw new CliError('Usage: cdock wake auto [account-id|--all]', EXIT_USAGE)
+            }
+            accountId = arg
+          }
+          if (all) {
+            accountId = undefined
+          }
+          const result = await runtime.services.usage.auto(accountId, 'auto')
+          printIfNeeded(
+            `Auto wake checked ${result.results.length} account(s), woke ${
+              result.results.filter((item) => item.status === 'success').length
+            }`,
+            silent
+          )
+          return { code: EXIT_OK, payload: toCliResult(result) }
+        }
+        case 'state': {
+          if (rest.length > 1) {
+            throw new CliError('Usage: cdock wake state [account-id]', EXIT_USAGE)
+          }
+          const snapshot = await runtime.services.accounts.list()
+          const accountIds = rest[0] ? [rest[0]] : snapshot.accounts.map((account) => account.id)
+          const states = Object.fromEntries(
+            accountIds.map((accountId) => [
+              accountId,
+              snapshot.wakeStateByAccountId?.[accountId] ?? null
+            ])
+          )
+          if (!silent) {
+            for (const accountId of accountIds) {
+              const account = snapshot.accounts.find((item) => item.id === accountId)
+              const state = snapshot.wakeStateByAccountId?.[accountId]
+              console.log(
+                `${accountId}  ${accountLabel(account)}  lastWakeAt=${state?.lastWakeAt ?? '-'} status=${state?.lastStatus ?? '-'} source=${state?.lastWakeSource ?? '-'}`
+              )
+            }
+          }
+          return { code: EXIT_OK, payload: toCliResult(states) }
+        }
+        default:
+          throw new CliError('Unknown wake command', EXIT_USAGE)
+      }
+    }
     case 'cost': {
       if (subcommand !== 'read') {
         throw new CliError('Unknown cost command', EXIT_USAGE)

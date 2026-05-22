@@ -9,6 +9,7 @@ import type {
   AppSettings,
   AppSnapshot,
   AppUpdateState,
+  AutoWakeRateLimitsResult,
   CopyCodexSessionToProviderInput,
   CopyCodexSessionToProviderResult,
   CopyCodexSkillInput,
@@ -52,6 +53,8 @@ import type {
   PortOccupant,
   TokenCostDetail,
   TokenCostReadOptions,
+  GatewayUsageDetail,
+  GatewayUsageReadOptions,
   LocalGatewayStatus,
   UpdateAccountHealthInput,
   UpdateAccountWakeScheduleInput,
@@ -116,7 +119,9 @@ interface CodexDesktopApi {
     accountId: string,
     input?: WakeAccountRateLimitsInput
   ) => Promise<WakeAccountRateLimitsResult>
+  autoWakeAccountRateLimits: (accountId?: string) => Promise<AutoWakeRateLimitsResult>
   readTokenCost: (input?: TokenCostReadOptions) => Promise<TokenCostDetail>
+  readGatewayUsage: (input?: GatewayUsageReadOptions) => Promise<GatewayUsageDetail>
   listCodexSessionProjects: (
     input?: ListCodexSessionProjectsInput
   ) => Promise<CodexSessionProjectsResult>

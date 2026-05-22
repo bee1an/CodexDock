@@ -47,6 +47,7 @@ import {
   type ProbeProviderModelsInput,
   type ReadCodexSessionDetailInput,
   type TokenCostReadOptions,
+  type GatewayUsageReadOptions,
   type TrashCodexSessionInput,
   type UpdateAccountHealthInput,
   type UpdateAccountWakeScheduleInput,
@@ -83,7 +84,7 @@ const defaultWorkspacePath = process.cwd()
 const isLocalEnvironment = !app.isPackaged
 const productionAppConfigPath = join(homedir(), '.config', 'codexdock')
 const localMockAppConfigPath = join(homedir(), '.config', 'codexdock-local')
-let useLocalMockDataSource = isLocalEnvironment && shouldUseLocalMockDataSource()
+let showLocalMockData = isLocalEnvironment && shouldUseLocalMockDataSource()
 
 function shouldUseLocalMockDataSource(): boolean {
   if (!isLocalEnvironment) {
@@ -100,15 +101,11 @@ function shouldUseLocalMockDataSource(): boolean {
 }
 
 function configuredAppConfigPath(): string {
-  return isLocalEnvironment && useLocalMockDataSource
-    ? localMockAppConfigPath
-    : productionAppConfigPath
+  return productionAppConfigPath
 }
 
 function configuredCodexHomePath(): string {
-  return isLocalEnvironment && useLocalMockDataSource
-    ? join(localMockAppConfigPath, '.codex')
-    : join(homedir(), '.codex')
+  return join(homedir(), '.codex')
 }
 
 async function persistLocalMockDataSourcePreference(enabled: boolean): Promise<void> {
@@ -458,6 +455,7 @@ function createTray(): void {
               host: '127.0.0.1',
               port: 11456,
               apiKey: '',
+              autoStart: false,
               stickyTtlMinutes: 360,
               requestTimeoutMs: 120_000,
               modelMappings: [],
@@ -474,6 +472,7 @@ function createTray(): void {
           tokenCostErrorByInstanceId: {},
           runningTokenCostSummary: null,
           runningTokenCostInstanceIds: [],
+          gatewayUsageByAccountId: {},
           localGatewayStatus: {
             running: false,
             baseUrl: 'http://127.0.0.1:11456',
@@ -515,7 +514,7 @@ app.whenReady().then(async () => {
   }
 
   const cliArgs = extractCliArgs(process.argv)
-  const shouldBootstrapLocalMockData = isLocalEnvironment && !cliArgs && useLocalMockDataSource
+  const shouldBootstrapLocalMockData = false
   const loginEventListeners = new Set<(event: LoginEvent) => void>()
   const platform = createElectronCodexPlatformAdapter()
 
@@ -552,14 +551,8 @@ app.whenReady().then(async () => {
     }
   }
 
-  const stopRunningGatewayBeforeRuntimeSwap = async (): Promise<void> => {
-    if ((await codexServices.gateway.status()).running) {
-      await codexServices.gateway.stop()
-    }
-  }
-
   codexServices = createRuntimeServices()
-  await codexServices.settings.update({ showLocalMockData: useLocalMockDataSource })
+  await codexServices.settings.update({ showLocalMockData })
 
   if (shouldBootstrapLocalMockData) {
     await bootstrapLocalMockData()
@@ -582,6 +575,14 @@ app.whenReady().then(async () => {
   }
 
   const initialSettings = await codexServices.settings.get()
+  if (initialSettings.localGateway?.autoStart === true) {
+    try {
+      await codexServices.gateway.start()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to auto-start local gateway: ${detail}`)
+    }
+  }
   appUpdaterService = createAppUpdaterService({
     currentVersion: app.getVersion(),
     initialSettings,
@@ -654,15 +655,10 @@ app.whenReady().then(async () => {
     if (
       isLocalEnvironment &&
       typeof nextSettings.showLocalMockData === 'boolean' &&
-      nextSettings.showLocalMockData !== useLocalMockDataSource
+      nextSettings.showLocalMockData !== showLocalMockData
     ) {
-      await stopRunningGatewayBeforeRuntimeSwap()
-      useLocalMockDataSource = nextSettings.showLocalMockData
-      await persistLocalMockDataSourcePreference(useLocalMockDataSource)
-      codexServices = createRuntimeServices()
-      if (useLocalMockDataSource) {
-        await bootstrapLocalMockData()
-      }
+      showLocalMockData = nextSettings.showLocalMockData
+      await persistLocalMockDataSourcePreference(showLocalMockData)
     }
 
     const snapshot = await codexServices.settings.update(nextSettings)
@@ -944,6 +940,13 @@ app.whenReady().then(async () => {
       }
     }
   )
+  ipcMain.handle('codex:auto-wake-account-rate-limits', async (_, accountId?: string) => {
+    try {
+      return await codexServices.usage.auto(accountId, 'auto')
+    } finally {
+      await refreshTrayTitle()
+    }
+  })
   ipcMain.handle('codex:read-token-cost', async (_, input?: TokenCostReadOptions) => {
     try {
       return await codexServices.cost.read(input)
@@ -953,6 +956,9 @@ app.whenReady().then(async () => {
       }, 0)
     }
   })
+  ipcMain.handle('codex:read-gateway-usage', (_, input?: GatewayUsageReadOptions) =>
+    codexServices.gatewayUsage.read(input)
+  )
   ipcMain.handle('codex:list-sessions', (_, input?: ListCodexSessionsInput) =>
     codexServices.session.list(input)
   )
@@ -1129,6 +1135,19 @@ app.whenReady().then(async () => {
   authRefreshController.start()
   usagePollingController.start()
   wakeSchedulerController.start()
+  void codexServices.settings.get().then(async (settings) => {
+    if (!settings.autoWakeOnStartup) {
+      return
+    }
+
+    try {
+      await codexServices.usage.auto(undefined, 'startup')
+      await refreshTrayTitle()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Unknown error'
+      console.warn(`Failed to run startup auto wake: ${detail}`)
+    }
+  })
 
   app.on('activate', function () {
     // On macOS it's common to re-create a window in the app when the

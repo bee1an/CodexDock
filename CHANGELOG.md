@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.11 - 2026-05-22
+
+This release adds gateway-recorded usage, smart wake automation, and broader account and gateway controls across the desktop app and CLI.
+
+- Added gateway-recorded usage storage with 90-day rolling retention, serialized atomic writes, per-account and per-instance attribution, model breakdowns, and `/inst/<instanceId>/v1` routing for instance-aware gateway requests.
+- Added gateway usage APIs and desktop charts so the local gateway view can summarize tokens and cost by account or group, drill into group members, sort by today/90-day usage or cost, and use gateway-recorded data instead of instance-binding estimates.
+- Added smart wake automation with startup auto-wake, configurable target groups/accounts/ungrouped accounts, first-window threshold, reset-tolerance, cooldown settings, and persisted wake state for each account.
+- Added one-click multi-account wake flows, including the Wake All dialog, smart/forced wake selection, live logs, awakened-account summaries, and per-account smart wake actions.
+- Added `cdock wake now`, `cdock wake auto`, and `cdock wake state` CLI commands, plus CLI parsing/output for the new auto-wake settings.
+- Improved wake and quota behavior with first-window/second-window wording, free-plan schedule handling, scheduled wake source tracking, smarter wake eligibility checks, and account health blocking for temporary rate-limit states.
+- Improved local gateway reliability with startup auto-start, gateway usage recording hooks for streamed and non-streamed responses, 429 quota classification, temporary `rate_limited` account health with retry times, sticky-target eviction, and safer provider fallback/model-list behavior.
+- Improved account, settings, and gateway desktop surfaces with account search, quota-based account sorting, rate-limit health badges, auto-wake target management, gateway auto-start controls, persistent gateway log columns, and refreshed bilingual copy.
+- Updated release and maintenance plumbing by migrating gateway usage/log/config-guard data, filtering gateway usage with local mock visibility, reorganizing renderer files into `dialogs`, `lib`, `shell`, and `views`, adding `$lib` aliases, and expanding tests for the new gateway, wake, CLI, and UI flows.
+
 ## 0.4.10 - 2026-05-19
 
 This release adds per-account usage charts, centralizes config.toml handling, and introduces per-group account ordering.

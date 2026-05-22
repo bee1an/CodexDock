@@ -81,7 +81,8 @@ function createSnapshot(): AppSnapshot {
     tokenCostByInstanceId: {},
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
-    runningTokenCostInstanceIds: []
+    runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {}
   }
 }
 

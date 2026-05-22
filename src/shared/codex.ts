@@ -21,6 +21,7 @@ export interface LocalGatewaySettings {
   host: string
   port: number
   apiKey?: string | ProtectedPayload
+  autoStart: boolean
   stickyTtlMinutes: number
   requestTimeoutMs: number
   modelMappings: LocalGatewayModelMapping[]
@@ -109,6 +110,14 @@ export interface AppSettings {
   language: AppLanguage
   theme: AppTheme
   checkForUpdatesOnStartup: boolean
+  autoWakeOnStartup?: boolean
+  autoWakeTargetMode?: AutoWakeTargetMode
+  autoWakeGroupIds?: string[]
+  autoWakeAccountIds?: string[]
+  autoWakeIncludeUngrouped?: boolean
+  autoWakeFirstWindowRemainingThresholdPercent?: number
+  autoWakeResetToleranceMinutes?: number
+  autoWakeCooldownWindowRatio?: number
   codexDesktopExecutablePath: string
   preserveChatGptAuthOnDirectProviderOpen?: boolean
   showLocalMockData?: boolean
@@ -118,6 +127,8 @@ export interface AppSettings {
   localGateway?: LocalGatewaySettings
   tagVisibility?: TagVisibilitySettings
 }
+
+export type AutoWakeTargetMode = 'all' | 'selected'
 
 export interface CustomProviderSummary {
   id: string
@@ -274,9 +285,11 @@ export interface AccountRateLimits {
 export interface WakeAccountRateLimitsInput {
   model?: string
   prompt?: string
+  source?: WakeAccountSource
 }
 
 export type WakeScheduleRunStatus = 'idle' | 'success' | 'error' | 'skipped'
+export type WakeAccountSource = 'manual' | 'schedule' | 'auto' | 'startup'
 
 export interface AccountWakeSchedule {
   enabled: boolean
@@ -296,6 +309,13 @@ export interface UpdateAccountWakeScheduleInput {
   prompt?: string
 }
 
+export interface AccountWakeState {
+  lastWakeAt?: string
+  lastWakeSource?: WakeAccountSource
+  lastStatus?: WakeScheduleRunStatus
+  lastMessage?: string
+}
+
 export interface WakeAccountRequestResult {
   status: number
   accepted: boolean
@@ -309,7 +329,30 @@ export interface WakeAccountRateLimitsResult {
   requestResult: WakeAccountRequestResult | null
 }
 
-export type AccountHealthStatus = 'normal' | 'auth_error'
+export interface AutoWakeDecision {
+  canWake: boolean
+  reason: string
+  firstWindowRemainingPercent?: number
+  resetRemainingMs?: number
+  resetToleranceMs?: number
+  cooldownMs?: number
+}
+
+export interface AutoWakeAccountResult {
+  accountId: string
+  status: WakeScheduleRunStatus
+  message: string
+  decision: AutoWakeDecision
+  requestResult?: WakeAccountRequestResult | null
+  rateLimits?: AccountRateLimits
+}
+
+export interface AutoWakeRateLimitsResult {
+  checkedAt: string
+  results: AutoWakeAccountResult[]
+}
+
+export type AccountHealthStatus = 'normal' | 'auth_error' | 'rate_limited'
 
 export type AccountHealthSource = 'gateway' | 'refresh' | 'usage' | 'manual'
 
@@ -319,6 +362,7 @@ export interface AccountHealth {
   markedAt: string
   source: AccountHealthSource
   httpStatus?: number
+  retryAt?: string
 }
 
 export interface UpdateAccountHealthInput {
@@ -557,6 +601,61 @@ export interface TokenCostReadOptions {
   refresh?: boolean
 }
 
+export const GATEWAY_USAGE_RETENTION_DAYS = 90
+export const GATEWAY_USAGE_UNKNOWN_INSTANCE_ID = '__unknown__'
+export const GATEWAY_USAGE_ALL_ACCOUNT_ID = '__all__'
+
+export interface GatewayUsageSummary {
+  todayTokens: number
+  todayCostUSD: number | null
+  last30DaysTokens: number
+  last30DaysCostUSD: number | null
+  updatedAt: string
+}
+
+export interface GatewayUsageInstanceBreakdown {
+  instanceId: string
+  totalTokens: number
+  costUSD: number | null
+}
+
+export interface GatewayUsageDailyEntry {
+  date: string
+  inputTokens: number
+  outputTokens: number
+  totalTokens: number
+  costUSD: number | null
+  modelsUsed: string[]
+  modelBreakdowns: TokenCostModelBreakdown[]
+  instanceBreakdowns: GatewayUsageInstanceBreakdown[]
+}
+
+export interface GatewayUsageDetail {
+  accountId: string
+  source: 'gateway'
+  retentionDays: typeof GATEWAY_USAGE_RETENTION_DAYS
+  summary: GatewayUsageSummary
+  daily: GatewayUsageDailyEntry[]
+  instanceBreakdowns: GatewayUsageInstanceBreakdown[]
+}
+
+export interface GatewayUsageReadOptions {
+  accountId?: string
+  instanceId?: string
+  sinceKey?: string
+  untilKey?: string
+}
+
+export interface GatewayUsageRecordInput {
+  accountId: string
+  instanceId: string
+  model: string
+  inputTokens: number
+  cachedTokens: number
+  outputTokens: number
+  timestamp?: string
+}
+
 export interface CodexSkillSummary {
   instanceId: string
   instanceName: string
@@ -612,10 +711,13 @@ export interface AppSnapshot {
   usageErrorByAccountId: Record<string, string>
   accountHealthByAccountId: Record<string, AccountHealth>
   wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
+  wakeStateByAccountId?: Record<string, AccountWakeState>
   tokenCostByInstanceId: Record<string, TokenCostSummary>
   tokenCostErrorByInstanceId: Record<string, string>
   runningTokenCostSummary: TokenCostSummary | null
   runningTokenCostInstanceIds: string[]
+  gatewayUsageByAccountId: Record<string, GatewayUsageSummary>
+  gatewayUsageError?: string
   localGatewayStatus?: LocalGatewayStatus
 }
 
@@ -699,6 +801,127 @@ export interface ProviderCheckReport {
 
 export function remainingPercent(value?: number | null): number {
   return Math.max(0, Math.min(100, 100 - (value ?? 0)))
+}
+
+function normalizeTimestampMs(value?: number | null): number | null {
+  if (!value) {
+    return null
+  }
+
+  return value < 1_000_000_000_000 ? value * 1000 : value
+}
+
+export function autoWakeFirstWindowRemainingThresholdPercent(settings?: AppSettings): number {
+  const value = settings?.autoWakeFirstWindowRemainingThresholdPercent
+  return Number.isFinite(value) && value != null ? Math.max(0, Math.min(100, value)) : 96
+}
+
+export function autoWakeResetToleranceMs(settings?: AppSettings): number {
+  const value = settings?.autoWakeResetToleranceMinutes
+  return Number.isFinite(value) && value != null ? Math.max(0, value) * 60_000 : 5 * 60_000
+}
+
+export function autoWakeCooldownWindowRatio(settings?: AppSettings): number {
+  const value = settings?.autoWakeCooldownWindowRatio
+  return Number.isFinite(value) && value != null ? Math.max(0, value) : 0.1
+}
+
+export function autoWakeWindowDurationMs(rateLimits?: AccountRateLimits): number | null {
+  const minutes = rateLimits?.primary?.windowDurationMins
+  if (!Number.isFinite(minutes) || minutes == null || minutes <= 0) {
+    return null
+  }
+
+  return minutes * 60_000
+}
+
+export function autoWakeCooldownMs(
+  rateLimits?: AccountRateLimits,
+  settings?: AppSettings
+): number | null {
+  const windowDurationMs = autoWakeWindowDurationMs(rateLimits)
+  if (windowDurationMs == null) {
+    return null
+  }
+
+  return windowDurationMs * autoWakeCooldownWindowRatio(settings)
+}
+
+export function canAutoWakeAccount(
+  rateLimits: AccountRateLimits | undefined,
+  wakeState: AccountWakeState | undefined,
+  settings: AppSettings | undefined,
+  now = Date.now()
+): AutoWakeDecision {
+  const primary = rateLimits?.primary
+  if (!rateLimits || !primary) {
+    return { canWake: false, reason: 'missing_first_window' }
+  }
+
+  const windowDurationMs = autoWakeWindowDurationMs(rateLimits)
+  const resetAtMs = normalizeTimestampMs(primary.resetsAt)
+  if (windowDurationMs == null || resetAtMs == null) {
+    return { canWake: false, reason: 'missing_first_window_reset' }
+  }
+
+  const firstWindowRemainingPercent = remainingPercent(primary.usedPercent)
+  const remainingThreshold = autoWakeFirstWindowRemainingThresholdPercent(settings)
+  if (firstWindowRemainingPercent <= remainingThreshold) {
+    return {
+      canWake: false,
+      reason: 'first_window_not_initial',
+      firstWindowRemainingPercent
+    }
+  }
+
+  const resetRemainingMs = resetAtMs - now
+  const resetToleranceMs = autoWakeResetToleranceMs(settings)
+  const cooldownMs = autoWakeCooldownMs(rateLimits, settings) ?? 30 * 60_000
+  const lastWakeAt = wakeState?.lastWakeAt ? Date.parse(wakeState.lastWakeAt) : Number.NaN
+  if (Number.isFinite(lastWakeAt) && now - lastWakeAt <= cooldownMs) {
+    return {
+      canWake: false,
+      reason: 'wake_cooldown',
+      firstWindowRemainingPercent,
+      resetRemainingMs,
+      resetToleranceMs,
+      cooldownMs
+    }
+  }
+
+  if (resetRemainingMs <= 0 || Math.abs(windowDurationMs - resetRemainingMs) >= resetToleranceMs) {
+    return {
+      canWake: false,
+      reason: 'first_window_reset_not_initial',
+      firstWindowRemainingPercent,
+      resetRemainingMs,
+      resetToleranceMs
+    }
+  }
+
+  if (!isFreePlan(rateLimits)) {
+    const secondaryRemaining = rateLimits.secondary
+      ? remainingPercent(rateLimits.secondary.usedPercent)
+      : 0
+    if (secondaryRemaining <= 0) {
+      return {
+        canWake: false,
+        reason: 'second_window_depleted',
+        firstWindowRemainingPercent,
+        resetRemainingMs,
+        resetToleranceMs
+      }
+    }
+  }
+
+  return {
+    canWake: true,
+    reason: 'eligible',
+    firstWindowRemainingPercent,
+    resetRemainingMs,
+    resetToleranceMs,
+    cooldownMs
+  }
 }
 
 export function usagePollingIntervalMs(usagePollingMinutes: number): number {
@@ -790,6 +1013,7 @@ export function defaultLocalGatewaySettings(): LocalGatewaySettings {
   return {
     host: '127.0.0.1',
     port: 11456,
+    autoStart: false,
     stickyTtlMinutes: 360,
     requestTimeoutMs: 120_000,
     modelMappings: [],
@@ -822,7 +1046,7 @@ function normalizeModelMappings(value: unknown): LocalGatewayModelMapping[] {
   return result
 }
 
-function normalizeAllowedGroupIds(value: unknown): string[] {
+export function normalizeSettingsIdList(value: unknown): string[] {
   if (!Array.isArray(value)) {
     return []
   }
@@ -836,38 +1060,53 @@ function normalizeAllowedGroupIds(value: unknown): string[] {
     result.push(trimmed)
   }
   return result
+}
+
+export function normalizeAutoWakeTargetMode(value: unknown): AutoWakeTargetMode {
+  return value === 'selected' ? 'selected' : 'all'
+}
+
+export function autoWakeTargetAccountIds(
+  accounts: Array<Pick<AccountSummary, 'id' | 'groupIds'>>,
+  groups: Array<Pick<AccountGroup, 'id'>>,
+  settings?: AppSettings
+): string[] {
+  if (normalizeAutoWakeTargetMode(settings?.autoWakeTargetMode) !== 'selected') {
+    return accounts.map((account) => account.id)
+  }
+
+  const groupIds = normalizeSettingsIdList(settings?.autoWakeGroupIds)
+  const accountIds = normalizeSettingsIdList(settings?.autoWakeAccountIds)
+  const validGroupIds = groups.map((group) => group.id)
+  const includeUngrouped = settings?.autoWakeIncludeUngrouped === true
+
+  return accounts
+    .filter((account) => {
+      if (accountIds.includes(account.id)) {
+        return true
+      }
+
+      if (account.groupIds.some((groupId) => groupIds.includes(groupId))) {
+        return true
+      }
+
+      return (
+        includeUngrouped && !account.groupIds.some((groupId) => validGroupIds.includes(groupId))
+      )
+    })
+    .map((account) => account.id)
+}
+
+function normalizeAllowedGroupIds(value: unknown): string[] {
+  return normalizeSettingsIdList(value)
 }
 
 function normalizeAllowedAccountIds(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue
-    const trimmed = entry.trim()
-    if (!trimmed || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    result.push(trimmed)
-  }
-  return result
+  return normalizeSettingsIdList(value)
 }
 
 function normalizeAllowedProviderIds(value: unknown): string[] {
-  if (!Array.isArray(value)) {
-    return []
-  }
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const entry of value) {
-    if (typeof entry !== 'string') continue
-    const trimmed = entry.trim()
-    if (!trimmed || seen.has(trimmed)) continue
-    seen.add(trimmed)
-    result.push(trimmed)
-  }
-  return result
+  return normalizeSettingsIdList(value)
 }
 
 export function normalizeLocalGatewaySettings(
@@ -900,6 +1139,7 @@ export function normalizeLocalGatewaySettings(
           : defaults.port,
     apiKey:
       typeof settings?.apiKey === 'string' ? settings.apiKey.trim() || undefined : settings?.apiKey,
+    autoStart: settings?.autoStart === true,
     stickyTtlMinutes:
       Number.isFinite(stickyTtlMinutes) && stickyTtlMinutes > 0
         ? Math.floor(stickyTtlMinutes)
@@ -991,6 +1231,14 @@ export function filterLocalMockAppSnapshot(snapshot: AppSnapshot): AppSnapshot {
     wakeSchedulesByAccountId: filterSnapshotRecord(
       snapshot.wakeSchedulesByAccountId,
       visibleAccountIds
+    ),
+    wakeStateByAccountId: filterSnapshotRecord(
+      snapshot.wakeStateByAccountId ?? {},
+      visibleAccountIds
+    ),
+    gatewayUsageByAccountId: filterSnapshotRecord(
+      snapshot.gatewayUsageByAccountId ?? {},
+      visibleAccountIds
     )
   }
 }
@@ -1045,7 +1293,7 @@ function accountHasUsage(rateLimits?: AccountRateLimits): boolean {
   return Boolean(rateLimits?.primary || rateLimits?.secondary)
 }
 
-function isFreePlan(rateLimits?: AccountRateLimits): boolean {
+export function isFreePlan(rateLimits?: AccountRateLimits): boolean {
   return (rateLimits?.planType ?? '').toLowerCase() === 'free'
 }
 
@@ -1054,15 +1302,26 @@ export function hasFullSessionQuota(rateLimits?: AccountRateLimits): boolean {
 }
 
 export function supportsWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
-  return Boolean(rateLimits && !isFreePlan(rateLimits))
+  return Boolean(rateLimits?.primary)
 }
 
 export function hasWakeWeeklyQuotaRemaining(rateLimits?: AccountRateLimits): boolean {
-  return !rateLimits?.secondary || remainingPercent(rateLimits.secondary.usedPercent) > 0
+  if (isFreePlan(rateLimits)) {
+    return true
+  }
+
+  return Boolean(rateLimits?.secondary && remainingPercent(rateLimits.secondary.usedPercent) > 0)
 }
 
 export function canRunWakeRequest(rateLimits?: AccountRateLimits): boolean {
-  return supportsWakeSessionQuota(rateLimits) && hasWakeWeeklyQuotaRemaining(rateLimits)
+  const primaryRemaining = rateLimits?.primary
+    ? remainingPercent(rateLimits.primary.usedPercent)
+    : 0
+  return (
+    supportsWakeSessionQuota(rateLimits) &&
+    primaryRemaining > 0 &&
+    hasWakeWeeklyQuotaRemaining(rateLimits)
+  )
 }
 
 export function canWakeSessionQuota(rateLimits?: AccountRateLimits): boolean {
@@ -1213,11 +1472,19 @@ export function resolveBestAccount(
 }
 
 export function accountHealthStatus(health?: AccountHealth | null): AccountHealthStatus {
+  if (
+    health?.status === 'rate_limited' &&
+    health.retryAt &&
+    Date.parse(health.retryAt) <= Date.now()
+  ) {
+    return 'normal'
+  }
   return health?.status ?? 'normal'
 }
 
 export function isAccountHealthBlocking(health?: AccountHealth | null): boolean {
-  return accountHealthStatus(health) === 'auth_error'
+  const status = accountHealthStatus(health)
+  return status === 'auth_error' || status === 'rate_limited'
 }
 
 export function statusBarAccounts(

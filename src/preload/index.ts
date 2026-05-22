@@ -9,6 +9,7 @@ import type {
   AppSettings,
   AppSnapshot,
   AppUpdateState,
+  AutoWakeRateLimitsResult,
   CopyCodexSessionToProviderInput,
   CopyCodexSessionToProviderResult,
   CopyCodexSkillInput,
@@ -54,6 +55,8 @@ import type {
   PortOccupant,
   TokenCostDetail,
   TokenCostReadOptions,
+  GatewayUsageDetail,
+  GatewayUsageReadOptions,
   UpdateAccountHealthInput,
   UpdateAccountWakeScheduleInput,
   UpdateAccountTokensInput,
@@ -131,8 +134,12 @@ const codexApp = {
     ipcRenderer.invoke('codex:read-account-rate-limits', accountId),
   wakeAccountRateLimits: (accountId: string, input?: WakeAccountRateLimitsInput) =>
     ipcRenderer.invoke('codex:wake-account-rate-limits', accountId, input),
+  autoWakeAccountRateLimits: (accountId?: string): Promise<AutoWakeRateLimitsResult> =>
+    ipcRenderer.invoke('codex:auto-wake-account-rate-limits', accountId),
   readTokenCost: (input?: TokenCostReadOptions): Promise<TokenCostDetail> =>
     ipcRenderer.invoke('codex:read-token-cost', input),
+  readGatewayUsage: (input?: GatewayUsageReadOptions): Promise<GatewayUsageDetail> =>
+    ipcRenderer.invoke('codex:read-gateway-usage', input),
   listCodexSessionProjects: (
     input?: ListCodexSessionProjectsInput
   ): Promise<CodexSessionProjectsResult> =>

@@ -9,6 +9,7 @@ import type {
   AccountGroup,
   AccountTokensDetail,
   AccountWakeSchedule,
+  AccountWakeState,
   AppSettings,
   AppSnapshot,
   CurrentSessionSummary,
@@ -21,7 +22,9 @@ import type { ConfigGuard } from './codex-config-guard'
 import { decodeJwtPayload } from '../shared/openai-auth'
 import {
   defaultWakeModel,
+  normalizeAutoWakeTargetMode,
   normalizeLocalGatewaySettings,
+  normalizeSettingsIdList,
   normalizeStatsDisplaySettings
 } from '../shared/codex'
 import {
@@ -36,6 +39,7 @@ import {
   normalizePersistedState,
   normalizeGroupName,
   normalizeWakeSchedule,
+  normalizeWakeState,
   resolveAccountId,
   summarizeAuth,
   toAccountSummary
@@ -98,10 +102,12 @@ export class CodexAccountStore {
         usageErrorByAccountId: state.usageErrorByAccountId,
         accountHealthByAccountId: state.accountHealthByAccountId,
         wakeSchedulesByAccountId: state.wakeSchedulesByAccountId,
+        wakeStateByAccountId: state.wakeStateByAccountId,
         tokenCostByInstanceId: {},
         tokenCostErrorByInstanceId: {},
         runningTokenCostSummary: null,
         runningTokenCostInstanceIds: [],
+        gatewayUsageByAccountId: {},
         localGatewayStatus: {
           running: false,
           baseUrl: '',
@@ -127,6 +133,17 @@ export class CodexAccountStore {
         localGateway: normalizeLocalGatewaySettings(
           nextSettings.localGateway ?? state.settings.localGateway
         ),
+        autoWakeTargetMode: normalizeAutoWakeTargetMode(
+          nextSettings.autoWakeTargetMode ?? state.settings.autoWakeTargetMode
+        ),
+        autoWakeGroupIds: normalizeSettingsIdList(
+          nextSettings.autoWakeGroupIds ?? state.settings.autoWakeGroupIds
+        ),
+        autoWakeAccountIds: normalizeSettingsIdList(
+          nextSettings.autoWakeAccountIds ?? state.settings.autoWakeAccountIds
+        ),
+        autoWakeIncludeUngrouped:
+          nextSettings.autoWakeIncludeUngrouped ?? state.settings.autoWakeIncludeUngrouped,
         statusBarAccountIds: (
           nextSettings.statusBarAccountIds ?? state.settings.statusBarAccountIds
         ).slice(0, 5)
@@ -232,6 +249,35 @@ export class CodexAccountStore {
     })
   }
 
+  async markAccountRateLimited(
+    accountId: string,
+    reason: string,
+    source: AccountHealthSource,
+    retryAt: string,
+    httpStatus?: number
+  ): Promise<void> {
+    await this.runStateTask(async () => {
+      const state = await this.readState()
+
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
+
+      state.accountHealthByAccountId = {
+        ...state.accountHealthByAccountId,
+        [accountId]: {
+          status: 'rate_limited',
+          reason: reason.trim() || 'Account quota is temporarily exhausted.',
+          source,
+          markedAt: new Date().toISOString(),
+          retryAt,
+          ...(httpStatus ? { httpStatus } : {})
+        }
+      }
+      await this.writeState(state)
+    })
+  }
+
   async clearAccountHealth(accountId: string): Promise<void> {
     await this.runStateTask(async () => {
       const state = await this.readState()
@@ -273,13 +319,15 @@ export class CodexAccountStore {
         return
       }
 
-      state.accountHealthByAccountId = {
-        ...state.accountHealthByAccountId,
-        [accountId]: {
-          status: 'auth_error',
-          reason: input.reason?.trim() || 'Account authentication failed.',
-          source: 'manual',
-          markedAt: new Date().toISOString()
+      if (input.status === 'auth_error') {
+        state.accountHealthByAccountId = {
+          ...state.accountHealthByAccountId,
+          [accountId]: {
+            status: 'auth_error',
+            reason: input.reason?.trim() || 'Account authentication failed.',
+            source: 'manual',
+            markedAt: new Date().toISOString()
+          }
         }
       }
       await this.writeState(state)
@@ -384,6 +432,39 @@ export class CodexAccountStore {
       delete nextWakeSchedulesByAccountId[accountId]
       state.wakeSchedulesByAccountId = nextWakeSchedulesByAccountId
       await this.writeState(state)
+    })
+  }
+
+  async patchAccountWakeState(
+    accountId: string,
+    patch: Partial<AccountWakeState>
+  ): Promise<AccountWakeState | null> {
+    return this.runStateTask(async () => {
+      const state = await this.readState()
+      if (!state.accounts.some((account) => account.id === accountId)) {
+        throw new Error('Account not found.')
+      }
+
+      const current = state.wakeStateByAccountId[accountId]
+      const next = normalizeWakeState({
+        ...current,
+        ...patch,
+        lastWakeAt: patch.lastWakeAt ?? current?.lastWakeAt,
+        lastWakeSource: patch.lastWakeSource ?? current?.lastWakeSource,
+        lastStatus: patch.lastStatus ?? current?.lastStatus,
+        lastMessage: patch.lastMessage ?? current?.lastMessage
+      })
+
+      if (!next) {
+        return null
+      }
+
+      state.wakeStateByAccountId = {
+        ...state.wakeStateByAccountId,
+        [accountId]: next
+      }
+      await this.writeState(state)
+      return next
     })
   }
 
@@ -545,6 +626,15 @@ export class CodexAccountStore {
         // Keep importing account metadata even if the wake schedule cannot be copied.
       }
 
+      try {
+        const wakeState = externalState.wakeStateByAccountId[account.id]
+        if (wakeState) {
+          await this.patchAccountWakeState(imported.id, wakeState)
+        }
+      } catch {
+        // Keep importing account metadata even if the wake state cannot be copied.
+      }
+
       importedCount += 1
     }
 
@@ -684,6 +774,14 @@ export class CodexAccountStore {
             [identity]: state.wakeSchedulesByAccountId[previousId]
           }
           delete state.wakeSchedulesByAccountId[previousId]
+        }
+
+        if (state.wakeStateByAccountId[previousId]) {
+          state.wakeStateByAccountId = {
+            ...state.wakeStateByAccountId,
+            [identity]: state.wakeStateByAccountId[previousId]
+          }
+          delete state.wakeStateByAccountId[previousId]
         }
       }
 
@@ -874,6 +972,14 @@ export class CodexAccountStore {
           }
           delete state.wakeSchedulesByAccountId[previousId]
         }
+
+        if (state.wakeStateByAccountId[previousId]) {
+          state.wakeStateByAccountId = {
+            ...state.wakeStateByAccountId,
+            [identity]: state.wakeStateByAccountId[previousId]
+          }
+          delete state.wakeStateByAccountId[previousId]
+        }
       }
 
       existing.id = identity
@@ -930,6 +1036,10 @@ export class CodexAccountStore {
 
       if (state.wakeSchedulesByAccountId[accountId]) {
         delete state.wakeSchedulesByAccountId[accountId]
+      }
+
+      if (state.wakeStateByAccountId[accountId]) {
+        delete state.wakeStateByAccountId[accountId]
       }
 
       state.groups = state.groups.map((group) =>
@@ -1097,6 +1207,14 @@ export class CodexAccountStore {
             [identity]: state.wakeSchedulesByAccountId[previousId]
           }
           delete state.wakeSchedulesByAccountId[previousId]
+        }
+
+        if (state.wakeStateByAccountId[previousId]) {
+          state.wakeStateByAccountId = {
+            ...state.wakeStateByAccountId,
+            [identity]: state.wakeStateByAccountId[previousId]
+          }
+          delete state.wakeStateByAccountId[previousId]
         }
       }
 

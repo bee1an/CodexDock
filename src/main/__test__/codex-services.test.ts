@@ -132,6 +132,69 @@ function createJsonResponse(payload: unknown, status = 200): Response {
   })
 }
 
+function createResponsesSseResponse(options: {
+  model: string
+  text?: string
+  inputTokens: number
+  cachedTokens?: number
+  cachedTokenShape?: 'top-level' | 'input-details'
+  outputTokens: number
+}): Response {
+  const usage: Record<string, unknown> = {
+    input_tokens: options.inputTokens,
+    output_tokens: options.outputTokens
+  }
+  if (options.cachedTokenShape === 'input-details') {
+    usage.input_tokens_details = { cached_tokens: options.cachedTokens ?? 0 }
+  } else {
+    usage.cached_input_tokens = options.cachedTokens ?? 0
+  }
+
+  return new Response(
+    [
+      'event: response.output_text.delta',
+      `data: ${JSON.stringify({
+        type: 'response.output_text.delta',
+        delta: options.text ?? 'ok'
+      })}`,
+      '',
+      'event: response.completed',
+      `data: ${JSON.stringify({
+        type: 'response.completed',
+        response: {
+          id: 'resp_test',
+          model: options.model,
+          usage
+        }
+      })}`,
+      '',
+      ''
+    ].join('\n'),
+    {
+      status: 200,
+      headers: {
+        'content-type': 'text/event-stream; charset=utf-8'
+      }
+    }
+  )
+}
+
+async function waitForCondition<T>(
+  read: () => Promise<T>,
+  predicate: (value: T) => boolean,
+  message: string
+): Promise<T> {
+  let latest = await read()
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (predicate(latest)) {
+      return latest
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    latest = await read()
+  }
+  throw new Error(message)
+}
+
 async function getFreePort(): Promise<number> {
   return new Promise((resolve, reject) => {
     const server = createNetServer()
@@ -1192,6 +1255,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1216,7 +1280,9 @@ describe('createCodexServices', () => {
       expect(config).toContain('model = "gpt-5.4"')
       expect(config).toContain('model_provider = "custom"')
       expect(config).toContain('[model_providers.custom]')
-      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/v1"`)
+      expect(config).toMatch(
+        new RegExp(`base_url = "http://127\\.0\\.0\\.1:${port}/inst/[^"]+/v1"`)
+      )
       expect(auth).toContain('"OPENAI_API_KEY": "gateway-secret-a"')
       expect(backups.some((fileName) => fileName.startsWith('config.toml-'))).toBe(true)
       expect(backups.some((fileName) => fileName.startsWith('auth.json-'))).toBe(true)
@@ -1246,6 +1312,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1267,7 +1334,7 @@ describe('createCodexServices', () => {
       expect(config).toContain('model_provider = "Local Gateway"')
       expect(config).toContain('[model_providers."Local Gateway"]')
       expect(config).toContain('name = "Local Gateway"')
-      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/v1"`)
+      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/inst/__default__/v1"`)
       expect(config).toContain('experimental_bearer_token = "gateway-secret-a"')
     } finally {
       await services.gateway.stop()
@@ -1288,6 +1355,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1309,8 +1377,8 @@ describe('createCodexServices', () => {
       await expect(readFile(join(localGatewayHome, 'auth.json'), 'utf8')).resolves.toContain(
         '"OPENAI_API_KEY": "gateway-secret-a"'
       )
-      await expect(readFile(join(localGatewayHome, 'config.toml'), 'utf8')).resolves.toContain(
-        `base_url = "http://127.0.0.1:${port}/v1"`
+      await expect(readFile(join(localGatewayHome, 'config.toml'), 'utf8')).resolves.toMatch(
+        new RegExp(`base_url = "http://127\\.0\\.0\\.1:${port}/inst/[^"]+/v1"`)
       )
 
       const rotated = await services.gateway.rotateKey()
@@ -1343,6 +1411,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1382,7 +1451,9 @@ describe('createCodexServices', () => {
       const config = await readFile(join(localGatewayHome, 'config.toml'), 'utf8')
       expect(config).toContain('model_provider = "custom"')
       expect(config).toContain('[model_providers.custom]')
-      expect(config).toContain(`base_url = "http://127.0.0.1:${port}/v1"`)
+      expect(config).toMatch(
+        new RegExp(`base_url = "http://127\\.0\\.0\\.1:${port}/inst/[^"]+/v1"`)
+      )
       await expect(readFile(join(localGatewayHome, 'auth.json'), 'utf8')).resolves.toContain(
         '"OPENAI_API_KEY": "gateway-secret-a"'
       )
@@ -1405,6 +1476,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1478,6 +1550,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1541,6 +1614,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1565,6 +1639,86 @@ describe('createCodexServices', () => {
       expect(response.status).toBe(200)
       expect(payload.accountId).toBe('acct-free')
       expect(platform.fetch).toHaveBeenCalledOnce()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('records usage from direct /v1/responses local gateway traffic', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async () =>
+      createResponsesSseResponse({
+        model: 'gpt-5.5',
+        inputTokens: 120,
+        cachedTokens: 30,
+        cachedTokenShape: 'input-details',
+        outputTokens: 45
+      })
+    )
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    const snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-gateway-usage',
+        email: 'gateway-usage@example.com'
+      })
+    )
+    const account = snapshot.accounts[0]
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        autoStart: false,
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [account.id],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.5', input: 'hello', stream: true })
+      })
+      const body = await response.text()
+
+      expect(response.status).toBe(200)
+      expect(body).toContain('response.completed')
+
+      const usage = await services.gatewayUsage.read({ accountId: account.id })
+      expect(usage.summary.todayTokens).toBe(165)
+      expect(usage.summary.last30DaysTokens).toBe(165)
+      expect(usage.summary.todayCostUSD).toBeCloseTo(0.001815, 8)
+      expect(usage.daily[0]).toMatchObject({
+        inputTokens: 120,
+        outputTokens: 45,
+        totalTokens: 165,
+        modelsUsed: ['gpt-5.5']
+      })
+
+      const status = await waitForCondition(
+        () => services.gateway.status(),
+        (current) =>
+          Boolean(current.logs?.some((log) => log.path === '/v1/responses' && log.tokens === 165)),
+        'Expected /v1/responses log to include usage tokens.'
+      )
+      expect(status.logs?.find((log) => log.path === '/v1/responses')?.tokens).toBe(165)
     } finally {
       await services.gateway.stop()
     }
@@ -1599,6 +1753,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1645,6 +1800,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1661,6 +1817,7 @@ describe('createCodexServices', () => {
           host: '127.0.0.1',
           port,
           apiKey: 'gateway-secret-a',
+          autoStart: false,
           stickyTtlMinutes: 360,
           requestTimeoutMs: 120_000,
           modelMappings: [],
@@ -1742,6 +1899,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -1777,6 +1935,209 @@ describe('createCodexServices', () => {
         status: 'auth_error',
         httpStatus: 401
       })
+      expect(snapshot.accountHealthByAccountId[accountB!.id]).toBeUndefined()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('temporarily disables quota-exhausted local gateway accounts and retries the next account', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    const resetAt = 1_900_000_000
+    platform.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlText = String(url)
+      if (!urlText.includes('/codex/responses')) {
+        throw new Error(`Unexpected fetch: ${urlText}`)
+      }
+
+      const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+      if (chatgptAccountId === 'acct-a') {
+        return createJsonResponse(
+          {
+            error: {
+              code: 'rate_limit_exceeded',
+              message: 'Codex quota depleted'
+            },
+            rate_limit: {
+              limit_reached: true,
+              primary_window: {
+                used_percent: 100,
+                reset_at: resetAt
+              }
+            }
+          },
+          429
+        )
+      }
+      return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-a',
+        email: 'a@example.com',
+        primaryUsedPercent: 10,
+        secondaryUsedPercent: 10
+      })
+    )
+    let snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-b',
+        email: 'b@example.com',
+        primaryUsedPercent: 60,
+        secondaryUsedPercent: 60
+      })
+    )
+    const accountA = snapshot.accounts.find((account) => account.email === 'a@example.com')
+    const accountB = snapshot.accounts.find((account) => account.email === 'b@example.com')
+    expect(accountA).toBeTruthy()
+    expect(accountB).toBeTruthy()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        autoStart: false,
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [accountA!.id, accountB!.id],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as { accountId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.accountId).toBe('acct-b')
+
+      const codexAccountIds = vi
+        .mocked(platform.fetch)
+        .mock.calls.filter(([url]) => String(url).includes('/codex/responses'))
+        .map(([, init]) => new Headers(init?.headers as HeadersInit).get('chatgpt-account-id'))
+      expect(codexAccountIds).toEqual(['acct-a', 'acct-b'])
+
+      snapshot = await services.getSnapshot()
+      expect(snapshot.accountHealthByAccountId[accountA!.id]).toMatchObject({
+        status: 'rate_limited',
+        httpStatus: 429,
+        retryAt: new Date(resetAt * 1000).toISOString()
+      })
+      expect(snapshot.accountHealthByAccountId[accountB!.id]).toBeUndefined()
+    } finally {
+      await services.gateway.stop()
+    }
+  })
+
+  it('retries another local gateway account for generic 429 without marking health', async () => {
+    const env = await createEnvironment()
+    const platform = createPlatform()
+    platform.fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const urlText = String(url)
+      if (!urlText.includes('/codex/responses')) {
+        throw new Error(`Unexpected fetch: ${urlText}`)
+      }
+
+      const chatgptAccountId = new Headers(init?.headers as HeadersInit).get('chatgpt-account-id')
+      if (chatgptAccountId === 'acct-a') {
+        return createJsonResponse(
+          {
+            error: {
+              code: 'server_overloaded',
+              message: 'Please retry later'
+            },
+            retry_after_seconds: 30
+          },
+          429
+        )
+      }
+      return createJsonResponse({ ok: true, accountId: chatgptAccountId })
+    })
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform
+    })
+    const port = await getFreePort()
+
+    await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-a',
+        email: 'a@example.com',
+        primaryUsedPercent: 10,
+        secondaryUsedPercent: 10
+      })
+    )
+    let snapshot = await services.accounts.importFromTemplate(
+      createTemplateImport({
+        accountId: 'acct-b',
+        email: 'b@example.com',
+        primaryUsedPercent: 60,
+        secondaryUsedPercent: 60
+      })
+    )
+    const accountA = snapshot.accounts.find((account) => account.email === 'a@example.com')
+    const accountB = snapshot.accounts.find((account) => account.email === 'b@example.com')
+    expect(accountA).toBeTruthy()
+    expect(accountB).toBeTruthy()
+
+    await services.settings.update({
+      localGateway: {
+        host: '127.0.0.1',
+        port,
+        apiKey: 'gateway-secret-a',
+        autoStart: false,
+        stickyTtlMinutes: 360,
+        requestTimeoutMs: 120_000,
+        modelMappings: [],
+        allowedGroupIds: [],
+        allowedAccountIds: [accountA!.id, accountB!.id],
+        allowedProviderIds: []
+      }
+    })
+
+    await services.gateway.start()
+    try {
+      const response = await fetch(`http://127.0.0.1:${port}/v1/responses`, {
+        method: 'POST',
+        headers: {
+          authorization: 'Bearer gateway-secret-a',
+          'content-type': 'application/json'
+        },
+        body: JSON.stringify({ model: 'gpt-5.4', input: 'hello' })
+      })
+      const payload = (await response.json()) as { accountId?: string }
+
+      expect(response.status).toBe(200)
+      expect(payload.accountId).toBe('acct-b')
+
+      const codexAccountIds = vi
+        .mocked(platform.fetch)
+        .mock.calls.filter(([url]) => String(url).includes('/codex/responses'))
+        .map(([, init]) => new Headers(init?.headers as HeadersInit).get('chatgpt-account-id'))
+      expect(codexAccountIds).toEqual(['acct-a', 'acct-b'])
+
+      snapshot = await services.getSnapshot()
+      expect(snapshot.accountHealthByAccountId[accountA!.id]).toBeUndefined()
       expect(snapshot.accountHealthByAccountId[accountB!.id]).toBeUndefined()
     } finally {
       await services.gateway.stop()
@@ -1828,6 +2189,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'gateway-secret-a',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2054,6 +2416,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2151,6 +2514,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2168,7 +2532,7 @@ describe('createCodexServices', () => {
 
     await gateway.start()
     try {
-      const response = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+      const response = await fetch(`http://127.0.0.1:${port}/inst/isolated-a/v1/chat/completions`, {
         method: 'POST',
         headers: {
           authorization: 'Bearer test-gateway-key',
@@ -2181,6 +2545,8 @@ describe('createCodexServices', () => {
       expect(platform.fetch).toHaveBeenCalledTimes(1)
       const fetchCall = (platform.fetch as ReturnType<typeof vi.fn>).mock.calls[0]
       expect(fetchCall[0]).toContain('api.test-provider.local')
+      expect(fetchCall[0]).toContain('/v1/chat/completions')
+      expect(fetchCall[0]).not.toContain('/inst/isolated-a')
     } finally {
       await gateway.stop()
     }
@@ -2227,6 +2593,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2288,6 +2655,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2315,6 +2683,7 @@ describe('createCodexServices', () => {
           host: '127.0.0.1',
           port,
           apiKey: 'test-gateway-key',
+          autoStart: false,
           stickyTtlMinutes: 360,
           requestTimeoutMs: 120_000,
           modelMappings: [],
@@ -2360,6 +2729,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2386,6 +2756,7 @@ describe('createCodexServices', () => {
           host: '127.0.0.1',
           port,
           apiKey: 'test-gateway-key',
+          autoStart: false,
           stickyTtlMinutes: 360,
           requestTimeoutMs: 120_000,
           modelMappings: [],
@@ -2423,6 +2794,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -2461,6 +2833,7 @@ describe('createCodexServices', () => {
         host: '127.0.0.1',
         port,
         apiKey: 'test-gateway-key',
+        autoStart: false,
         stickyTtlMinutes: 360,
         requestTimeoutMs: 120_000,
         modelMappings: [],
@@ -3658,7 +4031,7 @@ describe('createCodexServices', () => {
     )
   })
 
-  it('does not trigger wake-up requests for free accounts', async () => {
+  it('triggers wake-up requests for free accounts with first-window quota', async () => {
     const env = await createEnvironment()
     const platform = createPlatform()
     const services = createCodexServices({
@@ -3672,9 +4045,23 @@ describe('createCodexServices', () => {
 
     const account = (await services.getSnapshot()).accounts[0]
 
-    ;(platform.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
-      createUsageResponse({ planType: 'free', primaryUsedPercent: 0 })
-    )
+    ;(platform.fetch as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce(createUsageResponse({ planType: 'free', primaryUsedPercent: 0 }))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ ok: true }), {
+          status: 200,
+          headers: {
+            'content-type': 'application/json'
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        createUsageResponse({
+          planType: 'free',
+          primaryUsedPercent: 0,
+          primaryResetAt: 1_900_000_000
+        })
+      )
 
     await expect(services.usage.wake(account.id)).resolves.toMatchObject({
       rateLimits: {
@@ -3683,14 +4070,18 @@ describe('createCodexServices', () => {
           usedPercent: 0
         }
       },
-      requestResult: null
+      requestResult: {
+        status: 200,
+        accepted: true
+      }
     })
 
-    expect(platform.fetch).toHaveBeenCalledTimes(1)
-    expect(platform.fetch).toHaveBeenCalledWith(
-      'https://chatgpt.com/backend-api/wham/usage',
+    expect(platform.fetch).toHaveBeenCalledTimes(3)
+    expect(platform.fetch).toHaveBeenNthCalledWith(
+      2,
+      'https://chatgpt.com/backend-api/codex/responses',
       expect.objectContaining({
-        method: 'GET'
+        method: 'POST'
       })
     )
   })

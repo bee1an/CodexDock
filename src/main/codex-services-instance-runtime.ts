@@ -456,8 +456,12 @@ export function createCodexServicesInstanceRuntime(
     return resolve(codexHome) === resolve(localGatewayCodexHome())
   }
 
-  function localGatewayProviderBaseUrl(baseUrl: string): string {
-    return `${baseUrl.replace(/\/+$/u, '')}/v1`
+  function localGatewayProviderBaseUrl(baseUrl: string, instanceId?: string): string {
+    const trimmed = baseUrl.replace(/\/+$/u, '')
+    if (instanceId && instanceId.trim()) {
+      return `${trimmed}/inst/${encodeURIComponent(instanceId.trim())}/v1`
+    }
+    return `${trimmed}/v1`
   }
 
   async function resolveLocalGatewayOpenConfig(): Promise<{ baseUrl: string; apiKey: string }> {
@@ -840,7 +844,7 @@ export function createCodexServicesInstanceRuntime(
     await writeProviderApiKeyToCodexHome(codexHome, input.apiKey)
     await writeProviderConfigToCodexHome(codexHome, {
       name: localGatewayInstanceName,
-      baseUrl: localGatewayProviderBaseUrl(input.baseUrl),
+      baseUrl: localGatewayProviderBaseUrl(input.baseUrl, instance?.id),
       model: localGatewayProviderModel,
       fastMode: true
     })
@@ -894,7 +898,7 @@ export function createCodexServicesInstanceRuntime(
       defaultCodexHome,
       {
         name: localGatewayInstanceName,
-        baseUrl: localGatewayProviderBaseUrl(input.baseUrl),
+        baseUrl: localGatewayProviderBaseUrl(input.baseUrl, DEFAULT_CODEX_INSTANCE_ID),
         model: localGatewayProviderModel,
         fastMode: true
       },

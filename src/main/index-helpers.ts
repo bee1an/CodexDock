@@ -70,8 +70,8 @@ function localeText(language: AppSettings['language']): {
   return {
     noAccount: language === 'en' ? 'No account available' : '当前没有可用账号',
     currentAccount: language === 'en' ? 'Active account' : '当前使用账号',
-    sessionQuota: language === 'en' ? 'Session quota' : '小时限额',
-    weeklyQuota: language === 'en' ? 'Weekly quota' : '周限额',
+    sessionQuota: language === 'en' ? 'First window' : '第一窗口',
+    weeklyQuota: language === 'en' ? 'Second window' : '第二窗口',
     remaining: language === 'en' ? 'left' : '剩余',
     resetAt: language === 'en' ? 'Resets in' : '重置时间',
     noVisibleAccount: language === 'en' ? 'No account to display' : '还没有可显示的账号',

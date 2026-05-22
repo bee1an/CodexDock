@@ -28,9 +28,13 @@ describe('migrateLegacyElectronUserData', () => {
     await mkdir(join(legacyConfigPath, 'Session Storage'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'GPUCache'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'cost-usage'), { recursive: true })
+    await mkdir(join(legacyConfigPath, 'gateway-usage'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'codex-instance-homes'), { recursive: true })
     await mkdir(join(legacyConfigPath, 'skill-library'), { recursive: true })
     await writeFile(join(legacyConfigPath, 'codex-accounts.json'), '{}\n', 'utf8')
+    await writeFile(join(legacyConfigPath, 'config-guard-state.json'), '{}\n', 'utf8')
+    await writeFile(join(legacyConfigPath, 'gateway-usage', 'v1.json'), '{}\n', 'utf8')
+    await writeFile(join(legacyConfigPath, 'local-gateway-logs.json'), '{}\n', 'utf8')
     await writeFile(join(legacyConfigPath, 'skill-library', '.categories.json'), '[]\n', 'utf8')
     await writeFile(join(legacyConfigPath, 'Preferences'), '{"legacy":true}\n', 'utf8')
     await writeFile(join(legacyConfigPath, 'Session Storage', '000003.log'), 'session', 'utf8')
@@ -50,6 +54,15 @@ describe('migrateLegacyElectronUserData', () => {
     await expect(
       readFile(join(legacyConfigPath, 'skill-library', '.categories.json'), 'utf8')
     ).resolves.toBe('[]\n')
+    await expect(readFile(join(legacyConfigPath, 'config-guard-state.json'), 'utf8')).resolves.toBe(
+      '{}\n'
+    )
+    await expect(
+      readFile(join(legacyConfigPath, 'gateway-usage', 'v1.json'), 'utf8')
+    ).resolves.toBe('{}\n')
+    await expect(readFile(join(legacyConfigPath, 'local-gateway-logs.json'), 'utf8')).resolves.toBe(
+      '{}\n'
+    )
     await expect(readFile(join(defaultUserDataPath, 'Preferences'), 'utf8')).resolves.toBe(
       '{"legacy":true}\n'
     )

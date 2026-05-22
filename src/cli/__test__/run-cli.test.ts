@@ -43,6 +43,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
     runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {},
     ...overrides
   }
 }
@@ -98,6 +99,8 @@ interface CliTestRuntime {
     }
     usage: {
       read: ReturnType<typeof vi.fn>
+      wake: ReturnType<typeof vi.fn>
+      auto: ReturnType<typeof vi.fn>
     }
     cost: {
       read: ReturnType<typeof vi.fn>
@@ -440,7 +443,29 @@ function createRuntime(): {
         )
       },
       usage: {
-        read: vi.fn(async () => rateLimits)
+        read: vi.fn(async () => rateLimits),
+        wake: vi.fn(async () => ({
+          rateLimits,
+          requestResult: {
+            status: 200,
+            accepted: true,
+            model: 'gpt-5.4-mini',
+            prompt: 'ping',
+            body: 'ok'
+          }
+        })),
+        auto: vi.fn(async () => ({
+          checkedAt: '2026-03-08T00:00:00.000Z',
+          results: [
+            {
+              accountId: 'acct_1',
+              status: 'success',
+              message: 'ok',
+              decision: { canWake: true, reason: 'eligible' },
+              rateLimits
+            }
+          ]
+        }))
       },
       cost: {
         read: vi.fn(async () => tokenCostDetail)
@@ -873,6 +898,38 @@ describe('runCli', () => {
       data: rateLimits,
       error: null
     })
+
+    logSpy.mockClear()
+    await expect(
+      runCli(runtime as never, [
+        'wake',
+        'now',
+        'acct_1',
+        '--model',
+        'gpt-test',
+        '--prompt',
+        'ping',
+        '--json'
+      ])
+    ).resolves.toBe(0)
+    expect(runtime.services.usage.wake).toHaveBeenCalledWith('acct_1', {
+      model: 'gpt-test',
+      prompt: 'ping',
+      source: 'manual'
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['wake', 'now', '--all', '--json'])).resolves.toBe(0)
+    expect(runtime.services.accounts.list).toHaveBeenCalled()
+    expect(runtime.services.usage.wake).toHaveBeenLastCalledWith('acct_1', {
+      model: undefined,
+      prompt: undefined,
+      source: 'manual'
+    })
+
+    logSpy.mockClear()
+    await expect(runCli(runtime as never, ['wake', 'auto', '--all', '--json'])).resolves.toBe(0)
+    expect(runtime.services.usage.auto).toHaveBeenCalledWith(undefined, 'auto')
 
     logSpy.mockClear()
     await expect(runCli(runtime as never, ['cost', 'read', '--json'])).resolves.toBe(0)

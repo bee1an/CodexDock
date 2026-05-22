@@ -1398,7 +1398,14 @@ export {
   DEFAULT_CODEX_INSTANCE_ID,
   ALL_TOKEN_COST_INSTANCE_ID,
   aggregateTokenCostDetails,
+  addCostToRollup,
+  addDays,
   codexCostUSD,
+  createCostRollup,
+  dateFromLocalDayKey,
+  finalizeCostRollup,
+  localDayKey,
   normalizeCodexModel,
   scanCodexTokenCost
 }
+export type { CostRollup }

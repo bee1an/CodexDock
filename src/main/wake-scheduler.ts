@@ -1,5 +1,6 @@
 import {
   canRunWakeRequest,
+  isFreePlan,
   isAccountHealthBlocking,
   type AccountSummary,
   type AccountWakeSchedule,
@@ -100,7 +101,7 @@ function supportsScheduledWake(snapshot: AppSnapshot, accountId: string): boolea
   }
 
   const rateLimits = snapshot.usageByAccountId[accountId]
-  return Boolean(rateLimits && canRunWakeRequest(rateLimits))
+  return Boolean(rateLimits && !isFreePlan(rateLimits) && canRunWakeRequest(rateLimits))
 }
 
 export function createWakeSchedulerController(
@@ -216,7 +217,8 @@ export function createWakeSchedulerController(
     try {
       const result = await options.wakeAccount(account.id, {
         model: schedule.model,
-        prompt: schedule.prompt
+        prompt: schedule.prompt,
+        source: 'schedule'
       })
 
       if (!result.requestResult) {

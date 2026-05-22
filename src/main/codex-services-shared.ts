@@ -18,6 +18,7 @@ import {
   type AccountTokensDetail,
   type AccountTransferFormat,
   type AccountWakeSchedule,
+  type AutoWakeRateLimitsResult,
   type AppSettings,
   type AppSnapshot,
   type CodexInstanceDefaults,
@@ -51,6 +52,8 @@ import {
   type ReadCodexSessionDetailInput,
   type TokenCostDetail,
   type TokenCostReadOptions,
+  type GatewayUsageDetail,
+  type GatewayUsageReadOptions,
   type TrashCodexSessionInput,
   type TrashCodexSessionResult,
   type UpdateAccountHealthInput,
@@ -453,9 +456,13 @@ export interface CodexServices {
       accountId?: string,
       input?: WakeAccountRateLimitsInput
     ): Promise<WakeAccountRateLimitsResult>
+    auto(accountId?: string, source?: 'auto' | 'startup'): Promise<AutoWakeRateLimitsResult>
   }
   cost: {
     read(input?: TokenCostReadOptions): Promise<TokenCostDetail>
+  }
+  gatewayUsage: {
+    read(input?: GatewayUsageReadOptions): Promise<GatewayUsageDetail>
   }
   gateway: {
     start(): Promise<AppSnapshot>

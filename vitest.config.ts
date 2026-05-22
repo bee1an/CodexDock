@@ -1,19 +1,24 @@
+import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
 import { svelte } from '@sveltejs/vite-plugin-svelte'
 import { svelteTesting } from '@testing-library/svelte/vite'
 
 const rendererComponentTests = [
-  'src/renderer/src/components/__test__/AppDialog.test.ts',
-  'src/renderer/src/components/__test__/AccountsListView.test.ts',
-  'src/renderer/src/components/__test__/AccountsPanel.test.ts',
-  'src/renderer/src/components/__test__/AccountsProvidersView.test.ts',
-  'src/renderer/src/components/__test__/LocalGatewayView.test.ts',
-  'src/renderer/src/components/__test__/AccountsTagsView.test.ts',
-  'src/renderer/src/components/__test__/SettingsView.test.ts',
-  'src/renderer/src/components/__test__/SessionsView.test.ts'
+  'src/renderer/src/lib/ui/__test__/AppDialog.test.ts',
+  'src/renderer/src/views/accounts/__test__/AccountsListView.test.ts',
+  'src/renderer/src/shell/__test__/WorkspaceShell.test.ts',
+  'src/renderer/src/views/accounts/__test__/AccountsProvidersView.test.ts',
+  'src/renderer/src/views/gateway/__test__/LocalGatewayView.test.ts',
+  'src/renderer/src/views/settings/__test__/SettingsView.test.ts',
+  'src/renderer/src/views/sessions/__test__/SessionsView.test.ts'
 ]
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      $lib: resolve(__dirname, 'src/renderer/src/lib')
+    }
+  },
   test: {
     clearMocks: true,
     restoreMocks: true,

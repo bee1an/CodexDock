@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  autoWakeTargetAccountIds,
+  canAutoWakeAccount,
   canRunWakeRequest,
   filterLocalMockAppSnapshot,
   formatRelativeReset,
@@ -17,6 +19,7 @@ import {
   usagePollingIntervalMs,
   type AccountRateLimits,
   type AppSnapshot,
+  type AccountGroup,
   type AccountSummary
 } from '../codex'
 
@@ -82,6 +85,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
     runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {},
     ...overrides
   }
 }
@@ -443,7 +447,7 @@ describe('codex shared helpers', () => {
     expect(resolveBestAccount(accounts, usageByAccountId)).toBeNull()
   })
 
-  it('does not allow wake requests when weekly quota is depleted', () => {
+  it('checks wake requests with first and second windows', () => {
     expect(
       canRunWakeRequest(
         createUsage({
@@ -460,7 +464,81 @@ describe('codex shared helpers', () => {
           secondary: { usedPercent: 80, windowDurationMins: 10080, resetsAt: null }
         })
       )
+    ).toBe(false)
+
+    expect(
+      canRunWakeRequest(
+        createUsage({
+          planType: 'free',
+          primary: { usedPercent: 3, windowDurationMins: 10080, resetsAt: null },
+          secondary: null
+        })
+      )
     ).toBe(true)
+  })
+
+  it('detects smart auto-wake eligibility from the first window and cooldown', () => {
+    const now = Date.parse('2026-03-08T10:00:00.000Z')
+    const rateLimits = createUsage({
+      primary: {
+        usedPercent: 3,
+        windowDurationMins: 300,
+        resetsAt: now + 299 * 60_000
+      },
+      secondary: { usedPercent: 50, windowDurationMins: 10080, resetsAt: now + 1000 }
+    })
+
+    expect(canAutoWakeAccount(rateLimits, undefined, undefined, now)).toMatchObject({
+      canWake: true,
+      reason: 'eligible'
+    })
+    expect(
+      canAutoWakeAccount(
+        rateLimits,
+        { lastWakeAt: new Date(now - 10 * 60_000).toISOString() },
+        undefined,
+        now
+      )
+    ).toMatchObject({
+      canWake: false,
+      reason: 'wake_cooldown'
+    })
+  })
+
+  it('reports wake cooldown before first-window reset drift', () => {
+    const now = Date.parse('2026-03-08T10:00:00.000Z')
+    const rateLimits = createUsage({
+      primary: {
+        usedPercent: 3,
+        windowDurationMins: 300,
+        resetsAt: now + 290 * 60_000
+      },
+      secondary: { usedPercent: 50, windowDurationMins: 10080, resetsAt: now + 1000 }
+    })
+
+    expect(
+      canAutoWakeAccount(
+        rateLimits,
+        { lastWakeAt: new Date(now - 10 * 60_000).toISOString() },
+        undefined,
+        now
+      )
+    ).toMatchObject({
+      canWake: false,
+      reason: 'wake_cooldown'
+    })
+
+    expect(
+      canAutoWakeAccount(
+        rateLimits,
+        { lastWakeAt: new Date(now - 40 * 60_000).toISOString() },
+        undefined,
+        now
+      )
+    ).toMatchObject({
+      canWake: false,
+      reason: 'first_window_reset_not_initial'
+    })
   })
 
   it('treats free accounts as primary quota accounts', () => {
@@ -519,6 +597,16 @@ describe('normalizeLocalGatewaySettings', () => {
     expect(result.allowedProviderIds).toEqual([])
   })
 
+  it('defaults autoStart to false when not provided', () => {
+    const result = normalizeLocalGatewaySettings({})
+    expect(result.autoStart).toBe(false)
+  })
+
+  it('preserves autoStart when enabled', () => {
+    const result = normalizeLocalGatewaySettings({ autoStart: true })
+    expect(result.autoStart).toBe(true)
+  })
+
   it('preserves allowedProviderIds', () => {
     const result = normalizeLocalGatewaySettings({
       allowedProviderIds: ['prov-1', 'prov-2']
@@ -570,5 +658,42 @@ describe('normalizeLocalGatewaySettings', () => {
     } as unknown as Parameters<typeof normalizeLocalGatewaySettings>[0])
     expect(result.allowedProviderIds).toEqual([])
     expect(result.allowedGroupIds).toEqual(['group-1'])
+  })
+})
+
+describe('autoWakeTargetAccountIds', () => {
+  const groups: AccountGroup[] = [
+    {
+      id: 'group-a',
+      name: 'A',
+      createdAt: '2026-03-01T00:00:00.000Z',
+      updatedAt: '2026-03-01T00:00:00.000Z'
+    }
+  ]
+
+  const accounts = [
+    createAccount('acct-group', { groupIds: ['group-a'] }),
+    createAccount('acct-manual'),
+    createAccount('acct-missing-group', { groupIds: ['missing-group'] })
+  ]
+
+  it('defaults to all accounts when target mode is all', () => {
+    expect(autoWakeTargetAccountIds(accounts, groups, createSnapshot().settings)).toEqual([
+      'acct-group',
+      'acct-manual',
+      'acct-missing-group'
+    ])
+  })
+
+  it('resolves selected groups, accounts, and ungrouped accounts', () => {
+    expect(
+      autoWakeTargetAccountIds(accounts, groups, {
+        ...createSnapshot().settings,
+        autoWakeTargetMode: 'selected',
+        autoWakeGroupIds: ['group-a'],
+        autoWakeAccountIds: ['acct-manual'],
+        autoWakeIncludeUngrouped: true
+      })
+    ).toEqual(['acct-group', 'acct-manual', 'acct-missing-group'])
   })
 })

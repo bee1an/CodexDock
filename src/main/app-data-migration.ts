@@ -8,7 +8,10 @@ const codexDockConfigEntries = new Set([
   'codex-instances.json',
   'codex-providers.json',
   'codex-instance-homes',
+  'config-guard-state.json',
   'cost-usage',
+  'gateway-usage',
+  'local-gateway-logs.json',
   'prompts',
   'skill-library'
 ])

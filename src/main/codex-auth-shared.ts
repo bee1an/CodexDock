@@ -9,6 +9,7 @@ import type {
   AccountHealthSource,
   AccountRateLimits,
   AccountWakeSchedule,
+  AccountWakeState,
   AccountSummary,
   AppSettings,
   LoginMethod,
@@ -23,7 +24,9 @@ import {
 import {
   defaultWakeModel,
   defaultStatsDisplaySettings,
+  normalizeAutoWakeTargetMode,
   normalizeLocalGatewaySettings,
+  normalizeSettingsIdList,
   normalizeStatsDisplaySettings
 } from '../shared/codex'
 
@@ -53,6 +56,7 @@ interface PersistedState {
   usageErrorByAccountId: Record<string, string>
   accountHealthByAccountId: Record<string, AccountHealth>
   wakeSchedulesByAccountId: Record<string, AccountWakeSchedule>
+  wakeStateByAccountId: Record<string, AccountWakeState>
 }
 
 interface LegacyPersistedState {
@@ -66,6 +70,7 @@ interface LegacyPersistedState {
   usageErrorByAccountId?: Record<string, string>
   accountHealthByAccountId?: Record<string, AccountHealth>
   wakeSchedulesByAccountId?: Record<string, AccountWakeSchedule>
+  wakeStateByAccountId?: Record<string, AccountWakeState>
 }
 
 function defaultSettings(): AppSettings {
@@ -75,6 +80,14 @@ function defaultSettings(): AppSettings {
     language: 'zh-CN',
     theme: 'light',
     checkForUpdatesOnStartup: true,
+    autoWakeOnStartup: false,
+    autoWakeTargetMode: 'all',
+    autoWakeGroupIds: [],
+    autoWakeAccountIds: [],
+    autoWakeIncludeUngrouped: false,
+    autoWakeFirstWindowRemainingThresholdPercent: 96,
+    autoWakeResetToleranceMinutes: 5,
+    autoWakeCooldownWindowRatio: 0.1,
     codexDesktopExecutablePath: '',
     preserveChatGptAuthOnDirectProviderOpen: false,
     showLocalMockData: true,
@@ -121,7 +134,8 @@ function defaultState(): PersistedState {
     usageByAccountId: {},
     usageErrorByAccountId: {},
     accountHealthByAccountId: {},
-    wakeSchedulesByAccountId: {}
+    wakeSchedulesByAccountId: {},
+    wakeStateByAccountId: {}
   }
 }
 
@@ -148,6 +162,19 @@ function normalizeWakeSchedule(
   }
 }
 
+function normalizeWakeState(state?: Partial<AccountWakeState> | null): AccountWakeState | null {
+  if (!state) {
+    return null
+  }
+
+  return {
+    lastWakeAt: state.lastWakeAt,
+    lastWakeSource: state.lastWakeSource,
+    lastStatus: state.lastStatus ?? 'idle',
+    lastMessage: state.lastMessage?.trim() || undefined
+  }
+}
+
 function normalizePersistedState(parsed: PersistedState | LegacyPersistedState): PersistedState {
   const raw = parsed as Record<string, unknown>
   const rawAccounts = (raw.accounts ?? []) as Array<PersistedAccount & { tagIds?: string[] }>
@@ -167,6 +194,10 @@ function normalizePersistedState(parsed: PersistedState | LegacyPersistedState):
     settings: {
       ...defaultSettings(),
       ...('settings' in parsed ? parsed.settings : {}),
+      autoWakeTargetMode: normalizeAutoWakeTargetMode(parsed.settings?.autoWakeTargetMode),
+      autoWakeGroupIds: normalizeSettingsIdList(parsed.settings?.autoWakeGroupIds),
+      autoWakeAccountIds: normalizeSettingsIdList(parsed.settings?.autoWakeAccountIds),
+      autoWakeIncludeUngrouped: parsed.settings?.autoWakeIncludeUngrouped === true,
       statsDisplay: normalizeStatsDisplaySettings(parsed.settings?.statsDisplay),
       localGateway: normalizeLocalGatewaySettings(parsed.settings?.localGateway)
     },
@@ -181,6 +212,11 @@ function normalizePersistedState(parsed: PersistedState | LegacyPersistedState):
       Object.entries(parsed.wakeSchedulesByAccountId ?? {})
         .map(([accountId, schedule]) => [accountId, normalizeWakeSchedule(schedule)])
         .filter((entry): entry is [string, AccountWakeSchedule] => Boolean(entry[1]))
+    ),
+    wakeStateByAccountId: Object.fromEntries(
+      Object.entries(parsed.wakeStateByAccountId ?? {})
+        .map(([accountId, state]) => [accountId, normalizeWakeState(state)])
+        .filter((entry): entry is [string, AccountWakeState] => Boolean(entry[1]))
     )
   }
 }
@@ -200,10 +236,15 @@ function normalizeAccountHealthSource(value: unknown): AccountHealthSource {
 function normalizeAccountHealthByAccountId(
   raw: Record<string, AccountHealth>
 ): Record<string, AccountHealth> {
+  const now = Date.now()
   return Object.fromEntries(
     Object.entries(raw)
       .map(([accountId, health]): [string, AccountHealth] | null => {
-        if (!health || typeof health !== 'object' || health.status !== 'auth_error') {
+        if (
+          !health ||
+          typeof health !== 'object' ||
+          (health.status !== 'auth_error' && health.status !== 'rate_limited')
+        ) {
           return null
         }
 
@@ -219,15 +260,24 @@ function normalizeAccountHealthByAccountId(
           typeof health.httpStatus === 'number' && Number.isFinite(health.httpStatus)
             ? health.httpStatus
             : undefined
+        const retryAt =
+          typeof health.retryAt === 'string' && !Number.isNaN(Date.parse(health.retryAt))
+            ? health.retryAt
+            : undefined
+
+        if (health.status === 'rate_limited' && (!retryAt || Date.parse(retryAt) <= now)) {
+          return null
+        }
 
         return [
           accountId,
           {
-            status: 'auth_error',
+            status: health.status,
             reason,
             markedAt,
             source: normalizeAccountHealthSource(health.source),
-            ...(httpStatus ? { httpStatus } : {})
+            ...(httpStatus ? { httpStatus } : {}),
+            ...(retryAt ? { retryAt } : {})
           }
         ]
       })
@@ -621,6 +671,7 @@ export {
   normalizePersistedState,
   normalizeGroupName,
   normalizeWakeSchedule,
+  normalizeWakeState,
   parseTokenEndpointError,
   extractTokenEndpointErrorCode,
   resolveAccountId,

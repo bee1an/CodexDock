@@ -98,6 +98,7 @@ function createSnapshot(overrides: Partial<AppSnapshot> = {}): AppSnapshot {
     tokenCostErrorByInstanceId: {},
     runningTokenCostSummary: null,
     runningTokenCostInstanceIds: [],
+    gatewayUsageByAccountId: {},
     ...overrides
   }
 }
@@ -146,7 +147,11 @@ describe('wake scheduler controller', () => {
     await flushAsync()
 
     expect(wakeAccount).toHaveBeenCalledTimes(1)
-    expect(wakeAccount).toHaveBeenCalledWith('a', { model: 'gpt-5.4-mini', prompt: 'ping' })
+    expect(wakeAccount).toHaveBeenCalledWith('a', {
+      model: 'gpt-5.4-mini',
+      prompt: 'ping',
+      source: 'schedule'
+    })
     expect(snapshot.wakeSchedulesByAccountId.a.lastStatus).toBe('success')
     expect(snapshot.wakeSchedulesByAccountId.a.lastTriggeredAt).toBeTruthy()
   })

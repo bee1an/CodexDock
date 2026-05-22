@@ -66,6 +66,9 @@ Usage:
   cdock session list [--instance <id|default>] [--status active|archived] [--project <path>] [--query <text>] [--limit <n>] [--json]
   cdock session remove <session-id|file-path> [--instance <id|default>] [--json]
   cdock usage read [account-id] [--json]
+  cdock wake now [account-id|--all] [--model <model>] [--prompt <text>] [--json]
+  cdock wake auto [account-id|--all] [--json]
+  cdock wake state [account-id] [--json]
   cdock cost read [--refresh] [--json]
   cdock gateway start|stop|status [--json]
   cdock gateway open [--isolated] [--json]
@@ -383,6 +386,16 @@ export function printSettings(settings: AppSettings, quiet: boolean): void {
   console.log(`language=${settings.language}`)
   console.log(`theme=${settings.theme}`)
   console.log(`checkForUpdatesOnStartup=${settings.checkForUpdatesOnStartup}`)
+  console.log(`autoWakeOnStartup=${settings.autoWakeOnStartup === true}`)
+  console.log(`autoWakeTargetMode=${settings.autoWakeTargetMode ?? 'all'}`)
+  console.log(`autoWakeGroupIds=${(settings.autoWakeGroupIds ?? []).join(',')}`)
+  console.log(`autoWakeAccountIds=${(settings.autoWakeAccountIds ?? []).join(',')}`)
+  console.log(`autoWakeIncludeUngrouped=${settings.autoWakeIncludeUngrouped === true}`)
+  console.log(
+    `autoWakeFirstWindowRemainingThresholdPercent=${settings.autoWakeFirstWindowRemainingThresholdPercent ?? 96}`
+  )
+  console.log(`autoWakeResetToleranceMinutes=${settings.autoWakeResetToleranceMinutes ?? 5}`)
+  console.log(`autoWakeCooldownWindowRatio=${settings.autoWakeCooldownWindowRatio ?? 0.1}`)
   console.log(`codexDesktopExecutablePath=${settings.codexDesktopExecutablePath}`)
   console.log(`showLocalMockData=${settings.showLocalMockData !== false}`)
   console.log(
@@ -409,6 +422,34 @@ export function formatSettingsValue(key: keyof AppSettings, settings: AppSetting
 
   if (key === 'preserveChatGptAuthOnDirectProviderOpen') {
     return String(value === true)
+  }
+
+  if (key === 'autoWakeOnStartup') {
+    return String(value === true)
+  }
+
+  if (key === 'autoWakeTargetMode') {
+    return String(value ?? 'all')
+  }
+
+  if ((key === 'autoWakeGroupIds' || key === 'autoWakeAccountIds') && Array.isArray(value)) {
+    return value.join(',')
+  }
+
+  if (key === 'autoWakeIncludeUngrouped') {
+    return String(value === true)
+  }
+
+  if (key === 'autoWakeFirstWindowRemainingThresholdPercent') {
+    return String(value ?? 96)
+  }
+
+  if (key === 'autoWakeResetToleranceMinutes') {
+    return String(value ?? 5)
+  }
+
+  if (key === 'autoWakeCooldownWindowRatio') {
+    return String(value ?? 0.1)
   }
 
   if (key === 'toolbarIconMovable') {
