@@ -152,6 +152,30 @@ describe('CodexAccountStore', () => {
     return new CodexAccountStore(directory, createPlatform())
   }
 
+  it('normalizes imported auth payload tokens with access and session fallbacks', async () => {
+    const store = await createStore()
+    const accessToken = createJwt({
+      email: 'fallback@example.com',
+      sub: 'auth0|fallback',
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-fallback'
+      }
+    })
+
+    const account = await store.importAuthPayload({
+      auth_mode: 'chatgpt',
+      tokens: {
+        access_token: accessToken,
+        session_token: 'session-token-fallback'
+      } as CodexAuthPayload['tokens'] & { session_token: string }
+    })
+    const tokens = await store.getAccountTokens(account.id)
+
+    expect(tokens.accessToken).toBe(accessToken)
+    expect(tokens.idToken).toBe(accessToken)
+    expect(tokens.refreshToken).toBe('session-token-fallback')
+  })
+
   it('persists the reordered account sequence', async () => {
     const store = await createStore()
 

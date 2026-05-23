@@ -327,8 +327,38 @@ function resolveOpenAiAuthStringClaimFromTokens(
   return undefined
 }
 
+function readTokenField(record: JsonRecord, ...keys: string[]): string | undefined {
+  return firstOptionalString(...keys.map((key) => record[key]))
+}
+
+function readAccessTokenField(record: JsonRecord): string | undefined {
+  return readTokenField(record, 'access_token', 'accessToken')
+}
+
+function readIdTokenField(record: JsonRecord, parent?: JsonRecord): string | undefined {
+  return firstOptionalString(
+    record['id_token'],
+    record['idToken'],
+    parent?.['id_token'],
+    parent?.['idToken']
+  )
+}
+
+function readRefreshTokenField(record: JsonRecord, parent?: JsonRecord): string | undefined {
+  return firstOptionalString(
+    record['refresh_token'],
+    record['refreshToken'],
+    record['session_token'],
+    record['sessionToken'],
+    parent?.['refresh_token'],
+    parent?.['refreshToken'],
+    parent?.['session_token'],
+    parent?.['sessionToken']
+  )
+}
+
 function hasTopLevelTokens(record: JsonRecord): boolean {
-  return Boolean(readOptionalString(record['access_token']))
+  return Boolean(readAccessTokenField(record))
 }
 
 function hasNestedTokens(record: JsonRecord): boolean {
@@ -340,7 +370,9 @@ function hasCredentialsRecord(record: JsonRecord): boolean {
   const credentials = asRecord(record['credentials'])
   return Boolean(
     credentials &&
-    (readOptionalString(credentials['access_token']) || readOptionalString(credentials['id_token']))
+    (readAccessTokenField(credentials) ||
+      readIdTokenField(credentials) ||
+      readRefreshTokenField(credentials))
   )
 }
 
@@ -355,7 +387,9 @@ function normalizeChatGptWebSession(record: JsonRecord): JsonRecord {
   const user = asRecord(record['user'])
   const account = asRecord(record['account'])
   return {
-    access_token: record['accessToken'],
+    access_token: readAccessTokenField(record),
+    id_token: readIdTokenField(record),
+    refresh_token: readRefreshTokenField(record),
     expires_at: record['expires'],
     email: user?.['email'],
     chatgpt_user_id: user?.['id'],
@@ -443,13 +477,13 @@ function parseTemplateCredentials(
 
   const label = (field: string): string =>
     options.fieldPrefix ? `${options.fieldPrefix}.${field}` : field
+  const parent = options.parent
   const accessToken = readRequiredString(
-    record['access_token'],
+    readAccessTokenField(record),
     label('access_token'),
     accountIndex
   )
-  const idToken = readOptionalString(record['id_token'])
-  const parent = options.parent
+  const idToken = readIdTokenField(record, parent) ?? accessToken
   const idPayload = decodeJwtPayload(idToken)
   const accessPayload = decodeJwtPayload(accessToken)
   const chatgptAccountId = firstOptionalString(
@@ -482,7 +516,7 @@ function parseTemplateCredentials(
       readOptionalNumber(record['_token_version']) ??
       readOptionalNumber(parent?.['_token_version']),
     access_token: accessToken,
-    refresh_token: firstOptionalString(record['refresh_token'], parent?.['refresh_token']),
+    refresh_token: readRefreshTokenField(record, parent),
     id_token: idToken,
     chatgpt_account_id: chatgptAccountId,
     chatgpt_user_id: firstOptionalString(
@@ -579,9 +613,12 @@ function parseImportAccountRecord(
   index: number,
   exportedAt: string
 ): TemplateAccountRecord {
-  const account = asRecord(value)
+  let account = asRecord(value)
   if (!account) {
     throw new Error(`Template account #${index + 1} is invalid.`)
+  }
+  if (isChatGptWebSession(account)) {
+    account = normalizeChatGptWebSession(account)
   }
 
   let credentials: TemplateCredentialsRecord | undefined
@@ -666,16 +703,17 @@ function parseFlatImportRecord(value: unknown): TemplateFileRecord | null {
     return null
   }
 
-  if (!hasCredentialsRecord(record) && !hasNestedTokens(record) && !hasTopLevelTokens(record)) {
-    if (isChatGptWebSession(record)) {
-      const normalized = normalizeChatGptWebSession(record)
-      const exportedAt = normalizeIsoTimestamp(record['expires']) ?? new Date().toISOString()
-      return {
-        exported_at: exportedAt,
-        proxies: [],
-        accounts: [parseImportAccountRecord(normalized, 0, exportedAt)]
-      }
+  if (isChatGptWebSession(record)) {
+    const normalized = normalizeChatGptWebSession(record)
+    const exportedAt = normalizeIsoTimestamp(record['expires']) ?? new Date().toISOString()
+    return {
+      exported_at: exportedAt,
+      proxies: [],
+      accounts: [parseImportAccountRecord(normalized, 0, exportedAt)]
     }
+  }
+
+  if (!hasCredentialsRecord(record) && !hasNestedTokens(record) && !hasTopLevelTokens(record)) {
     return null
   }
 
@@ -789,17 +827,19 @@ export function buildAuthPayloadFromTemplate(
   account: TemplateAccountRecord,
   exportedAt: string
 ): CodexAuthPayload {
+  const accessToken = readRequiredString(
+    account.credentials?.access_token,
+    'credentials.access_token'
+  )
+
   return {
     auth_mode: 'chatgpt',
     OPENAI_API_KEY: null,
     last_refresh: account.last_refresh ?? exportedAt,
     tokens: {
-      access_token: readRequiredString(
-        account.credentials?.access_token,
-        'credentials.access_token'
-      ),
+      access_token: accessToken,
       refresh_token: readOptionalString(account.credentials?.refresh_token),
-      id_token: readOptionalString(account.credentials?.id_token),
+      id_token: readOptionalString(account.credentials?.id_token) ?? accessToken,
       account_id: readRequiredString(
         account.credentials?.chatgpt_account_id,
         'credentials.chatgpt_account_id'

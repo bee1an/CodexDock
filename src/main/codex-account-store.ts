@@ -36,6 +36,7 @@ import {
   dedupeAccountGroupIds,
   describeError,
   findMatchingAccount,
+  normalizeCodexAuthPayload,
   normalizePersistedState,
   normalizeGroupName,
   normalizeWakeSchedule,
@@ -1155,6 +1156,7 @@ export class CodexAccountStore {
     makeActive: boolean,
     metadata: Partial<Pick<AccountSummary, 'subscriptionExpiresAt'>> = {}
   ): Promise<AccountSummary> {
+    auth = normalizeCodexAuthPayload(auth)
     const state = await this.readState()
     const identity = resolveAccountId(auth)
     const summary = summarizeAuth(auth)

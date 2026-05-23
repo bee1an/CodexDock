@@ -477,6 +477,57 @@ function buildAuthPayloadFromTokenResponse(tokens: TokenEndpointPayload): CodexA
   }
 }
 
+function readOptionalAuthToken(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined
+}
+
+function pickAuthTokenField(
+  tokens: Record<string, unknown> | undefined,
+  ...keys: string[]
+): string | undefined {
+  if (!tokens) {
+    return undefined
+  }
+
+  for (const key of keys) {
+    const value = readOptionalAuthToken(tokens[key])
+    if (value) {
+      return value
+    }
+  }
+
+  return undefined
+}
+
+function normalizeCodexAuthPayload(auth: CodexAuthPayload): CodexAuthPayload {
+  const rawTokens = auth.tokens as Record<string, unknown> | undefined
+  if (!rawTokens) {
+    return auth
+  }
+
+  const accessToken = pickAuthTokenField(rawTokens, 'access_token', 'accessToken')
+  const idToken = pickAuthTokenField(rawTokens, 'id_token', 'idToken') ?? accessToken
+  const refreshToken = pickAuthTokenField(
+    rawTokens,
+    'refresh_token',
+    'refreshToken',
+    'session_token',
+    'sessionToken'
+  )
+  const accountId = pickAuthTokenField(rawTokens, 'account_id', 'accountId')
+
+  return {
+    ...auth,
+    tokens: {
+      ...auth.tokens,
+      access_token: accessToken,
+      refresh_token: refreshToken,
+      id_token: idToken,
+      account_id: accountId
+    }
+  }
+}
+
 export async function refreshCodexAuthPayload(
   auth: CodexAuthPayload,
   platform: CodexPlatformAdapter,
@@ -668,6 +719,7 @@ export {
   encodeFormComponent,
   extractChatGptAccountId,
   findMatchingAccount,
+  normalizeCodexAuthPayload,
   normalizePersistedState,
   normalizeGroupName,
   normalizeWakeSchedule,

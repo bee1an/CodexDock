@@ -58,16 +58,26 @@ describe('parseTemplateFileRecord — ChatGPT Web Session', () => {
     expect(creds.expires_at).toBe('2026-04-15T12:00:00.000Z')
   })
 
-  it('does not include id_token when source has none', () => {
+  it('uses access_token as id_token when source has none', () => {
     const session = createChatGptWebSession()
     const result = parseTemplateFileRecord(JSON.stringify(session))
-    expect(result.accounts[0].credentials.id_token).toBeUndefined()
+    expect(result.accounts[0].credentials.id_token).toBe(
+      result.accounts[0].credentials.access_token
+    )
   })
 
   it('does not include refresh_token when source has none', () => {
     const session = createChatGptWebSession()
     const result = parseTemplateFileRecord(JSON.stringify(session))
     expect(result.accounts[0].credentials.refresh_token).toBeUndefined()
+  })
+
+  it('uses sessionToken as refresh_token when refresh_token is absent', () => {
+    const session = createChatGptWebSession({
+      sessionToken: 'session-token-from-web'
+    })
+    const result = parseTemplateFileRecord(JSON.stringify(session))
+    expect(result.accounts[0].credentials.refresh_token).toBe('session-token-from-web')
   })
 
   it('resolves chatgpt_account_id from JWT when account.id is missing', () => {
@@ -84,13 +94,13 @@ describe('parseTemplateFileRecord — ChatGPT Web Session', () => {
     expect(() => parseTemplateFileRecord(JSON.stringify(session))).toThrow()
   })
 
-  it('throws when both account and user are missing (not recognized as web session)', () => {
+  it('throws when accessToken has no account identity', () => {
     const session = {
       accessToken: 'eyJhbGciOiJub25lIn0.eyJ0ZXN0Ijp0cnVlfQ.sig',
       expires: '2026-04-15T12:00:00.000Z'
     }
     expect(() => parseTemplateFileRecord(JSON.stringify(session))).toThrow(
-      'Invalid account template file.'
+      'missing required field: chatgpt_account_id'
     )
   })
 
@@ -127,7 +137,7 @@ describe('buildAuthPayloadFromTemplate — ChatGPT Web Session', () => {
     expect(payload.tokens?.access_token).toBeTruthy()
     expect(payload.tokens?.account_id).toBe('acct-xyz789')
     expect(payload.tokens?.refresh_token).toBeUndefined()
-    expect(payload.tokens?.id_token).toBeUndefined()
+    expect(payload.tokens?.id_token).toBe(payload.tokens?.access_token)
   })
 
   it('sets last_refresh to exported_at when account has no last_refresh', () => {
@@ -137,5 +147,38 @@ describe('buildAuthPayloadFromTemplate — ChatGPT Web Session', () => {
     const payload = buildAuthPayloadFromTemplate(account, parsed.exported_at)
 
     expect(payload.last_refresh).toBe('2026-04-15T12:00:00.000Z')
+  })
+
+  it('falls back to access_token and session_token for grouped token records', () => {
+    const accessToken = createJwt({
+      exp: Math.floor(new Date('2026-04-15T12:00:00.000Z').getTime() / 1000),
+      sub: 'auth0|grouped-user',
+      'https://api.openai.com/auth': {
+        chatgpt_account_id: 'acct-grouped-fallback'
+      },
+      'https://api.openai.com/profile': {
+        email: 'grouped@example.com'
+      }
+    })
+    const parsed = parseTemplateFileRecord(
+      JSON.stringify({
+        exported_at: '2026-04-15T12:00:00.000Z',
+        accounts: [
+          {
+            tokens: {
+              access_token: accessToken,
+              session_token: 'session-token-grouped'
+            }
+          }
+        ]
+      })
+    )
+    const account = parsed.accounts[0]
+    const payload = buildAuthPayloadFromTemplate(account, parsed.exported_at)
+
+    expect(account.credentials.id_token).toBe(accessToken)
+    expect(account.credentials.refresh_token).toBe('session-token-grouped')
+    expect(payload.tokens?.id_token).toBe(accessToken)
+    expect(payload.tokens?.refresh_token).toBe('session-token-grouped')
   })
 })
