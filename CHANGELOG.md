@@ -2,6 +2,14 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.12 - 2026-05-24
+
+This patch release improves Codex account import compatibility for session and token-only payloads.
+
+- Fixed Codex account imports so missing `id_token` values fall back to the provided `access_token`, matching official session payload behavior.
+- Added `session_token`/`sessionToken` fallback handling for missing `refresh_token` values across template and direct auth payload imports.
+- Kept desktop and `cdock account import` behavior aligned through shared token normalization and expanded tests for access/session token fallback cases.
+
 ## 0.4.11 - 2026-05-22
 
 This release adds gateway-recorded usage, smart wake automation, and broader account and gateway controls across the desktop app and CLI.
