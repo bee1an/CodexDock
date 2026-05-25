@@ -10,6 +10,8 @@ import type {
   AppSnapshot,
   AppUpdateState,
   AutoWakeRateLimitsResult,
+  BatchRefreshProgressEvent,
+  BatchRefreshSummary,
   CopyCodexSessionToProviderInput,
   CopyCodexSessionToProviderResult,
   CopyCodexSkillInput,
@@ -92,6 +94,10 @@ interface CodexDesktopApi {
   updateAccountHealth: (accountId: string, input: UpdateAccountHealthInput) => Promise<AppSnapshot>
   getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   refreshAccountTokens: (accountId: string) => Promise<AccountTokenRefreshResult>
+  refreshAccountTokensBatch: (accountIds: string[]) => Promise<BatchRefreshSummary>
+  onRefreshAccountTokensBatchProgress: (
+    callback: (event: BatchRefreshProgressEvent) => void
+  ) => () => void
   getAccountWakeSchedule: (accountId: string) => Promise<AccountWakeSchedule | null>
   updateAccountWakeSchedule: (
     accountId: string,

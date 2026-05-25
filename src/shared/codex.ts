@@ -434,6 +434,25 @@ export interface AccountTokenRefreshResult {
   error: string | null
 }
 
+export interface BatchRefreshProgressEvent {
+  batchId: string
+  accountId: string
+  result: AccountTokenRefreshResult
+  doneCount: number
+  total: number
+  durationMs: number
+}
+
+export interface BatchRefreshSummary {
+  batchId: string
+  total: number
+  successCount: number
+  failureCount: number
+  results: AccountTokenRefreshResult[]
+  startedAt: string
+  finishedAt: string
+}
+
 export interface CurrentSessionSummary {
   email?: string
   name?: string

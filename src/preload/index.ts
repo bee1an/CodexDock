@@ -10,6 +10,8 @@ import type {
   AppSnapshot,
   AppUpdateState,
   AutoWakeRateLimitsResult,
+  BatchRefreshProgressEvent,
+  BatchRefreshSummary,
   CopyCodexSessionToProviderInput,
   CopyCodexSessionToProviderResult,
   CopyCodexSkillInput,
@@ -97,6 +99,19 @@ const codexApp = {
     ipcRenderer.invoke('codex:get-account-tokens', accountId),
   refreshAccountTokens: (accountId: string): Promise<AccountTokenRefreshResult> =>
     ipcRenderer.invoke('codex:refresh-account-tokens', accountId),
+  refreshAccountTokensBatch: (accountIds: string[]): Promise<BatchRefreshSummary> =>
+    ipcRenderer.invoke('codex:refresh-account-tokens-batch', accountIds),
+  onRefreshAccountTokensBatchProgress: (callback: (event: BatchRefreshProgressEvent) => void) => {
+    const listener = (
+      _event: Electron.IpcRendererEvent,
+      payload: BatchRefreshProgressEvent
+    ): void => callback(payload)
+    ipcRenderer.on('codex:refresh-account-tokens-batch-progress', listener)
+
+    return (): void => {
+      ipcRenderer.removeListener('codex:refresh-account-tokens-batch-progress', listener)
+    }
+  },
   getAccountWakeSchedule: (accountId: string): Promise<AccountWakeSchedule | null> =>
     ipcRenderer.invoke('codex:get-account-wake-schedule', accountId),
   updateAccountWakeSchedule: (accountId: string, input: UpdateAccountWakeScheduleInput) =>

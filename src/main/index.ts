@@ -13,6 +13,7 @@ import {
 import { promises as fs } from 'node:fs'
 import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
+import { randomUUID } from 'node:crypto'
 import { join } from 'path'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -781,6 +782,19 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:refresh-account-tokens', (_, accountId: string) =>
     codexServices.accounts.refreshTokens(accountId)
   )
+  ipcMain.handle('codex:refresh-account-tokens-batch', async (_, accountIds: string[]) => {
+    const batchId = randomUUID()
+    const summary = await codexServices.accounts.refreshTokensBatch(accountIds, {
+      batchId,
+      onProgress: (event) => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('codex:refresh-account-tokens-batch-progress', event)
+        }
+      }
+    })
+    await refreshTrayTitle()
+    return summary
+  })
   ipcMain.handle('codex:get-account-wake-schedule', (_, accountId: string) =>
     codexServices.accounts.getWakeSchedule(accountId)
   )

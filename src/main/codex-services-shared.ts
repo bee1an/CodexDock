@@ -15,6 +15,8 @@ import {
   type AccountSummary,
   type AccountGroup,
   type AccountTokenRefreshResult,
+  type BatchRefreshProgressEvent,
+  type BatchRefreshSummary,
   type AccountTokensDetail,
   type AccountTransferFormat,
   type AccountWakeSchedule,
@@ -414,6 +416,13 @@ export interface CodexServices {
     ): Promise<AppSnapshot>
     get(accountId: string): Promise<AccountSummary>
     refreshTokens(accountId: string): Promise<AccountTokenRefreshResult>
+    refreshTokensBatch(
+      accountIds: string[],
+      options: {
+        batchId: string
+        onProgress?: (event: BatchRefreshProgressEvent) => void
+      }
+    ): Promise<BatchRefreshSummary>
   }
   groups: {
     create(name: string): Promise<AppSnapshot>

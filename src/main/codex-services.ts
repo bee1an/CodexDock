@@ -25,6 +25,7 @@ import {
   type CodexInstanceSummary,
   type AccountTokenRefreshLogEntry,
   type AccountTokenRefreshResult,
+  type BatchRefreshSummary,
   autoWakeTargetAccountIds,
   canAutoWakeAccount,
   canRunWakeRequest,
@@ -65,6 +66,7 @@ export type { CodexServices, CreateCodexServicesOptions } from './codex-services
 export { resolveWindowsCodexDesktopExecutable } from './codex-launcher'
 
 const WAKE_CONCURRENCY_LIMIT = 6
+const REFRESH_TOKENS_BATCH_CONCURRENCY = 6
 
 async function mapWithConcurrencyLimit<T, R>(
   items: T[],
@@ -86,6 +88,10 @@ async function mapWithConcurrencyLimit<T, R>(
   )
 
   return results
+}
+
+export const __testing__ = {
+  mapWithConcurrencyLimit
 }
 
 export function createCodexServices(options: CreateCodexServicesOptions): CodexServices {
@@ -590,6 +596,48 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
             error: msg
           }
         }
+      },
+      refreshTokensBatch: async (accountIds, { batchId, onProgress }) => {
+        const uniqueIds = Array.from(new Set(accountIds))
+        const total = uniqueIds.length
+        const startedAt = new Date().toISOString()
+        const results: AccountTokenRefreshResult[] = []
+        let doneCount = 0
+
+        await mapWithConcurrencyLimit(
+          uniqueIds,
+          REFRESH_TOKENS_BATCH_CONCURRENCY,
+          async (accountId, index) => {
+            const startedAtMs = performance.now()
+            const result = await services.accounts.refreshTokens(accountId)
+            const durationMs = Math.max(0, Math.round(performance.now() - startedAtMs))
+            results[index] = result
+            doneCount += 1
+            try {
+              onProgress?.({
+                batchId,
+                accountId,
+                result,
+                doneCount,
+                total,
+                durationMs
+              })
+            } catch {
+              // progress callback failures must not break the batch
+            }
+          }
+        )
+
+        const summary: BatchRefreshSummary = {
+          batchId,
+          total,
+          successCount: results.filter((r) => r.success).length,
+          failureCount: results.filter((r) => !r.success).length,
+          results,
+          startedAt,
+          finishedAt: new Date().toISOString()
+        }
+        return summary
       }
     },
     groups: {
