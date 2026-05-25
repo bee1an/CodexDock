@@ -48,9 +48,14 @@ function resolvePlanType(
     return rateLimits.planType
   }
 
-  const idPayload = decodeJwtPayload(auth.tokens?.id_token)
-  const authClaim = resolveOpenAiAuthClaim(idPayload)
-  return typeof authClaim.chatgpt_plan_type === 'string' ? authClaim.chatgpt_plan_type : null
+  for (const token of [auth.tokens?.id_token, auth.tokens?.access_token]) {
+    const authClaim = resolveOpenAiAuthClaim(decodeJwtPayload(token))
+    if (typeof authClaim.chatgpt_plan_type === 'string') {
+      return authClaim.chatgpt_plan_type
+    }
+  }
+
+  return null
 }
 
 function resolveChatGptUserId(auth: CodexAuthPayload): string | undefined {
@@ -112,6 +117,10 @@ function resolveExportName(account: AccountSummary): string {
   return account.email ?? account.name ?? account.accountId ?? account.id
 }
 
+function resolveExportIdToken(auth: CodexAuthPayload, accessToken: string): string {
+  return readOptionalString(auth.tokens?.id_token) ?? accessToken
+}
+
 export function buildTemplateAccountExport(
   account: AccountSummary,
   auth: CodexAuthPayload,
@@ -119,10 +128,10 @@ export function buildTemplateAccountExport(
   exportedAt: string
 ): TemplateAccountRecord {
   const accessToken = readRequiredString(auth.tokens?.access_token, 'access_token')
-  const idToken = readRequiredString(auth.tokens?.id_token, 'id_token')
+  const idToken = resolveExportIdToken(auth, accessToken)
   const refreshToken = readOptionalString(auth.tokens?.refresh_token)
   const accountId = resolveChatGptAccountIdFromTokens(
-    auth.tokens?.id_token,
+    idToken,
     auth.tokens?.access_token,
     auth.tokens?.account_id ?? account.accountId
   )
@@ -191,9 +200,9 @@ function buildResolvedExportAccount(
   exportedAt: string
 ): ResolvedExportAccount {
   const accessToken = readRequiredString(source.auth.tokens?.access_token, 'access_token')
-  const idToken = readRequiredString(source.auth.tokens?.id_token, 'id_token')
+  const idToken = resolveExportIdToken(source.auth, accessToken)
   const accountId = resolveChatGptAccountIdFromTokens(
-    source.auth.tokens?.id_token,
+    idToken,
     source.auth.tokens?.access_token,
     source.auth.tokens?.account_id ?? source.account.accountId
   )

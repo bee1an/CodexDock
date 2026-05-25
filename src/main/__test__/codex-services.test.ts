@@ -3158,6 +3158,62 @@ describe('createCodexServices', () => {
     expect(exported.accounts[0]?.credentials.chatgpt_account_id).toBe('acct-a')
   })
 
+  it('exports legacy accounts without id_token by falling back to access_token', async () => {
+    const env = await createEnvironment()
+    const services = createCodexServices({
+      userDataPath: env.userDataPath,
+      defaultWorkspacePath: env.workspacePath,
+      platform: createPlatform()
+    })
+
+    await writeGlobalAuth(env.globalAuthPath, createAuthPayload('acct-a', 'a@example.com'))
+    await services.accounts.importCurrent()
+
+    const statePath = join(env.userDataPath, 'codex-accounts.json')
+    const persistedState = JSON.parse(await readFile(statePath, 'utf8')) as {
+      accounts: Array<{
+        authPayload: {
+          mode: 'plain'
+          value: string
+        }
+      }>
+    }
+    const storedAuth = JSON.parse(persistedState.accounts[0]!.authPayload.value) as {
+      tokens: {
+        access_token: string
+        id_token?: string
+      }
+    }
+    const accessToken = storedAuth.tokens.access_token
+    delete storedAuth.tokens.id_token
+    persistedState.accounts[0]!.authPayload.value = JSON.stringify(storedAuth)
+    await writeFile(statePath, `${JSON.stringify(persistedState, null, 2)}\n`, 'utf8')
+
+    const codexdock = JSON.parse(await services.accounts.exportToTemplate()) as {
+      accounts: Array<{ credentials: { access_token: string; id_token: string } }>
+    }
+    expect(codexdock.accounts[0]?.credentials.access_token).toBe(accessToken)
+    expect(codexdock.accounts[0]?.credentials.id_token).toBe(accessToken)
+
+    const cockpitTools = JSON.parse(
+      await services.accounts.exportToTemplate(undefined, 'cockpit_tools')
+    ) as Array<{ tokens: { access_token: string; id_token: string } }>
+    expect(cockpitTools[0]?.tokens.access_token).toBe(accessToken)
+    expect(cockpitTools[0]?.tokens.id_token).toBe(accessToken)
+
+    const sub2api = JSON.parse(await services.accounts.exportToTemplate(undefined, 'sub2api')) as {
+      accounts: Array<{ credentials: { access_token: string; id_token: string } }>
+    }
+    expect(sub2api.accounts[0]?.credentials.access_token).toBe(accessToken)
+    expect(sub2api.accounts[0]?.credentials.id_token).toBe(accessToken)
+
+    const cliproxyapi = JSON.parse(
+      await services.accounts.exportToTemplate(undefined, 'cliproxyapi')
+    ) as { access_token: string; id_token: string }
+    expect(cliproxyapi.access_token).toBe(accessToken)
+    expect(cliproxyapi.id_token).toBe(accessToken)
+  })
+
   it('exports cockpit tools compatible payloads', async () => {
     const env = await createEnvironment()
     const services = createCodexServices({
