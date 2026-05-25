@@ -1,0 +1,270 @@
+::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-old(root) {
+    z-index: 0;
+  }
+
+  ::view-transition-new(root) {
+    z-index: 1;
+  }
+
+  .app-shell {
+    position: relative;
+    isolation: isolate;
+    background: var(--color-snow);
+  }
+
+  .mac-inactive-traffic-lights {
+    position: fixed;
+    top: 18px;
+    left: 16px;
+    z-index: 100;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    pointer-events: none;
+  }
+
+  .mac-inactive-traffic-lights span {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 12px;
+    border-radius: 999px;
+    background: #6d716c;
+    box-shadow: none;
+    filter: none;
+    opacity: 1;
+  }
+
+  .theme-workspace {
+    background: var(--color-snow) !important;
+    box-shadow: none;
+  }
+
+  .theme-surface {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
+    background: var(--panel-strong) !important;
+    box-shadow: var(--elevation-2) !important;
+  }
+
+  .theme-surface[role='dialog']),
+  .wake-dialog-panel {
+    border-radius: 0.75rem !important;
+    border-color: var(--line-strong) !important;
+    background: var(--dialog-bg) !important;
+    box-shadow: var(--dialog-shadow) !important;
+  }
+
+  .theme-import-method-card {
+    border-color: var(--line-strong) !important;
+    background: var(--surface-soft) !important;
+    box-shadow: none;
+    transition:
+      background-color 140ms ease,
+      border-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .theme-import-method-card:hover),
+  .theme-import-method-card:focus-visible {
+    border-color: var(--color-carbon) !important;
+    background: var(--surface-hover) !important;
+    box-shadow: none;
+  }
+
+  .wake-dialog-backdrop {
+    background: color-mix(in srgb, black 34%, transparent) !important;
+  }
+
+  .theme-toolbar),
+  .theme-soft-panel {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
+    background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)) !important;
+    box-shadow: none;
+  }
+
+  .workspace-topbar {
+    position: relative;
+    z-index: 1;
+    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 74%, transparent);
+    background: color-mix(in srgb, var(--color-fog) 78%, var(--color-snow));
+    box-shadow:
+      0 1px 0 var(--edge-light) inset,
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 22%, transparent);
+  }
+
+  .theme-view-toggle-active {
+    box-shadow: none;
+  }
+
+  .theme-view-toggle-active {
+    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent) !important;
+    background: var(--panel-strong) !important;
+  }
+
+  .theme-account-row {
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0;
+    background: transparent !important;
+    box-shadow: none;
+    position: relative;
+  }
+
+  .theme-account-row::before),
+  .theme-account-row::after {
+    content: none !important;
+  }
+
+  .theme-account-row + .theme-account-row::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: 0.75rem;
+    left: 3.25rem;
+    height: 1px;
+    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
+    pointer-events: none;
+  }
+
+  .theme-account-row:has(.theme-checkbox-input:checked) {
+    background: var(--surface-selected) !important;
+  }
+
+  .theme-account-selector),
+  .theme-workbench-chevron),
+  .theme-workbench-summary-pill),
+  .theme-selection-group-button),
+  .theme-selection-export {
+    box-shadow: none;
+  }
+
+  .theme-workbench-toolbar {
+    border-color: color-mix(in srgb, var(--line-strong) 64%, transparent) !important;
+    background: transparent !important;
+    box-shadow: none;
+  }
+
+  .theme-filter-chip-idle {
+    box-shadow: none;
+  }
+
+  .theme-filter-chip-active {
+    background: var(--color-carbon) !important;
+    color: var(--color-snow) !important;
+    box-shadow: none;
+  }
+
+  .scroll-row .theme-soft-panel {
+    border-radius: 0.34rem !important;
+    background: color-mix(in srgb, var(--panel-strong) 58%, var(--surface-soft)) !important;
+  }
+
+  .theme-version-pill),
+  .theme-plan-neutral),
+  .theme-plan-plus),
+  .theme-plan-pro),
+  .theme-plan-team),
+  .theme-plan-enterprise),
+  .theme-wake-schedule-pill),
+  .theme-tag-assigned {
+    border-radius: 0.28rem !important;
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 62%, transparent) inset;
+  }
+
+  .theme-provider-card),
+  .theme-tag-manager-card {
+    border: 0 !important;
+    outline: 0 !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    box-shadow: none;
+    position: relative;
+  }
+
+  .theme-provider-card::before),
+  .theme-provider-card::after {
+    content: none !important;
+  }
+
+  .theme-tag-empty),
+  .theme-tag-picker-surface {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-snow)) !important;
+    box-shadow: none;
+  }
+
+  .theme-tag-manager-card:hover {
+    background: var(--surface-hover) !important;
+  }
+
+  .theme-select),
+  .theme-provider-input),
+  .theme-tag-input),
+  .wake-dialog-field {
+    border-color: color-mix(in srgb, var(--line-strong) 70%, transparent) !important;
+    background: var(--panel-strong) !important;
+    box-shadow: var(--input-shadow);
+  }
+
+  .theme-primary-button {
+    box-shadow: var(--control-shadow) !important;
+  }
+
+  .theme-ghost-button),
+  .theme-menu-choice-active {
+    box-shadow: var(--control-shadow);
+  }
+
+  .text-muted {
+    color: var(--ink-soft);
+  }
+
+  .text-muted-strong {
+    color: var(--ink-soft-strong);
+  }
+
+  .text-faint {
+    color: var(--ink-faint);
+  }
+
+  .border-soft {
+    border-color: var(--color-arctic-mist);
+  }
+
+  @keyframes status-dot-breath {
+    0%,
+    100% {
+      opacity: 0.62;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  @keyframes progress-shimmer {
+    0% {
+      background-position: 200% 0;
+    }
+    100% {
+      background-position: -200% 0;
+    }
+  }
+
+  .theme-status-active),
+  .gateway-status-pill-running span:first-child),
+  .theme-provider-status {
+    animation: status-dot-breath 1.6s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce {
+    .theme-status-active),
+    .gateway-status-pill-running span:first-child),
+    .theme-provider-status {
+      animation: none;
+    }
+  }

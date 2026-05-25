@@ -1,0 +1,330 @@
+.gateway-container {
+    background: transparent;
+  }
+
+  .gateway-toolbar {
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 16%, transparent);
+  }
+
+  .gateway-title-icon,
+  .gateway-section-icon,
+  .gateway-config-icon,
+  .gateway-config-badge,
+  .gateway-config-field,
+  .gateway-metric-card,
+  .gateway-metrics-grid {
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+  }
+
+  .gateway-title-icon {
+    color: var(--ink-soft-strong);
+    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 58%, transparent) inset;
+  }
+
+  .gateway-panel {
+    background: color-mix(in srgb, var(--panel-strong) 92%, var(--surface-soft));
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 46%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 14%, transparent);
+  }
+
+  .gateway-config-panel {
+    min-height: 100%;
+  }
+
+  .gateway-config-header {
+    border-color: color-mix(in srgb, var(--line-strong) 74%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 66%, transparent);
+  }
+
+  .gateway-section-icon,
+  .gateway-config-icon {
+    color: var(--ink-soft-strong);
+    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+  }
+
+  .gateway-config-field {
+    background: color-mix(in srgb, var(--panel-strong) 76%, var(--surface-soft));
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 48%, transparent),
+      0 0 0 1px color-mix(in srgb, var(--edge-dark) 10%, transparent);
+  }
+
+  .gateway-config-value {
+    background: color-mix(in srgb, var(--panel-strong) 90%, transparent);
+    min-height: 3rem;
+  }
+
+  .gateway-config-code {
+    display: block;
+    padding: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--color-carbon);
+    line-height: 1.2;
+  }
+
+  .gateway-metric-card {
+    min-width: 0;
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
+      0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+    transition:
+      border-color 140ms ease,
+      background-color 140ms ease,
+      box-shadow 140ms ease;
+  }
+
+  .gateway-metric-card:hover {
+    border-color: color-mix(in srgb, var(--line-strong) 92%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 100%, transparent);
+    box-shadow:
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 64%, transparent),
+      0 2px 6px color-mix(in srgb, var(--edge-dark) 18%, transparent);
+  }
+
+  .gateway-metrics-grid {
+    background: color-mix(in srgb, var(--surface-soft) 50%, transparent);
+  }
+
+  .gateway-status-pill {
+    border-color: var(--color-arctic-mist);
+    background: var(--surface-soft);
+    color: var(--ink-soft-strong);
+  }
+
+  .gateway-status-pill-running span:first-child {
+    background: var(--success);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 14%, transparent);
+  }
+
+  .gateway-status-pill-idle span:first-child {
+    background: var(--ink-faint);
+  }
+
+  .gateway-error {
+    border-color: color-mix(in srgb, var(--danger) 30%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--danger) 8%, transparent);
+  }
+
+  .gateway-port-conflict {
+    border-color: color-mix(in srgb, var(--warn) 35%, transparent);
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+  }
+
+  .gateway-port-conflict-icon {
+    color: var(--warn);
+  }
+
+  .gateway-port-conflict-text {
+    color: color-mix(in srgb, var(--ink) 85%, var(--warn));
+  }
+
+  .gateway-divide {
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+  }
+
+  .gateway-table-container {
+    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+  }
+
+  .account-usage-chart-frame {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 96%, transparent);
+    box-shadow: inset 0 1px 0 color-mix(in srgb, var(--edge-light) 40%, transparent);
+  }
+
+  .account-usage-chart-scroll {
+    max-height: 360px;
+    scrollbar-gutter: stable;
+  }
+
+  .account-usage-chart-canvas {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .account-usage-chart-canvas canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+  }
+
+  .account-usage-tooltip {
+    max-width: min(16rem, calc(100% - 1rem));
+    border-color: color-mix(in srgb, var(--line-strong) 78%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 98%, transparent);
+    box-shadow:
+      0 14px 36px color-mix(in srgb, var(--color-carbon) 14%, transparent),
+      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 42%, transparent);
+  }
+
+  .gateway-logs-header,
+  .gateway-log-filters {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+  }
+
+  .gateway-logs-header {
+    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  }
+
+  .gateway-log-filters {
+    background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft));
+  }
+
+  .gateway-table-head {
+    background: color-mix(in srgb, var(--surface-soft) 92%, var(--panel-strong));
+    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 78%, transparent);
+    backdrop-filter: blur(10px);
+  }
+
+  .gateway-table-row {
+    background: color-mix(in srgb, var(--panel-strong) 98%, transparent);
+  }
+
+  .gateway-table-row:nth-child(even) {
+    background: color-mix(in srgb, var(--surface-soft) 22%, var(--panel-strong));
+  }
+
+  .gateway-table-row:hover {
+    background: var(--surface-hover);
+    box-shadow: inset 3px 0 0 color-mix(in srgb, var(--ink-soft-strong) 72%, transparent);
+  }
+
+  .gateway-log-detail {
+    border-color: color-mix(in srgb, var(--line-strong) 64%, transparent);
+    background: transparent;
+    border-left: 3px solid color-mix(in srgb, var(--color-danger) 56%, transparent);
+  }
+
+  .gateway-method-pill,
+  .gateway-status-code {
+    display: inline-flex;
+    min-width: 2.75rem;
+    align-items: center;
+    justify-content: center;
+    border-color: var(--color-arctic-mist);
+    background: var(--surface-soft);
+  }
+
+  .gateway-empty-state {
+    background: color-mix(in srgb, var(--surface-soft) 36%, transparent);
+  }
+
+  .gateway-mappings-header {
+    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 62%, transparent);
+  }
+
+  .gateway-mapping-table {
+    background: color-mix(in srgb, var(--panel-strong) 76%, var(--surface-soft));
+    overflow: hidden;
+  }
+
+  .gateway-mapping-grid {
+    --gateway-mapping-action-width: 6.75rem;
+
+    display: grid;
+    grid-template-columns:
+      minmax(0, 1fr) auto minmax(0, 1fr)
+      var(--gateway-mapping-action-width);
+    align-items: center;
+    column-gap: 0.5rem;
+  }
+
+  .gateway-mapping-action-cell {
+    display: flex;
+    min-width: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .gateway-mapping-action-cell-full .app-button {
+    width: 100%;
+  }
+
+  .gateway-mapping-row {
+    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 36%, transparent);
+    transition: background-color 140ms ease;
+  }
+
+  .gateway-mapping-row:last-child {
+    border-bottom: none;
+  }
+
+  .gateway-mapping-row:hover {
+    background: var(--surface-hover);
+  }
+
+  .gateway-mapping-code {
+    background: none;
+    padding: 0;
+    border-radius: 0;
+    font-weight: 400;
+  }
+
+  .gateway-method-get {
+    border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--success) 8%, transparent);
+    color: var(--success);
+  }
+
+  .gateway-method-system {
+    border-color: var(--color-arctic-mist);
+    background: color-mix(in srgb, var(--surface-soft) 80%, transparent);
+    color: var(--ink-soft-strong);
+  }
+
+  .gateway-method-write {
+    border-color: color-mix(in srgb, var(--color-carbon) 18%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--color-carbon) 7%, transparent);
+    color: var(--accent-deep);
+  }
+
+  .gateway-status-success {
+    border-color: color-mix(in srgb, var(--success) 22%, var(--color-arctic-mist));
+    background: transparent;
+    color: var(--success);
+  }
+
+  .gateway-status-warn {
+    border-color: color-mix(in srgb, var(--warn) 24%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--warn) 10%, transparent);
+    color: var(--warn);
+  }
+
+  .gateway-status-error {
+    border-color: color-mix(in srgb, var(--danger) 24%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+
+  .gateway-errors-badge {
+    border-color: color-mix(in srgb, var(--danger) 24%, var(--color-arctic-mist));
+    background: color-mix(in srgb, var(--danger) 10%, transparent);
+    color: var(--danger);
+  }
+
+  .gateway-latency-warn {
+    color: var(--warn);
+  }
+
+  .gateway-latency-error {
+    color: var(--danger);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .gateway-table-row {
+      transition-duration: 0ms;
+    }
+
+    .gateway-spinner {
+      animation: none !important;
+    }
+  }

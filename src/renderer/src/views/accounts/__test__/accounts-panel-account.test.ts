@@ -6,6 +6,7 @@ import {
   accountGroupsForDisplay,
   availableGroupsForAccount,
   buildPersistedUsageSortOrder,
+  eligibleAccountsForRefresh,
   filterChipLabel,
   filterAccountsBySearch,
   groupFilterLabel,
@@ -172,6 +173,43 @@ describe('accounts panel account helpers', () => {
     expect(
       sortAccountsByUsage(sortableAccounts, usageByAccountId, 'secondary', 'desc').map((a) => a.id)
     ).toEqual(['acct-a', 'acct-b', 'acct-c'])
+  })
+
+  it('sorts accounts by access token expiry with missing values trailing', () => {
+    const sortableAccounts = [
+      { ...accounts[0], id: 'acct-late', accessTokenExpiresAt: 3_000 },
+      { ...accounts[0], id: 'acct-soon', accessTokenExpiresAt: 1_000 },
+      { ...accounts[0], id: 'acct-mid', accessTokenExpiresAt: 2_000 },
+      { ...accounts[0], id: 'acct-none' }
+    ]
+
+    expect(
+      sortAccountsByUsage(sortableAccounts, {}, 'accessTokenExpiry', 'asc').map((a) => a.id)
+    ).toEqual(['acct-soon', 'acct-mid', 'acct-late', 'acct-none'])
+    expect(
+      sortAccountsByUsage(sortableAccounts, {}, 'accessTokenExpiry', 'desc').map((a) => a.id)
+    ).toEqual(['acct-late', 'acct-mid', 'acct-soon', 'acct-none'])
+  })
+
+  it('selects accounts whose access token expires within the threshold', () => {
+    const now = 10_000
+    const candidates = [
+      { ...accounts[0], id: 'acct-soon', accessTokenExpiresAt: 11_000 }, // +1000ms
+      { ...accounts[0], id: 'acct-edge', accessTokenExpiresAt: 13_000 }, // exactly threshold
+      { ...accounts[0], id: 'acct-far', accessTokenExpiresAt: 20_000 }, // beyond threshold
+      { ...accounts[0], id: 'acct-expired', accessTokenExpiresAt: 5_000 }, // already expired
+      { ...accounts[0], id: 'acct-unknown' } // accessTokenExpiresAt undefined
+    ]
+
+    expect(eligibleAccountsForRefresh(candidates, 3_000, now).map((a) => a.id)).toEqual([
+      'acct-soon',
+      'acct-edge',
+      'acct-expired'
+    ])
+    expect(eligibleAccountsForRefresh(candidates, 0, now).map((a) => a.id)).toEqual([
+      'acct-expired'
+    ])
+    expect(eligibleAccountsForRefresh([], 3_000, now)).toEqual([])
   })
 
   it('builds persisted sort payloads for all accounts and group searches', () => {

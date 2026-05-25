@@ -366,7 +366,7 @@
             title={copy.forceRefreshTokensButton}
             ariaLabel={copy.forceRefreshTokensButton}
           >
-            <span class="i-lucide-rotate-cw h-3.5 w-3.5"></span>
+            <span class="i-lucide-key-round h-3.5 w-3.5"></span>
           </AppButton>
           <AppButton
             variant="ghost"

@@ -1,46 +1,41 @@
 <script lang="ts">
   import { onMount } from 'svelte'
   import brandMark from './assets/brand-mark.png'
-  import WorkspaceShell from './shell/WorkspaceShell.svelte'
-  import AppButton from '$lib/ui/AppButton.svelte'
-  import AppDialog from '$lib/ui/AppDialog.svelte'
-  import AppInput from '$lib/ui/AppInput.svelte'
-  import { reveal, toastReveal } from '$lib/motion/gsap-motion'
-  import EditAccountTokensDialog from './dialogs/EditAccountTokensDialog.svelte'
-  import RefreshAccountTokensDialog from './dialogs/RefreshAccountTokensDialog.svelte'
+  import { reveal } from '$lib/motion/gsap-motion'
   import HeroPanel from './shell/HeroPanel.svelte'
   import TrayPanel from './shell/TrayPanel.svelte'
-  import WakeDialog from './dialogs/WakeDialog.svelte'
-  import WakeAllDialog from './dialogs/WakeAllDialog.svelte'
+  import AccountTransferDialogsHost from './app/AccountTransferDialogsHost.svelte'
+  import AccountTokensDialogsHost from './app/AccountTokensDialogsHost.svelte'
+  import WakeDialogsHost from './app/WakeDialogsHost.svelte'
+  import LocalGatewayActionsHost from './app/LocalGatewayActionsHost.svelte'
+  import AccountActionsHost from './app/AccountActionsHost.svelte'
+  import WorkspaceShellHost from './app/WorkspaceShellHost.svelte'
+  import PageErrorToast from './app/PageErrorToast.svelte'
   import {
-    accountEmail,
-    accountLabel,
     accountScopedRecord,
-    loginTone,
     messages,
     pollingOptions,
     preserveAccountScopedRecord,
     statusBarAccounts,
     usageErrorKind
   } from '$lib/view/app-view'
-  import { isValidWakeScheduleTime, normalizeWakeScheduleTimes } from '$lib/view/wake-schedule'
+  import { createDefaultSnapshot } from './app/default-snapshot'
+  import { applyTheme, applyThemeWithRipple, type ThemeTransitionOrigin } from './app/theme'
 
   import type {
     AppLanguage,
     AppMeta,
     AppTheme,
     AppUpdateState,
-    AccountWakeSchedule,
     AccountGroup,
-    AccountTransferFormat,
     AccountRateLimits,
     AccountSummary,
     AppSettings,
     AppSnapshot,
     CustomProviderDetail,
     CreateCustomProviderInput,
-    LocalGatewayModelMapping,
     LoginEvent,
+    LocalGatewayModelMapping,
     LoginMethod,
     PortOccupant,
     ProbeProviderModelsInput,
@@ -48,131 +43,66 @@
     StatsDisplaySettings,
     TagVisibilitySettings,
     UpdateAccountHealthInput,
-    UpdateAccountWakeScheduleInput,
-    WakeAccountRequestResult,
-    WakeAccountRateLimitsInput,
     UpdateCustomProviderInput
   } from '../../shared/codex'
   import {
-    accountTransferFormats,
-    defaultWakeModel,
-    defaultStatsDisplaySettings,
-    formatRelativeReset,
-    isFreePlan,
     normalizeStatsDisplaySettings,
     resolveBestAccount,
-    shouldAutoPollUsage,
-    supportsWeeklyQuota
+    shouldAutoPollUsage
   } from '../../shared/codex'
 
-  type WakeDialogStatus = 'idle' | 'running' | 'success' | 'skipped' | 'error'
-  type WakeDialogTab = 'session' | 'schedule'
-  type WakeAllSubmitOptions = {
-    forceWake?: boolean
-    selectedCount?: number
-  }
-  type TransitionMotionState = 'closed' | 'open' | 'closing'
-  type ThemeTransitionOrigin = {
-    x?: number
-    y?: number
-    target?: HTMLElement | null
-  }
-  type DocumentWithViewTransitions = Document & {
-    startViewTransition?: (callback: () => void | Promise<void>) => {
-      ready: Promise<void>
-      finished: Promise<void>
-      updateCallbackDone: Promise<void>
-      skipTransition: () => void
-    }
-  }
   type ApplySnapshotOptions = {
     preserveUsageState?: boolean
   }
 
-  const wakeConcurrencyLimit = 6
-
-  async function mapWithConcurrencyLimit<T, R>(
-    items: T[],
-    limit: number,
-    task: (item: T, index: number) => Promise<R>
-  ): Promise<R[]> {
-    const results: R[] = []
-    let nextIndex = 0
-    const workerCount = Math.min(Math.max(1, limit), items.length)
-
-    await Promise.all(
-      Array.from({ length: workerCount }, async (): Promise<void> => {
-        while (nextIndex < items.length) {
-          const currentIndex = nextIndex
-          nextIndex += 1
-          results[currentIndex] = await task(items[currentIndex] as T, currentIndex)
-        }
-      })
-    )
-
-    return results
+  type AccountActionsHostApi = {
+    removeAccount(account: AccountSummary): Promise<void>
+    updateAccountHealth(account: AccountSummary, input: UpdateAccountHealthInput): Promise<void>
+    removeAccounts(accountIds: string[]): Promise<void>
+    reorderAccounts(accountIds: string[]): Promise<void>
+    reorderAccountsInGroup(groupId: string, accountIds: string[]): Promise<void>
+    createGroup(name: string): Promise<void>
+    updateGroup(group: AccountGroup, name: string): Promise<void>
+    deleteGroup(group: AccountGroup): Promise<void>
+    updateAccountGroups(account: AccountSummary, groupIds: string[]): Promise<void>
   }
 
-  let snapshot: AppSnapshot = {
-    accounts: [],
-    providers: [],
-    groups: [],
-    codexInstances: [],
-    codexInstanceDefaults: {
-      rootDir: '',
-      defaultCodexHome: ''
-    },
-    currentSession: null,
-    loginInProgress: false,
-    settings: {
-      usagePollingMinutes: 15,
-      statusBarAccountIds: [],
-      language: 'zh-CN',
-      theme: 'light',
-      checkForUpdatesOnStartup: true,
-      autoWakeOnStartup: false,
-      autoWakeTargetMode: 'all',
-      autoWakeGroupIds: [],
-      autoWakeAccountIds: [],
-      autoWakeIncludeUngrouped: false,
-      autoWakeFirstWindowRemainingThresholdPercent: 96,
-      autoWakeResetToleranceMinutes: 5,
-      autoWakeCooldownWindowRatio: 0.1,
-      codexDesktopExecutablePath: '',
-      preserveChatGptAuthOnDirectProviderOpen: false,
-      showLocalMockData: true,
-      statsDisplay: defaultStatsDisplaySettings(),
-      toolbarIconMovable: true,
-      collapsedToolbarIconDefaultPosition: true,
-      localGateway: {
-        host: '127.0.0.1',
-        port: 11456,
-        apiKey: '',
-        autoStart: false,
-        stickyTtlMinutes: 360,
-        requestTimeoutMs: 120_000,
-        modelMappings: [],
-        allowedGroupIds: [],
-        allowedAccountIds: [],
-        allowedProviderIds: []
-      }
-    },
-    usageByAccountId: {},
-    usageErrorByAccountId: {},
-    accountHealthByAccountId: {},
-    wakeSchedulesByAccountId: {},
-    wakeStateByAccountId: {},
-    tokenCostByInstanceId: {},
-    tokenCostErrorByInstanceId: {},
-    runningTokenCostSummary: null,
-    runningTokenCostInstanceIds: [],
-    gatewayUsageByAccountId: {},
-    localGatewayStatus: {
-      running: false,
-      baseUrl: 'http://127.0.0.1:11456',
-      apiKeyPreview: ''
-    }
+  type LocalGatewayActionsHostApi = {
+    startLocalGateway(): Promise<void>
+    stopLocalGateway(): Promise<void>
+    rotateLocalGatewayKey(): Promise<void>
+    openLocalGatewayInCodex(): Promise<void>
+    openLocalGatewayIsolatedInCodex(): Promise<void>
+    updateLocalGatewayModelMappings(mappings: LocalGatewayModelMapping[]): Promise<void>
+    updateLocalGatewayAllowedGroups(groupIds: string[]): Promise<void>
+    updateLocalGatewayAllowedAccounts(accountIds: string[]): Promise<void>
+    updateLocalGatewayAllowedProviders(providerIds: string[]): Promise<void>
+    updateLocalGatewayPort(port: number): Promise<void>
+    updateLocalGatewayAutoStart(autoStart: boolean): Promise<void>
+    updateLocalGatewayVisibleColumns(columns: string[]): Promise<void>
+    killLocalGatewayPortOccupant(): Promise<void>
   }
+
+  type WakeDialogsHostApi = {
+    openWakeDialog(account: AccountSummary, initialTab?: 'session' | 'schedule'): void
+    openWakeAllDialog(): void
+    handleEscape(): boolean
+  }
+
+  type AccountTokensDialogsHostApi = {
+    openRefreshTokensBatchDialog(): void
+    openEditTokensDialog(account: AccountSummary): void
+    openRefreshTokensDialog(account: AccountSummary): void
+  }
+
+  type AccountTransferDialogsHostApi = {
+    openImportMethodDialog(): void
+    openExportFormatDialog(accountIds?: string[]): void
+    exportSelectedAccounts(accountIds: string[]): Promise<void>
+    handleEscape(): boolean
+  }
+
+  let snapshot: AppSnapshot = createDefaultSnapshot()
   let rawSnapshot: AppSnapshot = snapshot
   let appMeta: AppMeta = {
     version: '--',
@@ -214,57 +144,15 @@
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
   let wakingAccountId = ''
-  let wakeDialogAccount: AccountSummary | null = null
-  let wakeDialogTab: WakeDialogTab = 'session'
-  let wakePromptDraft = 'ping'
-  let wakeModelDraft = defaultWakeModel
-  let wakeDialogStatus: WakeDialogStatus = 'idle'
-  let wakeDialogLogs: string[] = []
-  let wakeRequestResult: WakeAccountRequestResult | null = null
-  let wakeRequestError = ''
-  let wakeRawResponseBody = ''
-  let wakeAllDialogOpen = false
-  let wakeAllPromptDraft = 'ping'
-  let wakeAllModelDraft = defaultWakeModel
   let wakeAllRunning = false
-  let wakeAllLogs: string[] = []
-  let wakeAllAwakenedLabels: string[] = []
-  let wakeAllError = ''
-  let showExportFormatDialog = false
-  let renderExportFormatDialog = false
-  let exportDialogMotionState: TransitionMotionState = 'closed'
-  let exportDialogCloseTimer: number | null = null
-  let exportDialogOpenFrame: number | null = null
-  let exportDialogBusy = false
-  let exportDialogError = ''
-  let exportDialogAccountIds: string[] | null = null
-  let exportDialogFormat: AccountTransferFormat = 'codexdock'
+  let refreshTokensBatchPhase: 'idle' | 'confirming' | 'running' | 'done' = 'idle'
   let localGatewayBusy = false
   let localGatewayApiKey = ''
-  let pasteSessionError = ''
-  let pasteSessionSaving = false
-  let showImportMethodDialog = false
-  let importDialogStep: 'choose' | 'paste' = 'choose'
-  let importDialogRawInput = ''
-  let wakeScheduleEnabledDraft = true
-  let wakeScheduleTimesDraft: string[] = ['09:00']
-  let wakeSchedulePromptDraft = 'ping'
-  let wakeScheduleModelDraft = defaultWakeModel
-  let wakeScheduleError = ''
-  let wakeScheduleSaving = false
-  let editTokensDialogAccount: AccountSummary | null = null
-  let editTokensAccessTokenDraft = ''
-  let editTokensRefreshTokenDraft = ''
-  let editTokensIdTokenDraft = ''
-  let editTokensAccountIdHintDraft = ''
-  let editTokensError = ''
-  let editTokensSaving = false
-  let editTokensLoading = false
-  let editTokensLoadRequestId = 0
-  let refreshTokensDialogAccount: AccountSummary | null = null
-  let refreshTokensStatus: 'idle' | 'running' | 'success' | 'error' = 'idle'
-  let refreshTokensResult: import('../../shared/codex').AccountTokenRefreshResult | null = null
-  let refreshTokensError = ''
+  let transferDialogs: AccountTransferDialogsHostApi | null = null
+  let accountTokensDialogs: AccountTokensDialogsHostApi | null = null
+  let wakeDialogs: WakeDialogsHostApi | null = null
+  let localGatewayActions: LocalGatewayActionsHostApi | null = null
+  let accountActions: AccountActionsHostApi | null = null
   const isTrayView =
     typeof window !== 'undefined' && new URLSearchParams(window.location.search).get('tray') === '1'
   let prefersDark = false
@@ -280,207 +168,6 @@
   const panelClass = 'theme-workspace bg-snow p-0'
 
   const copyForLanguage = (): (typeof messages)['zh-CN'] => messages[snapshot.settings.language]
-  const exportFormatOptionOrder = [...accountTransferFormats]
-  const resolvedTheme = (theme: AppTheme): 'light' | 'dark' =>
-    theme === 'system' ? (prefersDark ? 'dark' : 'light') : theme
-
-  const prefersReducedMotion = (): boolean =>
-    typeof window !== 'undefined' &&
-    typeof window.matchMedia === 'function' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-  const themeTransitionPoint = (
-    origin?: ThemeTransitionOrigin
-  ): { x: number; y: number } | null => {
-    if (typeof window === 'undefined' || !origin) {
-      return null
-    }
-
-    if (Number.isFinite(origin.x) && Number.isFinite(origin.y)) {
-      return {
-        x: Math.max(0, Math.min(window.innerWidth, origin.x ?? 0)),
-        y: Math.max(0, Math.min(window.innerHeight, origin.y ?? 0))
-      }
-    }
-
-    if (origin.target) {
-      const rect = origin.target.getBoundingClientRect()
-
-      return {
-        x: rect.left + rect.width / 2,
-        y: rect.top + rect.height / 2
-      }
-    }
-
-    return null
-  }
-
-  const applyThemeWithRipple = (theme: AppTheme, origin?: ThemeTransitionOrigin): void => {
-    if (typeof document === 'undefined' || typeof window === 'undefined') {
-      return
-    }
-
-    const transitionDocument = document as DocumentWithViewTransitions
-    const point = themeTransitionPoint(origin)
-
-    if (
-      !point ||
-      prefersReducedMotion() ||
-      !transitionDocument.startViewTransition ||
-      !document.documentElement.animate
-    ) {
-      applyTheme(theme)
-      return
-    }
-
-    const transition = transitionDocument.startViewTransition(() => {
-      applyTheme(theme)
-    })
-
-    void transition.ready
-      .then(() => {
-        const endRadius = Math.hypot(
-          Math.max(point.x, window.innerWidth - point.x),
-          Math.max(point.y, window.innerHeight - point.y)
-        )
-
-        document.documentElement.animate(
-          {
-            clipPath: [
-              `circle(0px at ${point.x}px ${point.y}px)`,
-              `circle(${endRadius}px at ${point.x}px ${point.y}px)`
-            ]
-          },
-          {
-            duration: 520,
-            easing: 'cubic-bezier(0.22, 1, 0.36, 1)',
-            pseudoElement: '::view-transition-new(root)'
-          }
-        )
-      })
-      .catch(() => {
-        transition.skipTransition()
-      })
-  }
-
-  const exportFormatLabel = (format: AccountTransferFormat): string => {
-    const copy = copyForLanguage()
-
-    switch (format) {
-      case 'cockpit_tools':
-        return copy.exportFormatCockpitTools
-      case 'sub2api':
-        return copy.exportFormatSub2api
-      case 'cliproxyapi':
-        return copy.exportFormatCliProxyApi
-      case 'codexdock':
-      default:
-        return copy.exportFormatCodexDock
-    }
-  }
-
-  const exportFormatDescription = (format: AccountTransferFormat): string => {
-    const copy = copyForLanguage()
-
-    switch (format) {
-      case 'cockpit_tools':
-        return copy.exportFormatCockpitToolsDescription
-      case 'sub2api':
-        return copy.exportFormatSub2apiDescription
-      case 'cliproxyapi':
-        return copy.exportFormatCliProxyApiDescription
-      case 'codexdock':
-      default:
-        return copy.exportFormatCodexDockDescription
-    }
-  }
-
-  const exportDialogScopeLabel = (): string =>
-    exportDialogAccountIds?.length
-      ? copyForLanguage().exportFormatTargetSelected(exportDialogAccountIds.length)
-      : copyForLanguage().exportFormatTargetAll
-
-  const modalCloseDurationMs = (): number => {
-    if (prefersReducedMotion() || typeof document === 'undefined') {
-      return 0
-    }
-
-    return (
-      parseFloat(
-        getComputedStyle(document.documentElement).getPropertyValue('--modal-close-dur')
-      ) || 150
-    )
-  }
-
-  const clearExportDialogTimers = (): void => {
-    if (exportDialogCloseTimer != null) {
-      window.clearTimeout(exportDialogCloseTimer)
-      exportDialogCloseTimer = null
-    }
-    if (exportDialogOpenFrame != null) {
-      window.cancelAnimationFrame(exportDialogOpenFrame)
-      exportDialogOpenFrame = null
-    }
-  }
-
-  const resetExportDialog = (): void => {
-    exportDialogError = ''
-    exportDialogAccountIds = null
-    exportDialogFormat = 'codexdock'
-  }
-
-  const finishExportFormatDialogClose = (): void => {
-    renderExportFormatDialog = false
-    exportDialogMotionState = 'closed'
-    exportDialogCloseTimer = null
-    resetExportDialog()
-  }
-
-  const openExportDialogMotion = (): void => {
-    clearExportDialogTimers()
-    renderExportFormatDialog = true
-    showExportFormatDialog = true
-    exportDialogMotionState = 'closed'
-    exportDialogOpenFrame = window.requestAnimationFrame(() => {
-      exportDialogOpenFrame = null
-      exportDialogMotionState = 'open'
-    })
-  }
-
-  const closeExportDialogMotion = (): void => {
-    if (!renderExportFormatDialog) {
-      showExportFormatDialog = false
-      resetExportDialog()
-      return
-    }
-
-    clearExportDialogTimers()
-    showExportFormatDialog = false
-    exportDialogMotionState = 'closing'
-    exportDialogCloseTimer = window.setTimeout(
-      finishExportFormatDialogClose,
-      modalCloseDurationMs()
-    )
-  }
-
-  const toolbarDialogOpen = (): boolean =>
-    (showCallbackLoginDetails &&
-      loginEvent?.method === 'browser' &&
-      Boolean(loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput)) ||
-    (showDeviceLoginDetails &&
-      loginEvent?.method === 'device' &&
-      Boolean(loginEvent?.verificationUrl || loginEvent?.userCode || loginEvent?.rawOutput))
-
-  const applyTheme = (theme: AppTheme): void => {
-    if (typeof document === 'undefined') {
-      return
-    }
-
-    const nextTheme = resolvedTheme(theme)
-    document.documentElement.dataset.theme = nextTheme
-    document.documentElement.style.colorScheme = nextTheme
-  }
-
   const refreshSnapshot = async (): Promise<void> => {
     applySnapshot(await window.codexApp.getSnapshot())
   }
@@ -494,31 +181,21 @@
     }
   }
 
+  const toolbarDialogOpen = (): boolean =>
+    (showCallbackLoginDetails &&
+      loginEvent?.method === 'browser' &&
+      Boolean(loginEvent?.authUrl || loginEvent?.localCallbackUrl || loginEvent?.rawOutput)) ||
+    (showDeviceLoginDetails &&
+      loginEvent?.method === 'device' &&
+      Boolean(loginEvent?.verificationUrl || loginEvent?.userCode || loginEvent?.rawOutput))
+
   const hasLoginPortConflict = (): boolean => {
     const message = `${pageError}\n${loginEvent?.message ?? ''}`.toLowerCase()
     return message.includes('1455') && (message.includes('占用') || message.includes('in use'))
   }
 
-  const localGatewayPort = (): number => snapshot.settings.localGateway?.port ?? 11456
-
-  const hasLocalGatewayPortConflict = (): boolean => {
-    const message = pageError.toLowerCase()
-    const port = String(localGatewayPort())
-    return (
-      (message.includes(port) || message.includes('local gateway') || message.includes('本地')) &&
-      (message.includes('eaddrinuse') ||
-        message.includes('address already in use') ||
-        message.includes('占用') ||
-        message.includes('in use'))
-    )
-  }
-
   const refreshLoginPortOccupant = async (): Promise<void> => {
     loginPortOccupant = await window.codexApp.getLoginPortOccupant()
-  }
-
-  const refreshLocalGatewayPortOccupant = async (): Promise<void> => {
-    localGatewayPortOccupant = await window.codexApp.getLocalGatewayPortOccupant()
   }
 
   const loginActionBusy = (): boolean => loginStarting || killingLoginPortOccupant
@@ -602,7 +279,7 @@
         visibleSnapshot.accountHealthByAccountId ?? {}
       )
     }
-    applyTheme(visibleSnapshot.settings.theme)
+    applyTheme(visibleSnapshot.settings.theme, prefersDark)
     usageByAccountId = nextUsageByAccountId
     usageErrorByAccountId = nextUsageErrorByAccountId
     syncUsageState(visibleSnapshot.accounts)
@@ -613,81 +290,6 @@
     delete nextState[accountId]
     usageErrorByAccountId = nextState
   }
-
-  const wakeTimestamp = (): string =>
-    new Intl.DateTimeFormat(snapshot.settings.language === 'en' ? 'en-US' : 'zh-CN', {
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false
-    }).format(new Date())
-
-  const pushWakeLog = async (message: string): Promise<void> => {
-    wakeDialogLogs = [...wakeDialogLogs, `[${wakeTimestamp()}] ${message}`]
-  }
-
-  const pushWakeAllLog = (message: string): void => {
-    wakeAllLogs = [...wakeAllLogs, `[${wakeTimestamp()}] ${message}`]
-  }
-
-  const pushWakeAllAwakenedLabel = (label: string): void => {
-    if (wakeAllAwakenedLabels.includes(label)) {
-      return
-    }
-
-    wakeAllAwakenedLabels = [...wakeAllAwakenedLabels, label]
-  }
-
-  const wakeAllTargetAccounts = (accountIds: string[]): AccountSummary[] => {
-    return snapshot.accounts.filter((account) => accountIds.includes(account.id))
-  }
-
-  const openWakeAllDialog = (): void => {
-    if (wakeAllRunning || !snapshot.accounts.length) {
-      return
-    }
-
-    wakeAllDialogOpen = true
-    wakeAllError = ''
-    wakeAllLogs = []
-    wakeAllAwakenedLabels = []
-  }
-
-  const closeWakeAllDialog = (): void => {
-    if (wakeAllRunning) {
-      return
-    }
-
-    wakeAllDialogOpen = false
-    wakeAllError = ''
-  }
-
-  const resetWakeDialogState = (): void => {
-    wakeDialogStatus = 'idle'
-    wakeDialogLogs = []
-    wakeRequestResult = null
-    wakeRequestError = ''
-    wakeRawResponseBody = ''
-  }
-
-  const wakeResponsePreview = (body: string): string => {
-    const firstLine = body
-      .split('\n')
-      .map((line) => line.trim())
-      .find(Boolean)
-
-    if (!firstLine) {
-      return copyForLanguage().wakeQuotaResultEmpty
-    }
-
-    return firstLine.length > 160 ? `${firstLine.slice(0, 157)}...` : firstLine
-  }
-
-  const currentWakeScheduleDialog = (): AccountWakeSchedule | null =>
-    wakeDialogAccount ? (snapshot.wakeSchedulesByAccountId[wakeDialogAccount.id] ?? null) : null
-
-  const wakeDialogAccountIsFree = (): boolean =>
-    Boolean(wakeDialogAccount && isFreePlan(usageByAccountId[wakeDialogAccount.id]))
 
   const inlineUpdateSummary = (): string => {
     switch (updateState.status) {
@@ -753,6 +355,16 @@
     snapshot = {
       ...snapshot,
       usageByAccountId: nextSnapshotUsageByAccountId
+    }
+  }
+
+  const setSnapshotRateLimits = (accountId: string, rateLimits: AccountRateLimits): void => {
+    snapshot = {
+      ...snapshot,
+      usageByAccountId: {
+        ...snapshot.usageByAccountId,
+        [accountId]: rateLimits
+      }
     }
   }
 
@@ -831,149 +443,6 @@
   const removeProvider = async (providerId: string): Promise<void> => {
     await runAction(`provider:remove:${providerId}`, () =>
       window.codexApp.removeProvider(providerId)
-    )
-  }
-
-  const runLocalGatewayAction = async (task: () => Promise<void>): Promise<void> => {
-    if (localGatewayBusy) {
-      return
-    }
-
-    localGatewayBusy = true
-    try {
-      await task()
-    } finally {
-      localGatewayBusy = false
-    }
-  }
-
-  const startLocalGateway = async (): Promise<void> =>
-    runLocalGatewayAction(async () => {
-      setPageError('')
-      localGatewayPortOccupant = null
-      try {
-        applySnapshot(await window.codexApp.startLocalGateway())
-      } catch (error) {
-        setPageError(localizeKnownError(error, copyForLanguage().actionFailed))
-        if (hasLocalGatewayPortConflict()) {
-          await refreshLocalGatewayPortOccupant()
-        }
-      }
-    })
-
-  const stopLocalGateway = async (): Promise<void> =>
-    runLocalGatewayAction(async () => {
-      await runAction('gateway:stop', () => window.codexApp.stopLocalGateway())
-    })
-
-  const rotateLocalGatewayKey = async (): Promise<void> =>
-    runLocalGatewayAction(async () => {
-      setPageError('')
-      try {
-        const result = await window.codexApp.rotateLocalGatewayKey()
-        localGatewayApiKey = result.apiKey
-        await navigator.clipboard.writeText(result.apiKey)
-        await refreshSnapshot()
-      } catch (error) {
-        setPageError(localizeKnownError(error, copyForLanguage().actionFailed))
-      }
-    })
-
-  const openLocalGatewayInCodex = async (): Promise<void> =>
-    runLocalGatewayAction(async () => {
-      await runAction('gateway:open-codex', () => window.codexApp.openLocalGatewayInCodex())
-    })
-
-  const openLocalGatewayIsolatedInCodex = async (): Promise<void> =>
-    runLocalGatewayAction(async () => {
-      await runAction('gateway:open-codex-isolated', () =>
-        window.codexApp.openLocalGatewayIsolatedInCodex()
-      )
-    })
-
-  const updateLocalGatewayModelMappings = async (
-    mappings: LocalGatewayModelMapping[]
-  ): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-mappings', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          modelMappings: mappings
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayAllowedGroups = async (groupIds: string[]): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-groups', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          allowedGroupIds: groupIds
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayAllowedAccounts = async (accountIds: string[]): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-accounts', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          allowedAccountIds: accountIds
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayAllowedProviders = async (providerIds: string[]): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-providers', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          allowedProviderIds: providerIds
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayPort = async (port: number): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-port', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          port
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayAutoStart = async (autoStart: boolean): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-auto-start', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          autoStart
-        }
-      })
-    )
-  }
-
-  const updateLocalGatewayVisibleColumns = async (columns: string[]): Promise<void> => {
-    const currentGateway = snapshot.settings.localGateway
-    await runAction('settings:gateway-columns', () =>
-      window.codexApp.updateSettings({
-        localGateway: {
-          ...(currentGateway ?? {}),
-          visibleColumns: columns
-        }
-      })
     )
   }
 
@@ -1078,328 +547,6 @@
     }
   }
 
-  const killLocalGatewayPortOccupant = async (): Promise<void> => {
-    setPageError('')
-    killingLocalGatewayPortOccupant = true
-
-    try {
-      localGatewayPortOccupant = await window.codexApp.killLocalGatewayPortOccupant()
-      await refreshLocalGatewayPortOccupant()
-    } catch (error) {
-      setPageError(localizeKnownError(error, copyForLanguage().killLocalGatewayPortOccupantFailed))
-    } finally {
-      killingLocalGatewayPortOccupant = false
-    }
-  }
-
-  const removeAccount = async (account: AccountSummary): Promise<void> => {
-    if (
-      !window.confirm(copyForLanguage().removeConfirm(accountLabel(account, copyForLanguage())))
-    ) {
-      return
-    }
-
-    await runAction(`remove:${account.id}`, () => window.codexApp.removeAccount(account.id))
-  }
-
-  const updateAccountHealth = async (
-    account: AccountSummary,
-    input: UpdateAccountHealthInput
-  ): Promise<void> => {
-    await runAction(`account-health:${account.id}:${input.status}`, () =>
-      window.codexApp.updateAccountHealth(account.id, input)
-    )
-  }
-
-  const openEditTokensDialog = (account: AccountSummary): void => {
-    editTokensDialogAccount = account
-    editTokensAccessTokenDraft = ''
-    editTokensRefreshTokenDraft = ''
-    editTokensIdTokenDraft = ''
-    editTokensAccountIdHintDraft = ''
-    editTokensError = ''
-    editTokensSaving = false
-    editTokensLoading = true
-
-    const requestId = ++editTokensLoadRequestId
-    void (async () => {
-      try {
-        const detail = await window.codexApp.getAccountTokens(account.id)
-        if (requestId !== editTokensLoadRequestId || editTokensDialogAccount?.id !== account.id) {
-          return
-        }
-        editTokensAccessTokenDraft = detail.accessToken ?? ''
-        editTokensRefreshTokenDraft = detail.refreshToken ?? ''
-        editTokensIdTokenDraft = detail.idToken ?? ''
-        editTokensAccountIdHintDraft = detail.accountId ?? ''
-      } catch (error) {
-        if (requestId !== editTokensLoadRequestId || editTokensDialogAccount?.id !== account.id) {
-          return
-        }
-        editTokensError = copyForLanguage().editAccountTokensLoadFailed(
-          error instanceof Error ? error.message : String(error)
-        )
-      } finally {
-        if (requestId === editTokensLoadRequestId) {
-          editTokensLoading = false
-        }
-      }
-    })()
-  }
-
-  const closeEditTokensDialog = (): void => {
-    if (editTokensSaving) {
-      return
-    }
-    editTokensLoadRequestId += 1
-    editTokensDialogAccount = null
-    editTokensLoading = false
-    editTokensError = ''
-  }
-
-  const saveAccountTokens = async (): Promise<void> => {
-    const target = editTokensDialogAccount
-    if (!target || editTokensSaving || editTokensLoading) {
-      return
-    }
-
-    const access = editTokensAccessTokenDraft.trim()
-    const refresh = editTokensRefreshTokenDraft.trim()
-    const idToken = editTokensIdTokenDraft.trim()
-    const accountIdHint = editTokensAccountIdHintDraft.trim()
-
-    if (!access && !refresh && !idToken && !accountIdHint) {
-      editTokensError = copyForLanguage().editAccountTokensEmptyError
-      return
-    }
-
-    editTokensSaving = true
-    editTokensError = ''
-
-    try {
-      const nextSnapshot = await window.codexApp.updateAccountTokens(target.id, {
-        accessToken: access || undefined,
-        refreshToken: refresh || undefined,
-        idToken: idToken || undefined,
-        accountId: accountIdHint || undefined
-      })
-      applySnapshot(nextSnapshot)
-      editTokensDialogAccount = null
-    } catch (error) {
-      editTokensError = copyForLanguage().editAccountTokensFailed(
-        error instanceof Error ? error.message : String(error)
-      )
-    } finally {
-      editTokensSaving = false
-    }
-  }
-
-  const openRefreshTokensDialog = (account: AccountSummary): void => {
-    refreshTokensDialogAccount = account
-    refreshTokensStatus = 'idle'
-    refreshTokensResult = null
-    refreshTokensError = ''
-  }
-
-  const closeRefreshTokensDialog = (): void => {
-    if (refreshTokensStatus === 'running') {
-      return
-    }
-    refreshTokensDialogAccount = null
-    refreshTokensStatus = 'idle'
-    refreshTokensResult = null
-    refreshTokensError = ''
-  }
-
-  const submitRefreshTokens = async (): Promise<void> => {
-    if (!refreshTokensDialogAccount || refreshTokensStatus === 'running') {
-      return
-    }
-
-    refreshTokensStatus = 'running'
-    refreshTokensError = ''
-    refreshTokensResult = null
-
-    try {
-      const result = await window.codexApp.refreshAccountTokens(refreshTokensDialogAccount.id)
-      refreshTokensResult = result
-      refreshTokensStatus = result.success ? 'success' : 'error'
-      refreshTokensError = result.error ?? ''
-      if (result.success) {
-        await refreshSnapshot()
-      }
-    } catch (error) {
-      refreshTokensStatus = 'error'
-      refreshTokensError = error instanceof Error ? error.message : String(error)
-    }
-  }
-
-  const removeAccounts = async (accountIds: string[]): Promise<void> => {
-    const uniqueIds = [...new Set(accountIds)]
-    if (!uniqueIds.length) {
-      return
-    }
-
-    if (!window.confirm(copyForLanguage().removeSelectedConfirm(uniqueIds.length))) {
-      return
-    }
-
-    await runAction(`remove-many:${uniqueIds.join(',')}`, () =>
-      window.codexApp.removeAccounts(uniqueIds)
-    )
-  }
-
-  const closeExportFormatDialog = (): void => {
-    if (exportDialogBusy) {
-      return
-    }
-
-    closeExportDialogMotion()
-  }
-
-  const openExportFormatDialog = (accountIds?: string[]): void => {
-    const uniqueIds = accountIds?.length ? [...new Set(accountIds)] : null
-    if (accountIds?.length && !uniqueIds?.length) {
-      return
-    }
-
-    exportDialogAccountIds = uniqueIds
-    exportDialogFormat = 'codexdock'
-    exportDialogError = ''
-    openExportDialogMotion()
-  }
-
-  const submitExportFormatDialog = async (): Promise<void> => {
-    if (exportDialogBusy || exportDialogMotionState === 'closing' || !showExportFormatDialog) {
-      return
-    }
-
-    exportDialogBusy = true
-    exportDialogError = ''
-
-    try {
-      const nextSnapshot = exportDialogAccountIds?.length
-        ? await window.codexApp.exportSelectedAccountsToFile(
-            exportDialogAccountIds,
-            exportDialogFormat
-          )
-        : await window.codexApp.exportAccountsToFile(exportDialogFormat)
-      applySnapshot(nextSnapshot)
-      closeExportDialogMotion()
-    } catch (error) {
-      exportDialogError = localizeKnownError(error, copyForLanguage().actionFailed)
-    } finally {
-      exportDialogBusy = false
-    }
-  }
-
-  const exportSelectedAccounts = async (accountIds: string[]): Promise<void> => {
-    const uniqueIds = [...new Set(accountIds)]
-    if (!uniqueIds.length) {
-      return
-    }
-
-    openExportFormatDialog(uniqueIds)
-  }
-
-  const openImportMethodDialog = (): void => {
-    importDialogStep = 'choose'
-    importDialogRawInput = ''
-    pasteSessionError = ''
-    pasteSessionSaving = false
-    showImportMethodDialog = true
-  }
-
-  const closeImportMethodDialog = (): void => {
-    if (pasteSessionSaving) return
-    showImportMethodDialog = false
-  }
-
-  const selectImportFromFile = (): void => {
-    showImportMethodDialog = false
-    void runAction('import:file', () => window.codexApp.importAccountsFromFile())
-  }
-
-  const selectImportFromSession = (): void => {
-    importDialogStep = 'paste'
-  }
-
-  const submitImportDialogPaste = async (): Promise<void> => {
-    if (pasteSessionSaving || !importDialogRawInput.trim()) return
-    pasteSessionSaving = true
-    pasteSessionError = ''
-    try {
-      applySnapshot(await window.codexApp.importAccountsFromRaw(importDialogRawInput))
-      showImportMethodDialog = false
-    } catch (error) {
-      pasteSessionError = localizeKnownError(error, copyForLanguage().actionFailed)
-    } finally {
-      pasteSessionSaving = false
-    }
-  }
-
-  const reorderAccounts = async (accountIds: string[]): Promise<void> => {
-    if (!accountIds.length) {
-      return
-    }
-
-    const payloadAccountIds = new Set(accountIds)
-    const currentPayloadOrder = snapshot.accounts
-      .filter((account) => payloadAccountIds.has(account.id))
-      .map((account) => account.id)
-
-    if (
-      currentPayloadOrder.length === accountIds.length &&
-      accountIds.every((accountId, index) => accountId === currentPayloadOrder[index])
-    ) {
-      return
-    }
-
-    await runAction('accounts:reorder', () => window.codexApp.reorderAccounts(accountIds), {
-      preserveUsageState: true
-    })
-  }
-
-  const reorderAccountsInGroup = async (groupId: string, accountIds: string[]): Promise<void> => {
-    if (!groupId || !accountIds.length) {
-      return
-    }
-
-    await runAction(
-      `accounts:reorder-in-group:${groupId}`,
-      () => window.codexApp.reorderAccountsInGroup(groupId, accountIds),
-      { preserveUsageState: true }
-    )
-  }
-
-  const createGroup = async (name: string): Promise<void> => {
-    await runAction(`groups:create:${name}`, () => window.codexApp.createGroup(name))
-  }
-
-  const updateGroup = async (group: AccountGroup, name: string): Promise<void> => {
-    await runAction(`groups:update:${group.id}`, () => window.codexApp.updateGroup(group.id, name))
-  }
-
-  const deleteGroup = async (group: AccountGroup): Promise<void> => {
-    await runAction(`groups:delete:${group.id}`, () => window.codexApp.deleteGroup(group.id))
-  }
-
-  const updateAccountGroups = async (
-    account: AccountSummary,
-    groupIds: string[]
-  ): Promise<void> => {
-    if (
-      groupIds.length === account.groupIds.length &&
-      groupIds.every((groupId, index) => groupId === account.groupIds[index])
-    ) {
-      return
-    }
-
-    await runAction(`account-groups:${account.id}`, () =>
-      window.codexApp.updateAccountGroups(account.id, groupIds)
-    )
-  }
-
   const copyText = async (value?: string): Promise<void> => {
     if (!value) {
       return
@@ -1465,46 +612,12 @@
     }
   }
 
-  const closeWakeDialog = (): void => {
-    if (wakingAccountId || wakeScheduleSaving) {
-      return
-    }
-
-    wakeDialogAccount = null
-    wakeDialogTab = 'session'
-    resetWakeDialogState()
-    wakeScheduleError = ''
-  }
-
-  const hydrateWakeScheduleDrafts = (account: AccountSummary): void => {
-    const schedule = snapshot.wakeSchedulesByAccountId[account.id]
-    wakeScheduleEnabledDraft = schedule?.enabled ?? true
-    wakeScheduleTimesDraft = schedule?.times.length ? [...schedule.times] : ['09:00']
-    wakeSchedulePromptDraft = schedule?.prompt ?? 'ping'
-    wakeScheduleModelDraft = schedule?.model ?? defaultWakeModel
-    wakeScheduleError = ''
-  }
-
-  const openWakeDialog = (account: AccountSummary, initialTab: WakeDialogTab = 'session'): void => {
-    if (wakingAccountId || wakeScheduleSaving || usageLoadingByAccountId[account.id]) {
-      return
-    }
-
-    wakeDialogAccount = account
-    wakeDialogTab =
-      initialTab === 'schedule' && isFreePlan(usageByAccountId[account.id]) ? 'session' : initialTab
-    resetWakeDialogState()
-    hydrateWakeScheduleDrafts(account)
-    void pushWakeLog(copyForLanguage().wakeQuotaLogReady(accountEmail(account, copyForLanguage())))
-  }
-
   const handleGlobalKeydown = (event: KeyboardEvent): void => {
     if (event.key !== 'Escape') {
       return
     }
 
-    if (showExportFormatDialog && !exportDialogBusy) {
-      closeExportFormatDialog()
+    if (transferDialogs?.handleEscape()) {
       return
     }
 
@@ -1513,330 +626,8 @@
       return
     }
 
-    if (wakeDialogAccount && !wakingAccountId && !wakeScheduleSaving) {
-      closeWakeDialog()
-    }
-  }
-
-  const saveWakeSchedule = async (): Promise<void> => {
-    if (!wakeDialogAccount || wakeScheduleSaving || wakingAccountId) {
+    if (wakeDialogs?.handleEscape()) {
       return
-    }
-
-    if (isFreePlan(usageByAccountId[wakeDialogAccount.id])) {
-      wakeScheduleError = copyForLanguage().wakeScheduleFreeUnsupported
-      return
-    }
-
-    const times = normalizeWakeScheduleTimes(wakeScheduleTimesDraft)
-    if (!times.length) {
-      wakeScheduleError = copyForLanguage().wakeScheduleNoTimes
-      return
-    }
-
-    if (!times.every(isValidWakeScheduleTime)) {
-      wakeScheduleError = copyForLanguage().wakeScheduleInvalidTime
-      return
-    }
-
-    wakeScheduleSaving = true
-    wakeScheduleError = ''
-
-    const input: UpdateAccountWakeScheduleInput = {
-      enabled: wakeScheduleEnabledDraft,
-      times,
-      prompt: wakeSchedulePromptDraft.trim() || 'ping',
-      model: wakeScheduleModelDraft.trim() || defaultWakeModel
-    }
-
-    try {
-      applySnapshot(await window.codexApp.updateAccountWakeSchedule(wakeDialogAccount.id, input))
-      wakeScheduleError = ''
-    } catch (error) {
-      wakeScheduleError = localizeKnownError(error, copyForLanguage().actionFailed)
-    } finally {
-      wakeScheduleSaving = false
-    }
-  }
-
-  const deleteWakeSchedule = async (): Promise<void> => {
-    if (!wakeDialogAccount || wakeScheduleSaving || wakingAccountId) {
-      return
-    }
-
-    wakeScheduleSaving = true
-    wakeScheduleError = ''
-
-    try {
-      applySnapshot(await window.codexApp.deleteAccountWakeSchedule(wakeDialogAccount.id))
-      hydrateWakeScheduleDrafts(wakeDialogAccount)
-    } catch (error) {
-      wakeScheduleError = localizeKnownError(error, copyForLanguage().actionFailed)
-    } finally {
-      wakeScheduleSaving = false
-    }
-  }
-
-  const wakeRateLimitReset = async (
-    account: AccountSummary,
-    input?: WakeAccountRateLimitsInput
-  ): Promise<WakeAccountRequestResult | null> => {
-    if (wakingAccountId || usageLoadingByAccountId[account.id]) {
-      return null
-    }
-
-    wakingAccountId = account.id
-    usageLoadingByAccountId = {
-      ...usageLoadingByAccountId,
-      [account.id]: true
-    }
-    clearUsageError(account.id)
-
-    try {
-      const result = await window.codexApp.wakeAccountRateLimits(account.id, input)
-      usageByAccountId = {
-        ...usageByAccountId,
-        [account.id]: result.rateLimits
-      }
-      snapshot = {
-        ...snapshot,
-        usageByAccountId: {
-          ...snapshot.usageByAccountId,
-          [account.id]: result.rateLimits
-        }
-      }
-      return result.requestResult
-    } catch (error) {
-      if (usageErrorKind(error instanceof Error ? error.message : undefined) === 'expired') {
-        clearUsageData(account.id)
-      }
-
-      usageErrorByAccountId = {
-        ...usageErrorByAccountId,
-        [account.id]: localizeKnownError(error, copyForLanguage().readRateLimitFailed)
-      }
-      throw error
-    } finally {
-      clearUsageLoading(account.id)
-      if (wakingAccountId === account.id) {
-        wakingAccountId = ''
-      }
-    }
-  }
-
-  const wakeRateLimitResetConcurrent = async (
-    account: AccountSummary,
-    input?: WakeAccountRateLimitsInput
-  ): Promise<WakeAccountRequestResult | null> => {
-    if (usageLoadingByAccountId[account.id]) {
-      return null
-    }
-
-    usageLoadingByAccountId = {
-      ...usageLoadingByAccountId,
-      [account.id]: true
-    }
-    clearUsageError(account.id)
-
-    try {
-      const result = await window.codexApp.wakeAccountRateLimits(account.id, input)
-      usageByAccountId = {
-        ...usageByAccountId,
-        [account.id]: result.rateLimits
-      }
-      snapshot = {
-        ...snapshot,
-        usageByAccountId: {
-          ...snapshot.usageByAccountId,
-          [account.id]: result.rateLimits
-        }
-      }
-      return result.requestResult
-    } catch (error) {
-      if (usageErrorKind(error instanceof Error ? error.message : undefined) === 'expired') {
-        clearUsageData(account.id)
-      }
-
-      usageErrorByAccountId = {
-        ...usageErrorByAccountId,
-        [account.id]: localizeKnownError(error, copyForLanguage().readRateLimitFailed)
-      }
-      throw error
-    } finally {
-      clearUsageLoading(account.id)
-    }
-  }
-
-  const submitWakeDialog = async (): Promise<void> => {
-    if (!wakeDialogAccount) {
-      return
-    }
-
-    resetWakeDialogState()
-    wakeDialogStatus = 'running'
-    await pushWakeLog(copyForLanguage().wakeQuotaLogStart(wakeModelDraft || defaultWakeModel))
-    await pushWakeLog(copyForLanguage().wakeQuotaLogPrompt(wakePromptDraft || 'ping'))
-    await pushWakeLog(copyForLanguage().wakeQuotaLogRequesting)
-
-    try {
-      wakeRequestResult = await wakeRateLimitReset(wakeDialogAccount, {
-        prompt: wakePromptDraft,
-        model: wakeModelDraft
-      })
-      wakeRawResponseBody = wakeRequestResult?.body ?? ''
-
-      if (!wakeRequestResult) {
-        wakeDialogStatus = 'skipped'
-        await pushWakeLog(copyForLanguage().wakeQuotaLogSkipped)
-        return
-      }
-
-      await pushWakeLog(copyForLanguage().wakeQuotaLogAccepted(wakeRequestResult.status))
-      await pushWakeLog(
-        copyForLanguage().wakeQuotaLogResponse(wakeResponsePreview(wakeRequestResult.body))
-      )
-      await pushWakeLog(copyForLanguage().wakeQuotaLogRefreshingUsage)
-
-      const nextRateLimits = usageByAccountId[wakeDialogAccount.id]
-      if (nextRateLimits?.primary?.resetsAt != null) {
-        await pushWakeLog(
-          copyForLanguage().wakeQuotaLogSessionReset(
-            formatRelativeReset(nextRateLimits.primary.resetsAt, snapshot.settings.language)
-          )
-        )
-      }
-      if (supportsWeeklyQuota(nextRateLimits) && nextRateLimits?.secondary?.resetsAt != null) {
-        await pushWakeLog(
-          copyForLanguage().wakeQuotaLogWeeklyReset(
-            formatRelativeReset(nextRateLimits.secondary.resetsAt, snapshot.settings.language)
-          )
-        )
-      }
-
-      wakeDialogStatus = 'success'
-      await pushWakeLog(copyForLanguage().wakeQuotaLogCompleted)
-    } catch (error) {
-      wakeRequestError = localizeKnownError(error, copyForLanguage().readRateLimitFailed)
-      wakeDialogStatus = 'error'
-      await pushWakeLog(copyForLanguage().wakeQuotaLogFailed(wakeRequestError))
-    }
-  }
-
-  const submitAutoWakeDialog = async (): Promise<void> => {
-    if (!wakeDialogAccount || wakingAccountId) {
-      return
-    }
-
-    const account = wakeDialogAccount
-    resetWakeDialogState()
-    wakeDialogStatus = 'running'
-    wakingAccountId = account.id
-    await pushWakeLog(copyForLanguage().wakeQuotaLogRequesting)
-
-    try {
-      const result = await window.codexApp.autoWakeAccountRateLimits(account.id)
-      const entry = result.results.find((item) => item.accountId === account.id)
-      if (!entry) {
-        wakeDialogStatus = 'skipped'
-        await pushWakeLog(copyForLanguage().wakeQuotaLogSkipped)
-        return
-      }
-
-      await pushWakeLog(copyForLanguage().wakeQuotaLogAutoDecision(entry.message))
-      wakeRequestResult = entry.requestResult ?? null
-      wakeRawResponseBody = entry.requestResult?.body ?? ''
-      wakeDialogStatus = entry.status === 'success' ? 'success' : entry.status
-      if (entry.status === 'success') {
-        await pushWakeLog(copyForLanguage().wakeQuotaLogCompleted)
-      }
-      applySnapshot(await window.codexApp.getSnapshot(), { preserveUsageState: true })
-    } catch (error) {
-      wakeRequestError = localizeKnownError(error, copyForLanguage().readRateLimitFailed)
-      wakeDialogStatus = 'error'
-      await pushWakeLog(copyForLanguage().wakeQuotaLogFailed(wakeRequestError))
-    } finally {
-      if (wakingAccountId === account.id) {
-        wakingAccountId = ''
-      }
-    }
-  }
-
-  const submitWakeAllDialog = async (
-    accountIds: string[],
-    options: WakeAllSubmitOptions = {}
-  ): Promise<void> => {
-    if (wakeAllRunning || !snapshot.accounts.length) {
-      return
-    }
-
-    const forceWake = Boolean(options.forceWake)
-    const accounts = wakeAllTargetAccounts(accountIds)
-    if (!accounts.length) {
-      wakeAllError =
-        forceWake || !options.selectedCount
-          ? copyForLanguage().wakeAllNoTarget
-          : copyForLanguage().wakeAllNoSmartTarget
-      return
-    }
-
-    wakeAllRunning = true
-    wakeAllError = ''
-    wakeAllLogs = []
-    wakeAllAwakenedLabels = []
-    pushWakeAllLog(
-      forceWake
-        ? copyForLanguage().wakeAllLogStart(accounts.length)
-        : copyForLanguage().wakeAllLogSmartStart(accounts.length)
-    )
-    pushWakeAllLog(copyForLanguage().wakeQuotaLogStart(wakeAllModelDraft || defaultWakeModel))
-    pushWakeAllLog(copyForLanguage().wakeQuotaLogPrompt(wakeAllPromptDraft || 'ping'))
-
-    try {
-      const outcomes = await mapWithConcurrencyLimit(
-        accounts,
-        wakeConcurrencyLimit,
-        async (account) => {
-          const label = accountEmail(account, copyForLanguage())
-          pushWakeAllLog(copyForLanguage().wakeAllLogAccountStart(label))
-          try {
-            const requestResult = await wakeRateLimitResetConcurrent(account, {
-              prompt: wakeAllPromptDraft,
-              model: wakeAllModelDraft,
-              source: forceWake ? 'manual' : 'auto'
-            })
-
-            if (requestResult) {
-              pushWakeAllAwakenedLabel(label)
-              pushWakeAllLog(
-                copyForLanguage().wakeAllLogAccountSuccess(label, requestResult.status)
-              )
-              return 'success'
-            }
-
-            pushWakeAllLog(copyForLanguage().wakeAllLogAccountSkipped(label))
-            return 'skipped'
-          } catch (error) {
-            pushWakeAllLog(
-              copyForLanguage().wakeAllLogAccountFailed(
-                label,
-                localizeKnownError(error, copyForLanguage().readRateLimitFailed)
-              )
-            )
-            return 'failed'
-          }
-        }
-      )
-
-      const succeeded = outcomes.filter((outcome) => outcome === 'success').length
-      const skipped = outcomes.filter((outcome) => outcome === 'skipped').length
-      const failed = outcomes.filter((outcome) => outcome === 'failed').length
-
-      applySnapshot(await window.codexApp.getSnapshot(), { preserveUsageState: true })
-      pushWakeAllLog(copyForLanguage().wakeAllLogSummary(succeeded, skipped, failed))
-    } catch (error) {
-      wakeAllError = localizeKnownError(error, copyForLanguage().actionFailed)
-    } finally {
-      wakeAllRunning = false
     }
   }
 
@@ -1859,7 +650,7 @@
       return
     }
 
-    applyThemeWithRipple(theme, origin)
+    applyThemeWithRipple(theme, prefersDark, origin)
     await runAction('settings:theme', () => window.codexApp.updateSettings({ theme }))
   }
 
@@ -1983,14 +774,14 @@
     const darkMedia = window.matchMedia('(prefers-color-scheme: dark)')
     prefersDark = darkMedia.matches
     document.body.classList.add(...bodyClasses)
-    applyTheme(snapshot.settings.theme)
+    applyTheme(snapshot.settings.theme, prefersDark)
     void refreshSnapshot()
     void refreshAppMeta()
     void refreshUpdateState()
 
     const handleThemeChange = (event: MediaQueryListEvent): void => {
       prefersDark = event.matches
-      applyTheme(snapshot.settings.theme)
+      applyTheme(snapshot.settings.theme, prefersDark)
     }
 
     darkMedia.addEventListener('change', handleThemeChange)
@@ -2039,7 +830,6 @@
       disposeSnapshot()
       disposeUpdateState()
       disposeLogin()
-      clearExportDialogTimers()
     }
   })
 </script>
@@ -2097,146 +887,53 @@
             class="flex h-0 min-h-0 flex-1 flex-col overflow-hidden"
             use:reveal={{ delay: 0.05 }}
           >
-            <WorkspaceShell
+            <WorkspaceShellHost
               {panelClass}
               copy={copyForLanguage()}
-              workspaceVersion={appMeta.version}
-              workspaceStatusText={loginEvent?.message ?? ''}
-              platform={appMeta.platform}
-              workspaceStatusToneClass={loginEvent
-                ? loginTone(loginEvent.phase)
-                : 'text-muted-strong'}
-              updateSummary={inlineUpdateSummary()}
-              updateActionLabel={inlineUpdateActionLabel()}
-              runUpdateAction={runInlineUpdateAction}
-              showLocalMockToggle={appMeta.isPackaged === false}
-              language={snapshot.settings.language}
-              showLocalMockData={snapshot.settings.showLocalMockData !== false}
-              accounts={snapshot.accounts}
-              codexInstances={snapshot.codexInstances}
-              providers={snapshot.providers}
-              localGatewayStatus={snapshot.localGatewayStatus ?? {
-                running: false,
-                baseUrl: 'http://127.0.0.1:11456',
-                apiKeyPreview: ''
-              }}
-              {localGatewayBusy}
-              {localGatewayApiKey}
-              localGatewayModelMappings={snapshot.settings.localGateway?.modelMappings ?? []}
-              localGatewayAllowedGroupIds={snapshot.settings.localGateway?.allowedGroupIds ?? []}
-              localGatewayAllowedAccountIds={snapshot.settings.localGateway?.allowedAccountIds ??
-                []}
-              groups={snapshot.groups}
-              activeAccountId={snapshot.activeAccountId}
+              {appMeta}
+              {loginEvent}
+              {snapshot}
               {usageByAccountId}
               {usageLoadingByAccountId}
               {usageErrorByAccountId}
-              accountHealthByAccountId={snapshot.accountHealthByAccountId}
-              tokenCostByInstanceId={snapshot.tokenCostByInstanceId}
-              tokenCostErrorByInstanceId={snapshot.tokenCostErrorByInstanceId}
-              runningTokenCostSummary={snapshot.runningTokenCostSummary}
-              runningTokenCostInstanceIds={snapshot.runningTokenCostInstanceIds}
-              gatewayUsageByAccountId={snapshot.gatewayUsageByAccountId ?? {}}
-              statsDisplay={normalizeStatsDisplaySettings(snapshot.settings.statsDisplay)}
-              wakeSchedulesByAccountId={snapshot.wakeSchedulesByAccountId}
-              loginActionBusy={loginActionBusy()}
               {loginStarting}
-              openAccountInCodex={(accountId) =>
-                runAccountAction(`open:${accountId}`, () =>
-                  window.codexApp.openAccountInCodex(accountId)
-                )}
-              openAccountInIsolatedCodex={(accountId) =>
-                runAccountAction(`open-isolated:${accountId}`, () =>
-                  window.codexApp.openAccountInIsolatedCodex(accountId)
-                )}
-              openingAccountId={accountActionKey.startsWith('open:')
-                ? accountActionKey.slice('open:'.length)
-                : ''}
-              openingIsolatedAccountId={accountActionKey.startsWith('open-isolated:')
-                ? accountActionKey.slice('open-isolated:'.length)
-                : ''}
+              {accountActionKey}
+              {providerOpeningId}
+              {localGatewayBusy}
+              {localGatewayApiKey}
+              {localGatewayPortOccupant}
+              {killingLocalGatewayPortOccupant}
               {wakingAccountId}
-              openingProviderId={providerOpeningId}
+              {wakeAllRunning}
+              {refreshTokensBatchPhase}
+              {refreshingAllUsage}
+              {updateState}
+              {accountActions}
+              {localGatewayActions}
+              {wakeDialogs}
+              {accountTokensDialogs}
+              {transferDialogs}
+              {inlineUpdateSummary}
+              {inlineUpdateActionLabel}
+              {runInlineUpdateAction}
+              {loginActionBusy}
+              {runAccountAction}
               {createProvider}
               {probeProviderModels}
               {getProvider}
               {reorderProviders}
               {updateProvider}
               {removeProvider}
-              {startLocalGateway}
-              {stopLocalGateway}
-              {rotateLocalGatewayKey}
-              {openLocalGatewayInCodex}
-              {openLocalGatewayIsolatedInCodex}
-              {updateLocalGatewayModelMappings}
-              {updateLocalGatewayAllowedGroups}
-              {updateLocalGatewayAllowedAccounts}
-              localGatewayAllowedProviderIds={snapshot.settings.localGateway?.allowedProviderIds ??
-                []}
-              {updateLocalGatewayAllowedProviders}
-              {updateLocalGatewayPort}
-              localGatewayAutoStart={snapshot.settings.localGateway?.autoStart === true}
-              {updateLocalGatewayAutoStart}
-              localGatewayVisibleColumns={snapshot.settings.localGateway?.visibleColumns}
-              {updateLocalGatewayVisibleColumns}
-              {localGatewayPortOccupant}
-              {killingLocalGatewayPortOccupant}
-              {killLocalGatewayPortOccupant}
               {openProviderInCodex}
               {openProviderIsolatedInCodex}
-              {reorderAccounts}
-              {reorderAccountsInGroup}
-              {createGroup}
-              {updateGroup}
-              {deleteGroup}
-              {updateAccountGroups}
-              {updateAccountHealth}
-              refreshAccountUsage={(account) => readRateLimits(account, { force: true })}
+              {readRateLimits}
               {updateShowLocalMockData}
               {updateStatsDisplay}
-              tagVisibility={snapshot.settings.tagVisibility ?? {}}
               {updateTagVisibility}
-              {openWakeDialog}
-              {openWakeAllDialog}
-              wakeAllBusy={wakeAllRunning}
-              {openEditTokensDialog}
-              {openRefreshTokensDialog}
-              getAccountTokens={(accountId) => window.codexApp.getAccountTokens(accountId)}
-              {removeAccount}
-              {removeAccounts}
-              {exportSelectedAccounts}
-              readTokenCost={(input) => window.codexApp.readTokenCost(input)}
-              listCodexSessionProjects={() => window.codexApp.listCodexSessionProjects()}
-              listCodexSessions={(input) => window.codexApp.listCodexSessions(input)}
-              readCodexSessionDetail={(input) => window.codexApp.readCodexSessionDetail(input)}
-              copyCodexSessionToProvider={(input) =>
-                window.codexApp.copyCodexSessionToProvider(input)}
-              trashCodexSession={(input) => window.codexApp.trashCodexSession(input)}
-              listCodexSkills={() => window.codexApp.listCodexSkills()}
-              readCodexSkillDetail={(instanceId, skillDirName) =>
-                window.codexApp.readCodexSkillDetail(instanceId, skillDirName)}
-              copyCodexSkill={(input) => window.codexApp.copyCodexSkill(input)}
               {startLogin}
-              importCurrent={() =>
-                runAction('import', () => window.codexApp.importCurrentAccount())}
-              importAccountsFile={() => openImportMethodDialog()}
-              exportAccountsFile={() => openExportFormatDialog()}
+              {runAction}
               {refreshAllRateLimits}
-              {refreshingAllUsage}
-              activateBestAccount={() => {
-                const target = bestAccount()
-                if (!target || target.id === snapshot.activeAccountId) {
-                  return
-                }
-                void runAccountAction(`activate:${target.id}`, () =>
-                  window.codexApp.activateAccount(target.id)
-                )
-              }}
-              bestAccount={bestAccount()}
-              {appMeta}
-              appSettings={snapshot.settings}
-              theme={snapshot.settings.theme}
-              {updateState}
+              {bestAccount}
               {updateLanguage}
               {updateTheme}
               {updatePollingInterval}
@@ -2248,325 +945,75 @@
               {openExternalLink}
               {updateCodexDesktopExecutablePath}
               {updatePreserveChatGptAuthOnDirectProviderOpen}
-              showCodexDesktopExecutablePath={shouldShowCodexDesktopExecutablePath()}
+              {shouldShowCodexDesktopExecutablePath}
             />
           </div>
         </div>
 
-        {#if pageError}
-          <section
-            use:toastReveal={{ autoDismissMs: 8000 }}
-            class="theme-surface theme-error-panel fixed bottom-20 left-1/2 z-[60] w-[min(calc(100vw-2rem),52rem)] -translate-x-1/2 rounded-[1rem] border border-danger/18 bg-[var(--panel-strong)] px-4 py-3.5 text-sm text-danger shadow-[0_20px_60px_-36px_var(--paper-shadow),0_10px_30px_-24px_var(--paper-shadow)]"
-            role="alert"
-            aria-live="assertive"
-          >
-            <div class="flex items-start gap-3">
-              <span class="i-lucide-alert-circle mt-0.5 h-4 w-4 flex-none" aria-hidden="true">
-              </span>
-              <div class="grid min-w-0 flex-1 gap-2">
-                <p class="break-words">{pageError}</p>
-                {#if loginPortOccupant && hasLoginPortConflict()}
-                  <div class="flex flex-wrap items-center gap-2 text-sm text-danger">
-                    <span>
-                      {copyForLanguage().portOccupied(
-                        loginPortOccupant.command,
-                        loginPortOccupant.pid
-                      )}
-                    </span>
-                    <AppButton
-                      variant="secondary"
-                      size="sm"
-                      onclick={killLoginPortOccupant}
-                      disabled={killingLoginPortOccupant}
-                    >
-                      {copyForLanguage().killPortOccupant}
-                    </AppButton>
-                  </div>
-                {/if}
-              </div>
-              <button
-                type="button"
-                class="flex-none rounded-full p-1 opacity-60 transition-opacity hover:opacity-100"
-                aria-label="Close"
-                onclick={() => {
-                  setPageError('')
-                }}
-              >
-                <span class="i-lucide-x h-4 w-4"></span>
-              </button>
-            </div>
-            <span
-              data-toast-timer
-              class="absolute bottom-0 left-4 right-4 h-px origin-left scale-x-0 rounded-full bg-danger/40"
-            ></span>
-          </section>
-        {/if}
+        <PageErrorToast
+          {pageError}
+          copy={copyForLanguage()}
+          {loginPortOccupant}
+          loginPortConflict={hasLoginPortConflict()}
+          {killingLoginPortOccupant}
+          {killLoginPortOccupant}
+          {setPageError}
+        />
       </div>
     {/if}
   </div>
 </div>
 
-{#if renderExportFormatDialog}
-  <AppDialog
-    ariaLabelledby="export-format-dialog-title"
-    maxWidthClass="max-w-xl"
-    panelClass="rounded-[1.25rem]"
-    zIndexClass="z-[60]"
-    closeDisabled={exportDialogBusy}
-    closeOnBackdrop={!exportDialogBusy}
-    motionSelector="[data-motion-item]"
-    onclose={closeExportFormatDialog}
-  >
-    <div class="grid gap-1" data-motion-item>
-      <p class="text-xs font-medium uppercase tracking-[0.22em] text-faint">
-        {exportDialogScopeLabel()}
-      </p>
-      <h2 id="export-format-dialog-title" class="text-[1.15rem] font-semibold text-carbon">
-        {copyForLanguage().exportFormatDialogTitle}
-      </h2>
-      <p class="text-sm leading-6 text-muted-strong">
-        {copyForLanguage().exportFormatDialogDescription}
-      </p>
-    </div>
+<AccountActionsHost bind:this={accountActions} copy={copyForLanguage()} {snapshot} {runAction} />
 
-    <div class="mt-5 grid gap-3">
-      {#each exportFormatOptionOrder as format (format)}
-        <label
-          data-motion-item
-          class={`theme-export-format-option grid cursor-pointer gap-1 rounded-2xl border px-4 py-3 transition-colors duration-140 ${exportDialogFormat === format ? 'border-[var(--line-strong)] bg-[var(--surface-soft)]' : 'border-[var(--card-border)] bg-transparent'}`}
-        >
-          <div class="flex items-start gap-3">
-            <input
-              class="mt-1 h-4 w-4 accent-black"
-              type="radio"
-              name="account-export-format"
-              value={format}
-              checked={exportDialogFormat === format}
-              onchange={() => {
-                exportDialogFormat = format
-              }}
-            />
-            <div class="grid gap-1">
-              <span class="text-sm font-medium text-carbon">{exportFormatLabel(format)}</span>
-              <span class="text-xs leading-5 text-muted-strong">
-                {exportFormatDescription(format)}
-              </span>
-            </div>
-          </div>
-        </label>
-      {/each}
-    </div>
+<LocalGatewayActionsHost
+  bind:this={localGatewayActions}
+  bind:localGatewayBusy
+  bind:localGatewayApiKey
+  bind:localGatewayPortOccupant
+  bind:killingLocalGatewayPortOccupant
+  copy={copyForLanguage()}
+  {snapshot}
+  {runAction}
+  {applySnapshot}
+  {setPageError}
+  {localizeKnownError}
+/>
 
-    {#if exportDialogError}
-      <p class="mt-4 text-sm text-danger" data-motion-item>{exportDialogError}</p>
-    {/if}
+<AccountTransferDialogsHost
+  bind:this={transferDialogs}
+  copy={copyForLanguage()}
+  {runAction}
+  {applySnapshot}
+  {localizeKnownError}
+/>
 
-    <svelte:fragment slot="footer">
-      <AppButton
-        variant="secondary"
-        size="sm"
-        onclick={closeExportFormatDialog}
-        disabled={exportDialogBusy}
-      >
-        {copyForLanguage().exportFormatCancel}
-      </AppButton>
-      <AppButton
-        variant="primary"
-        size="sm"
-        onclick={submitExportFormatDialog}
-        disabled={exportDialogBusy}
-      >
-        {copyForLanguage().exportFormatConfirm}
-      </AppButton>
-    </svelte:fragment>
-  </AppDialog>
-{/if}
+<WakeDialogsHost
+  bind:this={wakeDialogs}
+  bind:usageByAccountId
+  bind:usageLoadingByAccountId
+  bind:usageErrorByAccountId
+  bind:wakingAccountId
+  bind:wakeAllRunning
+  copy={copyForLanguage()}
+  {snapshot}
+  {clearUsageData}
+  {clearUsageError}
+  {clearUsageLoading}
+  {setSnapshotRateLimits}
+  {applySnapshot}
+  {localizeKnownError}
+/>
 
-{#if showImportMethodDialog}
-  <AppDialog
-    ariaLabel={importDialogStep === 'choose'
-      ? copyForLanguage().importMethodTitle
-      : copyForLanguage().pasteSessionTitle}
-    title={importDialogStep === 'choose'
-      ? copyForLanguage().importMethodTitle
-      : copyForLanguage().pasteSessionTitle}
-    showClose
-    closeLabel={copyForLanguage().closeDialog}
-    maxWidthClass={importDialogStep === 'choose' ? 'max-w-sm' : 'max-w-2xl'}
-    closeDisabled={pasteSessionSaving}
-    onclose={closeImportMethodDialog}
-  >
-    {#if importDialogStep === 'choose'}
-      <div class="grid gap-3">
-        <div
-          role="button"
-          tabindex="0"
-          class="theme-import-method-card grid cursor-pointer gap-1 rounded-2xl border border-[var(--card-border)] bg-transparent px-4 py-3 text-left transition-colors duration-140 hover:border-[var(--line-strong)] hover:bg-[var(--surface-soft)]"
-          onclick={selectImportFromFile}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') selectImportFromFile()
-          }}
-        >
-          <div class="flex items-start gap-3">
-            <span class="i-lucide-file-up mt-0.5 h-4 w-4 shrink-0 text-muted-strong"></span>
-            <div class="grid gap-0.5">
-              <span class="text-sm font-medium text-carbon">
-                {copyForLanguage().importFromFile}
-              </span>
-              <span class="text-xs leading-5 text-muted-strong">
-                {copyForLanguage().importFromFileDescription}
-              </span>
-            </div>
-          </div>
-        </div>
-        <div
-          role="button"
-          tabindex="0"
-          class="theme-import-method-card grid cursor-pointer gap-1 rounded-2xl border border-[var(--card-border)] bg-transparent px-4 py-3 text-left transition-colors duration-140 hover:border-[var(--line-strong)] hover:bg-[var(--surface-soft)]"
-          onclick={selectImportFromSession}
-          onkeydown={(e) => {
-            if (e.key === 'Enter' || e.key === ' ') selectImportFromSession()
-          }}
-        >
-          <div class="flex items-start gap-3">
-            <span class="i-lucide-clipboard-paste mt-0.5 h-4 w-4 shrink-0 text-muted-strong"></span>
-            <div class="grid gap-0.5">
-              <span class="text-sm font-medium text-carbon">
-                {copyForLanguage().importFromSession}
-              </span>
-              <span class="text-xs leading-5 text-muted-strong">
-                {copyForLanguage().importFromSessionDescription}
-              </span>
-            </div>
-          </div>
-        </div>
-      </div>
-    {:else}
-      <div class="flex flex-col gap-4">
-        <p class="text-[13px] text-[var(--ink-faint)]">{copyForLanguage().pasteSessionHint}</p>
-        <div class="flex flex-col gap-1.5">
-          <label class="text-[13px] font-medium text-carbon" for="paste-session-input">
-            {copyForLanguage().pasteSessionLabel}
-          </label>
-          <AppInput
-            id="paste-session-input"
-            multiline
-            rows={8}
-            size="md"
-            bind:value={importDialogRawInput}
-            placeholder={copyForLanguage().pasteSessionPlaceholder}
-            spellcheck={false}
-            disabled={pasteSessionSaving}
-          />
-        </div>
-        {#if pasteSessionError}
-          <p class="text-[13px] text-danger" role="alert">{pasteSessionError}</p>
-        {/if}
-      </div>
-    {/if}
-
-    <svelte:fragment slot="footer">
-      {#if importDialogStep === 'paste'}
-        <AppButton
-          variant="secondary"
-          size="sm"
-          onclick={closeImportMethodDialog}
-          disabled={pasteSessionSaving}
-        >
-          {copyForLanguage().exportFormatCancel}
-        </AppButton>
-        <AppButton
-          variant="primary"
-          size="sm"
-          onclick={submitImportDialogPaste}
-          disabled={pasteSessionSaving || !importDialogRawInput.trim()}
-        >
-          {copyForLanguage().pasteSessionConfirm}
-        </AppButton>
-      {/if}
-    </svelte:fragment>
-  </AppDialog>
-{/if}
-
-{#if wakeDialogAccount}
-  <WakeDialog
-    copy={copyForLanguage()}
-    language={snapshot.settings.language}
-    accountLabelText={accountEmail(wakeDialogAccount, copyForLanguage())}
-    bind:activeTab={wakeDialogTab}
-    bind:sessionPrompt={wakePromptDraft}
-    bind:sessionModel={wakeModelDraft}
-    sessionStatus={wakeDialogStatus}
-    sessionLogs={wakeDialogLogs}
-    requestResult={wakeRequestResult}
-    requestError={wakeRequestError}
-    rawResponseBody={wakeRawResponseBody}
-    sessionBusy={Boolean(wakingAccountId)}
-    schedule={currentWakeScheduleDialog()}
-    scheduleDisabled={wakeDialogAccountIsFree()}
-    scheduleDisabledReason={copyForLanguage().wakeScheduleFreeUnsupported}
-    bind:scheduleEnabled={wakeScheduleEnabledDraft}
-    bind:scheduleTimes={wakeScheduleTimesDraft}
-    bind:schedulePrompt={wakeSchedulePromptDraft}
-    bind:scheduleModel={wakeScheduleModelDraft}
-    scheduleError={wakeScheduleError}
-    scheduleSaving={wakeScheduleSaving}
-    onClose={closeWakeDialog}
-    onSubmitSession={submitWakeDialog}
-    onSubmitAuto={submitAutoWakeDialog}
-    onSaveSchedule={saveWakeSchedule}
-    onDeleteSchedule={deleteWakeSchedule}
-  />
-{/if}
-
-{#if wakeAllDialogOpen}
-  <WakeAllDialog
-    copy={copyForLanguage()}
-    accounts={snapshot.accounts}
-    groups={snapshot.groups}
-    settings={snapshot.settings}
-    rateLimitsByAccountId={usageByAccountId}
-    wakeStateByAccountId={snapshot.wakeStateByAccountId ?? {}}
-    accountHealthByAccountId={snapshot.accountHealthByAccountId}
-    bind:prompt={wakeAllPromptDraft}
-    bind:model={wakeAllModelDraft}
-    logs={wakeAllLogs}
-    awakenedLabels={wakeAllAwakenedLabels}
-    error={wakeAllError}
-    running={wakeAllRunning}
-    onClose={closeWakeAllDialog}
-    onSubmitAll={submitWakeAllDialog}
-  />
-{/if}
-
-{#if editTokensDialogAccount}
-  <EditAccountTokensDialog
-    copy={copyForLanguage()}
-    accountLabelText={accountLabel(editTokensDialogAccount, copyForLanguage())}
-    bind:accessToken={editTokensAccessTokenDraft}
-    bind:refreshToken={editTokensRefreshTokenDraft}
-    bind:idToken={editTokensIdTokenDraft}
-    bind:accountIdHint={editTokensAccountIdHintDraft}
-    errorMessage={editTokensError}
-    loading={editTokensLoading}
-    saving={editTokensSaving}
-    onClose={closeEditTokensDialog}
-    onSave={saveAccountTokens}
-  />
-{/if}
-
-{#if refreshTokensDialogAccount}
-  <RefreshAccountTokensDialog
-    copy={copyForLanguage()}
-    accountLabelText={accountLabel(refreshTokensDialogAccount, copyForLanguage())}
-    status={refreshTokensStatus}
-    result={refreshTokensResult}
-    errorMessage={refreshTokensError}
-    busy={refreshTokensStatus === 'running'}
-    onClose={closeRefreshTokensDialog}
-    onSubmit={submitRefreshTokens}
-  />
-{/if}
+<AccountTokensDialogsHost
+  bind:this={accountTokensDialogs}
+  bind:refreshTokensBatchPhase
+  copy={copyForLanguage()}
+  language={snapshot.settings.language}
+  accounts={snapshot.accounts}
+  groups={snapshot.groups}
+  {applySnapshot}
+/>
 
 <div use:reveal={{ delay: 0.02 }}>
   <HeroPanel
@@ -2580,276 +1027,3 @@
     {openExternalLink}
   />
 </div>
-
-<style>
-  :global(::view-transition-old(root)),
-  :global(::view-transition-new(root)) {
-    animation: none;
-    mix-blend-mode: normal;
-  }
-
-  :global(::view-transition-old(root)) {
-    z-index: 0;
-  }
-
-  :global(::view-transition-new(root)) {
-    z-index: 1;
-  }
-
-  .app-shell {
-    position: relative;
-    isolation: isolate;
-    background: var(--color-snow);
-  }
-
-  .mac-inactive-traffic-lights {
-    position: fixed;
-    top: 18px;
-    left: 16px;
-    z-index: 100;
-    display: flex;
-    gap: 8px;
-    align-items: center;
-    pointer-events: none;
-  }
-
-  .mac-inactive-traffic-lights span {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 12px;
-    border-radius: 999px;
-    background: #6d716c;
-    box-shadow: none;
-    filter: none;
-    opacity: 1;
-  }
-
-  :global(.theme-workspace) {
-    background: var(--color-snow) !important;
-    box-shadow: none;
-  }
-
-  :global(.theme-surface) {
-    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
-    background: var(--panel-strong) !important;
-    box-shadow: var(--elevation-2) !important;
-  }
-
-  :global(.theme-surface[role='dialog']),
-  :global(.wake-dialog-panel) {
-    border-radius: 0.75rem !important;
-    border-color: var(--line-strong) !important;
-    background: var(--dialog-bg) !important;
-    box-shadow: var(--dialog-shadow) !important;
-  }
-
-  :global(.theme-import-method-card) {
-    border-color: var(--line-strong) !important;
-    background: var(--surface-soft) !important;
-    box-shadow: none;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      box-shadow 140ms ease;
-  }
-
-  :global(.theme-import-method-card:hover),
-  :global(.theme-import-method-card:focus-visible) {
-    border-color: var(--color-carbon) !important;
-    background: var(--surface-hover) !important;
-    box-shadow: none;
-  }
-
-  :global(.wake-dialog-backdrop) {
-    background: color-mix(in srgb, black 34%, transparent) !important;
-  }
-
-  :global(.theme-toolbar),
-  :global(.theme-soft-panel) {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)) !important;
-    box-shadow: none;
-  }
-
-  :global(.workspace-topbar) {
-    position: relative;
-    z-index: 1;
-    border-bottom: 1px solid color-mix(in srgb, var(--line-strong) 74%, transparent);
-    background: color-mix(in srgb, var(--color-fog) 78%, var(--color-snow));
-    box-shadow:
-      0 1px 0 var(--edge-light) inset,
-      0 1px 0 color-mix(in srgb, var(--edge-dark) 22%, transparent);
-  }
-
-  :global(.theme-view-toggle-active) {
-    box-shadow: none;
-  }
-
-  :global(.theme-view-toggle-active) {
-    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent) !important;
-    background: var(--panel-strong) !important;
-  }
-
-  :global(.theme-account-row) {
-    border: 0 !important;
-    outline: 0 !important;
-    border-radius: 0;
-    background: transparent !important;
-    box-shadow: none;
-    position: relative;
-  }
-
-  :global(.theme-account-row::before),
-  :global(.theme-account-row::after) {
-    content: none !important;
-  }
-
-  :global(.theme-account-row + .theme-account-row::before) {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0.75rem;
-    left: 3.25rem;
-    height: 1px;
-    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
-    pointer-events: none;
-  }
-
-  :global(.theme-account-row:has(.theme-checkbox-input:checked)) {
-    background: var(--surface-selected) !important;
-  }
-
-  :global(.theme-account-selector),
-  :global(.theme-workbench-chevron),
-  :global(.theme-workbench-summary-pill),
-  :global(.theme-selection-group-button),
-  :global(.theme-selection-export) {
-    box-shadow: none;
-  }
-
-  :global(.theme-workbench-toolbar) {
-    border-color: color-mix(in srgb, var(--line-strong) 64%, transparent) !important;
-    background: transparent !important;
-    box-shadow: none;
-  }
-
-  :global(.theme-filter-chip-idle) {
-    box-shadow: none;
-  }
-
-  :global(.theme-filter-chip-active) {
-    background: var(--color-carbon) !important;
-    color: var(--color-snow) !important;
-    box-shadow: none;
-  }
-
-  :global(.scroll-row .theme-soft-panel) {
-    border-radius: 0.34rem !important;
-    background: color-mix(in srgb, var(--panel-strong) 58%, var(--surface-soft)) !important;
-  }
-
-  :global(.theme-version-pill),
-  :global(.theme-plan-neutral),
-  :global(.theme-plan-plus),
-  :global(.theme-plan-pro),
-  :global(.theme-plan-team),
-  :global(.theme-plan-enterprise),
-  :global(.theme-wake-schedule-pill),
-  :global(.theme-tag-assigned) {
-    border-radius: 0.28rem !important;
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 62%, transparent) inset;
-  }
-
-  :global(.theme-provider-card),
-  :global(.theme-tag-manager-card) {
-    border: 0 !important;
-    outline: 0 !important;
-    border-radius: 0 !important;
-    background: transparent !important;
-    box-shadow: none;
-    position: relative;
-  }
-
-  :global(.theme-provider-card::before),
-  :global(.theme-provider-card::after) {
-    content: none !important;
-  }
-
-  :global(.theme-tag-empty),
-  :global(.theme-tag-picker-surface) {
-    border-color: color-mix(in srgb, var(--line-strong) 72%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 92%, var(--color-snow)) !important;
-    box-shadow: none;
-  }
-
-  :global(.theme-tag-manager-card:hover) {
-    background: var(--surface-hover) !important;
-  }
-
-  :global(.theme-select),
-  :global(.theme-provider-input),
-  :global(.theme-tag-input),
-  :global(.wake-dialog-field) {
-    border-color: color-mix(in srgb, var(--line-strong) 70%, transparent) !important;
-    background: var(--panel-strong) !important;
-    box-shadow: var(--input-shadow);
-  }
-
-  :global(.theme-primary-button) {
-    box-shadow: var(--control-shadow) !important;
-  }
-
-  :global(.theme-ghost-button),
-  :global(.theme-menu-choice-active) {
-    box-shadow: var(--control-shadow);
-  }
-
-  :global(.text-muted) {
-    color: var(--ink-soft);
-  }
-
-  :global(.text-muted-strong) {
-    color: var(--ink-soft-strong);
-  }
-
-  :global(.text-faint) {
-    color: var(--ink-faint);
-  }
-
-  :global(.border-soft) {
-    border-color: var(--color-arctic-mist);
-  }
-
-  @keyframes status-dot-breath {
-    0%,
-    100% {
-      opacity: 0.62;
-    }
-    50% {
-      opacity: 1;
-    }
-  }
-
-  @keyframes progress-shimmer {
-    0% {
-      background-position: 200% 0;
-    }
-    100% {
-      background-position: -200% 0;
-    }
-  }
-
-  :global(.theme-status-active),
-  :global(.gateway-status-pill-running span:first-child),
-  :global(.theme-provider-status) {
-    animation: status-dot-breath 1.6s ease-in-out infinite;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.theme-status-active),
-    :global(.gateway-status-pill-running span:first-child),
-    :global(.theme-provider-status) {
-      animation: none;
-    }
-  }
-</style>

@@ -93,6 +93,7 @@
   export let groupMutationBusy = false
   export let refreshingAllUsage = false
   export let wakeAllBusy = false
+  export let refreshTokensBatchBusy = false
   export let bestAccount: AccountSummary | null = null
   export let startLogin: (method: LoginMethod) => void = () => {}
   export let importCurrent: () => void = () => {}
@@ -109,6 +110,7 @@
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
   export let openWakeAllDialog: () => void = () => {}
+  export let openRefreshTokensBatchDialog: () => void = () => {}
   export let openEditTokensDialog: (account: AccountSummary) => void
   export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let reorderAccounts: (accountIds: string[]) => Promise<void>
@@ -251,6 +253,18 @@
       direction: 'desc',
       icon: 'i-lucide-arrow-down-wide-narrow',
       label: () => copy.accountSortSecondaryDesc
+    },
+    {
+      field: 'accessTokenExpiry',
+      direction: 'asc',
+      icon: 'i-lucide-clock-arrow-down',
+      label: () => copy.accountSortAccessTokenExpiryAsc
+    },
+    {
+      field: 'accessTokenExpiry',
+      direction: 'desc',
+      icon: 'i-lucide-clock-arrow-up',
+      label: () => copy.accountSortAccessTokenExpiryDesc
     }
   ]
 
@@ -912,6 +926,19 @@
         class={`${wakeAllBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-zap'} h-3.5 w-3.5`}
       ></span>
       <span>{copy.wakeAllAccounts}</span>
+    </AppButton>
+    <AppButton
+      variant="secondary"
+      size="xs"
+      onclick={openRefreshTokensBatchDialog}
+      disabled={loginActionBusy || refreshTokensBatchBusy || !visibleAccounts.length}
+      ariaLabel={copy.refreshTokensBatch}
+      title={copy.refreshTokensBatch}
+    >
+      <span
+        class={`${refreshTokensBatchBusy ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-refresh-ccw-dot'} h-3.5 w-3.5`}
+      ></span>
+      <span>{copy.refreshTokensBatch}</span>
     </AppButton>
     <div class="relative">
       <AppButton
@@ -1835,7 +1862,7 @@
                   </button>
 
                   <button
-                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-danger shadow-none outline-none transition-colors duration-140 hover:bg-danger/10 active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-danger shadow-none outline-none transition-colors duration-140 hover:bg-[color-mix(in_srgb,var(--danger)_12%,transparent)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
                     type="button"
                     onclick={() => {
                       removeAccount(actionAccount)
@@ -1844,7 +1871,7 @@
                     disabled={loginActionBusy}
                   >
                     <span
-                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-danger transition-colors duration-140 group-hover:bg-[var(--color-snow)]"
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-danger transition-colors duration-140 group-hover:bg-[color-mix(in_srgb,var(--danger)_22%,transparent)] group-hover:text-danger"
                     >
                       <span class="i-lucide-trash-2 h-4 w-4"></span>
                     </span>
@@ -1953,96 +1980,3 @@
     </p>
   </div>
 {/if}
-
-<style>
-  .scroll-row {
-    scrollbar-width: none;
-    -ms-overflow-style: none;
-  }
-
-  .scroll-row::-webkit-scrollbar {
-    display: none;
-  }
-
-  .theme-account-divider {
-    height: 1px;
-    background: var(--row-divider);
-  }
-
-  .theme-account-expand-btn :global(.i-lucide-chevron-down) {
-    transition: transform 180ms ease;
-  }
-
-  .theme-account-expand-btn.is-expanded :global(.i-lucide-chevron-down) {
-    transform: rotate(180deg);
-  }
-
-  .account-drag-button {
-    appearance: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 1.5rem;
-    min-width: 1.5rem;
-    height: 1.5rem;
-    min-height: 1.5rem;
-    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
-    border-radius: 0.38rem;
-    background: transparent;
-    color: var(--ink-faint);
-    padding: 0;
-    transition:
-      background-color 140ms ease,
-      border-color 140ms ease,
-      color 140ms ease,
-      opacity 140ms ease;
-  }
-
-  .account-drag-button:hover:not(:disabled),
-  .account-drag-button:focus-visible {
-    border-color: var(--line-strong);
-    background: var(--surface-hover);
-    color: var(--color-carbon);
-  }
-
-  .account-drag-button:disabled {
-    cursor: not-allowed;
-    opacity: 0.48;
-  }
-
-  .theme-reset-time-neutral {
-    color: var(--ink-soft-strong);
-  }
-
-  .theme-quota-summary {
-    background: color-mix(in srgb, var(--panel-strong) 88%, var(--surface-soft));
-  }
-
-  .theme-quota-summary-bar {
-    background: var(--quota-bar-bg);
-  }
-
-  :global(.theme-account-row.is-dnd-shadow) + .theme-account-row {
-    transform: translateY(3px);
-    transition: transform 0.18s cubic-bezier(0.33, 1, 0.68, 1);
-  }
-
-  :global(.theme-account-row.is-dnd-shadow) + .theme-account-row::before {
-    content: '' !important;
-    position: absolute;
-    top: -1px;
-    right: 0.75rem;
-    left: 0.75rem;
-    height: 1px;
-    background: color-mix(in srgb, var(--color-carbon) 22%, transparent);
-    opacity: 1;
-    transition: opacity 0.18s ease;
-    pointer-events: none;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    :global(.theme-account-row.is-dnd-shadow) + .theme-account-row {
-      transform: none;
-    }
-  }
-</style>

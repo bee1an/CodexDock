@@ -5,7 +5,7 @@ import type { LocalizedCopy } from '$lib/view/app-view'
 
 export const ungroupedFilterId = '__ungrouped__'
 
-export type AccountUsageSortField = 'primary' | 'secondary'
+export type AccountUsageSortField = 'primary' | 'secondary' | 'accessTokenExpiry'
 export type AccountUsageSortDirection = 'asc' | 'desc'
 
 export interface PersistedUsageSortOrder {
@@ -92,8 +92,15 @@ function usageRemainingForSort(
   usageByAccountId: Record<string, AccountRateLimits>,
   field: AccountUsageSortField
 ): number | null {
+  if (field === 'accessTokenExpiry') {
+    return null
+  }
   const window = usageByAccountId[accountId]?.[field]
   return window ? remainingPercent(window.usedPercent) : null
+}
+
+function accessTokenExpiryForSort(account: AccountSummary): number | null {
+  return typeof account.accessTokenExpiresAt === 'number' ? account.accessTokenExpiresAt : null
 }
 
 export function sortAccountsByUsage(
@@ -103,6 +110,29 @@ export function sortAccountsByUsage(
   direction: AccountUsageSortDirection
 ): AccountSummary[] {
   const indexByAccountId = new Map(accounts.map((account, index) => [account.id, index]))
+
+  if (field === 'accessTokenExpiry') {
+    return [...accounts].sort((a, b) => {
+      const aExpiry = accessTokenExpiryForSort(a)
+      const bExpiry = accessTokenExpiryForSort(b)
+      const aMissing = aExpiry == null
+      const bMissing = bExpiry == null
+
+      if (aMissing !== bMissing) {
+        return aMissing ? 1 : -1
+      }
+      if (aMissing && bMissing) {
+        return (indexByAccountId.get(a.id) ?? 0) - (indexByAccountId.get(b.id) ?? 0)
+      }
+
+      const expiryCompare =
+        direction === 'asc'
+          ? (aExpiry as number) - (bExpiry as number)
+          : (bExpiry as number) - (aExpiry as number)
+
+      return expiryCompare || (indexByAccountId.get(a.id) ?? 0) - (indexByAccountId.get(b.id) ?? 0)
+    })
+  }
 
   return [...accounts].sort((a, b) => {
     const aRemaining = usageRemainingForSort(a.id, usageByAccountId, field)
@@ -217,4 +247,15 @@ export function filterChipLabel(
 
 export function groupMemberCount(accounts: AccountSummary[], groupId: string): number {
   return accounts.filter((account) => account.groupIds.includes(groupId)).length
+}
+
+export function eligibleAccountsForRefresh(
+  accounts: AccountSummary[],
+  thresholdMs: number,
+  now: number = Date.now()
+): AccountSummary[] {
+  return accounts.filter((account) => {
+    if (typeof account.accessTokenExpiresAt !== 'number') return false
+    return account.accessTokenExpiresAt - now <= thresholdMs
+  })
 }

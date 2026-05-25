@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from 'svelte'
   import type { DndEvent as SortEvent } from 'svelte-dnd-action'
 
   import type {
@@ -66,6 +67,7 @@
   } from '../views/accounts/accounts-panel-provider'
   import { providerLabel, nextTheme, themeIconClass, themeTitle } from '$lib/view/app-view'
   import { cascadeIn, reveal } from '$lib/motion/gsap-motion'
+  import { push } from 'svelte-spa-router'
 
   const flipDurationMs = 160
 
@@ -115,6 +117,7 @@
   export let openAccountInIsolatedCodex: (accountId: string) => void
   export let openWakeDialog: (account: AccountSummary, initialTab?: 'session' | 'schedule') => void
   export let openWakeAllDialog: () => void = () => {}
+  export let openRefreshTokensBatchDialog: () => void = () => {}
   export let openEditTokensDialog: (account: AccountSummary) => void
   export let openRefreshTokensDialog: (account: AccountSummary) => void
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
@@ -197,6 +200,7 @@
   export let refreshAllRateLimits: () => void = () => {}
   export let refreshingAllUsage = false
   export let wakeAllBusy = false
+  export let refreshTokensBatchBusy = false
   export let activateBestAccount: () => void = () => {}
   export let bestAccount: AccountSummary | null = null
   export let appMeta: AppMeta
@@ -223,7 +227,7 @@
   ) => Promise<void> = async () => {}
   export let showCodexDesktopExecutablePath = false
 
-  let currentView:
+  type AppRouteId =
     | 'accounts'
     | 'providers'
     | 'gateway'
@@ -231,7 +235,52 @@
     | 'sessions'
     | 'skills'
     | 'stash'
-    | 'settings' = 'accounts'
+    | 'settings'
+
+  const routePathToView: Record<string, AppRouteId> = {
+    '/': 'accounts',
+    '/accounts': 'accounts',
+    '/providers': 'providers',
+    '/gateway': 'gateway',
+    '/stats': 'stats',
+    '/sessions': 'sessions',
+    '/skills': 'skills',
+    '/stash': 'stash',
+    '/settings': 'settings'
+  }
+
+  const routeLocationFromHash = (): string => {
+    if (typeof window === 'undefined' || !window.location.hash.startsWith('#/')) {
+      return '/'
+    }
+
+    const hashLocation = window.location.hash.slice(1)
+    const queryIndex = hashLocation.indexOf('?')
+    return queryIndex >= 0 ? hashLocation.slice(0, queryIndex) : hashLocation
+  }
+
+  const viewFromRoute = (location: string): AppRouteId => routePathToView[location] ?? 'accounts'
+
+  const navigateView = (view: AppRouteId): void => {
+    currentView = view
+    void push(view === 'accounts' ? '/accounts' : `/${view}`).catch(() => {
+      // Keep the local tab state even if hash navigation is unavailable in tests.
+    })
+  }
+
+  let currentView: AppRouteId = 'accounts'
+
+  onMount(() => {
+    const handleHashChange = (): void => {
+      currentView = viewFromRoute(routeLocationFromHash())
+    }
+
+    window.addEventListener('hashchange', handleHashChange)
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange)
+    }
+  })
+
   let activeGroupFilter = 'all'
   let groupMutationBusy = false
   let showGroupManagerDialog = false
@@ -454,9 +503,7 @@
           size="sm"
           selected={currentView === 'accounts'}
           ariaPressed={currentView === 'accounts'}
-          onclick={() => {
-            currentView = 'accounts'
-          }}
+          onclick={() => navigateView('accounts')}
           ariaLabel={copy.accountCount(accounts.length)}
         >
           <span class="i-lucide-layout-list h-3.5 w-3.5"></span>
@@ -467,9 +514,7 @@
           size="sm"
           selected={currentView === 'providers'}
           ariaPressed={currentView === 'providers'}
-          onclick={() => {
-            currentView = 'providers'
-          }}
+          onclick={() => navigateView('providers')}
           ariaLabel={copy.providerCount(providers.length)}
         >
           <span class="i-lucide-plug-zap h-3.5 w-3.5"></span>
@@ -480,9 +525,7 @@
           size="sm"
           selected={currentView === 'gateway'}
           ariaPressed={currentView === 'gateway'}
-          onclick={() => {
-            currentView = 'gateway'
-          }}
+          onclick={() => navigateView('gateway')}
         >
           <span class="i-lucide-radio-tower h-3.5 w-3.5"></span>
           <span>{copy.localGateway}</span>
@@ -492,9 +535,7 @@
           size="sm"
           selected={currentView === 'stats'}
           ariaPressed={currentView === 'stats'}
-          onclick={() => {
-            currentView = 'stats'
-          }}
+          onclick={() => navigateView('stats')}
         >
           <span class="i-lucide-chart-no-axes-combined h-3.5 w-3.5"></span>
           <span>{copy.tokenStats}</span>
@@ -504,9 +545,7 @@
           size="sm"
           selected={currentView === 'sessions'}
           ariaPressed={currentView === 'sessions'}
-          onclick={() => {
-            currentView = 'sessions'
-          }}
+          onclick={() => navigateView('sessions')}
         >
           <span class="i-lucide-messages-square h-3.5 w-3.5"></span>
           <span>{copy.sessions}</span>
@@ -516,9 +555,7 @@
           size="sm"
           selected={currentView === 'skills'}
           ariaPressed={currentView === 'skills'}
-          onclick={() => {
-            currentView = 'skills'
-          }}
+          onclick={() => navigateView('skills')}
         >
           <span class="i-lucide-puzzle h-3.5 w-3.5"></span>
           <span>{copy.skills}</span>
@@ -528,9 +565,7 @@
           size="sm"
           selected={currentView === 'stash'}
           ariaPressed={currentView === 'stash'}
-          onclick={() => {
-            currentView = 'stash'
-          }}
+          onclick={() => navigateView('stash')}
         >
           <span class="i-lucide-archive h-3.5 w-3.5"></span>
           <span>{copy.stash}</span>
@@ -540,9 +575,7 @@
           size="sm"
           selected={currentView === 'settings'}
           ariaPressed={currentView === 'settings'}
-          onclick={() => {
-            currentView = 'settings'
-          }}
+          onclick={() => navigateView('settings')}
         >
           <span class="i-lucide-cog h-3.5 w-3.5"></span>
           <span>{copy.settings}</span>
@@ -687,6 +720,7 @@
       {groupMutationBusy}
       {refreshingAllUsage}
       {wakeAllBusy}
+      {refreshTokensBatchBusy}
       {bestAccount}
       {startLogin}
       {importCurrent}
@@ -694,6 +728,7 @@
       {exportAccountsFile}
       {refreshAllRateLimits}
       {openWakeAllDialog}
+      {openRefreshTokensBatchDialog}
       {activateBestAccount}
       openGroupManager={() => {
         showGroupManagerDialog = true
