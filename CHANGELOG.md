@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.13 - 2026-05-26
+
+This release adds batch token refresh with a multi-account selection dialog, extracts the app shell into dedicated Host components, and normalizes base styles.
+
+- Added batch refresh tokens dialog with account selection, concurrency-limited IPC, and progress UI for refreshing multiple accounts at once.
+- Refactored App.svelte into dedicated Host components and extracted view-level CSS for cleaner separation of concerns.
+- Added normalize.css and reset default list styles for consistent cross-platform rendering.
+- Fixed template export to fall back to `access_token` when `id_token` is missing.
+
 ## 0.4.12 - 2026-05-24
 
 This patch release improves Codex account import compatibility for session and token-only payloads.
