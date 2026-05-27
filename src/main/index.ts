@@ -15,12 +15,21 @@ import { readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { randomUUID } from 'node:crypto'
 import { join } from 'path'
-import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { electronApp, is, optimizer } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { runCli } from '../cli/run-cli'
 import { createAppUpdaterService, type AppUpdaterService } from './app-updater'
 import { createAuthRefreshController, type AuthRefreshController } from './auth-poller'
-import { isHomebrewCaskInstalled, launchHomebrewCaskUpgrade } from './homebrew-updater'
+import {
+  appendLogLine,
+  ensureLogDir,
+  isHomebrewCaskInstalled,
+  runHomebrewCaskUpgrade
+} from './homebrew-updater'
+import {
+  createUpgradeProgressWindowController,
+  type UpgradeProgressWindowController
+} from './upgrade-progress-window'
 import { createElectronCodexPlatformAdapter } from './electron-platform'
 import { installCliShim } from './cli-shim'
 import { createCodexServices, type CodexServices } from './codex-services'
@@ -79,8 +88,7 @@ let authRefreshController: AuthRefreshController | null = null
 let usagePollingController: UsagePollingController | null = null
 let wakeSchedulerController: WakeSchedulerController | null = null
 let lastSnapshot: AppSnapshot | null = null
-let homebrewUpdateQuitTimer: ReturnType<typeof setTimeout> | null = null
-let homebrewUpdateQuitCountdownStarted = false
+let upgradeProgressController: UpgradeProgressWindowController | null = null
 const defaultWorkspacePath = process.cwd()
 const isLocalEnvironment = !app.isPackaged
 const productionAppConfigPath = join(homedir(), '.config', 'codexdock')
@@ -324,51 +332,13 @@ function emitUpdateState(updateState: AppUpdateState): void {
     tray.setContextMenu(buildTrayMenu(lastSnapshot))
   }
 
-  if (
-    homebrewUpdateQuitTimer &&
-    updateState.externalAction === 'homebrew' &&
-    updateState.status === 'error'
-  ) {
-    clearTimeout(homebrewUpdateQuitTimer)
-    homebrewUpdateQuitTimer = null
-    homebrewUpdateQuitCountdownStarted = false
-  }
-
-  if (
-    updateState.delivery === 'external' &&
-    updateState.externalAction === 'homebrew' &&
-    updateState.status === 'downloading' &&
-    updateState.externalCommandStatus === 'waiting-for-app-quit' &&
-    !homebrewUpdateQuitCountdownStarted
-  ) {
-    homebrewUpdateQuitCountdownStarted = true
-    if (homebrewUpdateQuitTimer) {
-      clearTimeout(homebrewUpdateQuitTimer)
-    }
-    homebrewUpdateQuitTimer = setTimeout(() => {
-      app.quit()
-    }, 400)
-  }
-
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('codex:update-state', updateState)
   }
 }
 
 async function triggerUpdateDownload(): Promise<AppUpdateState> {
-  const updateState = await requireAppUpdaterService().downloadUpdate()
-  if (
-    updateState.delivery === 'external' &&
-    updateState.externalAction === 'homebrew' &&
-    updateState.status === 'downloading' &&
-    !homebrewUpdateQuitTimer
-  ) {
-    homebrewUpdateQuitTimer = setTimeout(() => {
-      app.quit()
-    }, 60_000)
-  }
-
-  return updateState
+  return requireAppUpdaterService().downloadUpdate()
 }
 
 function showMainWindow(): void {
@@ -595,13 +565,64 @@ app.whenReady().then(async () => {
       isHomebrewCaskInstalled({
         caskToken: 'codexdock'
       }),
-    launchHomebrewUpdate: async () =>
-      launchHomebrewCaskUpgrade({
-        appName: app.getName(),
-        caskToken: 'codexdock',
-        executablePath: app.getPath('exe'),
-        appPid: process.pid
+    runHomebrewUpgrade: async () => {
+      const logFilePath = join(app.getPath('userData'), 'updater.log')
+      await ensureLogDir(logFilePath)
+
+      upgradeProgressController = createUpgradeProgressWindowController({
+        isDevelopment: is.dev,
+        createWindow: () => {
+          const lang = lastSnapshot?.settings.language ?? 'zh-CN'
+          const win = new BrowserWindow({
+            width: 560,
+            height: 420,
+            resizable: true,
+            minimizable: false,
+            maximizable: false,
+            show: false,
+            autoHideMenuBar: true,
+            ...(process.platform === 'darwin'
+              ? { titleBarStyle: 'hidden' as const, trafficLightPosition: { x: 12, y: 12 } }
+              : {}),
+            webPreferences: {
+              preload: join(__dirname, '../preload/index.js'),
+              sandbox: false
+            }
+          })
+          win.on('ready-to-show', () => {
+            if (!win.isDestroyed()) {
+              win.show()
+            }
+          })
+          void loadRendererWindow(win, { view: 'upgrade-progress', lang })
+          return win
+        }
       })
+      upgradeProgressController.open()
+
+      const result = await runHomebrewCaskUpgrade({
+        caskToken: 'codexdock',
+        logFilePath,
+        emit: (event) => {
+          upgradeProgressController?.emit(event)
+        },
+        appendLog: (line) => appendLogLine(logFilePath, line),
+        beforeInstall: async () => {
+          await upgradeProgressController?.waitForInstallAck()
+        }
+      })
+
+      return {
+        success: result.success,
+        message: result.errorMessage,
+        command: result.command,
+        logFilePath
+      }
+    },
+    performHomebrewRelaunch: () => {
+      app.relaunch()
+      app.quit()
+    }
   })
   appUpdaterService.subscribe((updateState) => {
     emitUpdateState(updateState)
@@ -1136,6 +1157,26 @@ app.whenReady().then(async () => {
   ipcMain.handle('codex:check-for-updates', () => requireAppUpdaterService().checkForUpdates())
   ipcMain.handle('codex:download-update', () => triggerUpdateDownload())
   ipcMain.handle('codex:install-update', () => requireAppUpdaterService().installUpdate())
+  ipcMain.handle('upgrade:ready', () => {
+    upgradeProgressController?.markRendererReady()
+  })
+  ipcMain.handle('upgrade:installRendered', () => {
+    upgradeProgressController?.markInstallRendered()
+  })
+  ipcMain.handle('upgrade:restart', () => {
+    app.relaunch()
+    app.quit()
+  })
+  ipcMain.handle('upgrade:cancel', () => {
+    upgradeProgressController?.close()
+  })
+  ipcMain.handle('upgrade:openReleases', () => {
+    const githubUrl = resolveGithubUrl()
+    if (githubUrl) {
+      void shell.openExternal(`${githubUrl}/releases`)
+    }
+    upgradeProgressController?.close()
+  })
   ipcMain.handle('codex:start-login', (_, method: LoginMethod) => codexServices.login.start(method))
   ipcMain.handle('codex:get-login-port-occupant', () => codexServices.login.getPortOccupant())
   ipcMain.handle('codex:kill-login-port-occupant', () => codexServices.login.killPortOccupant())

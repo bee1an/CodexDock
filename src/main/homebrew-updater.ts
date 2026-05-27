@@ -1,24 +1,46 @@
 import { spawn } from 'node:child_process'
-import { constants } from 'node:fs'
-import { access } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+import { constants, promises as fsp } from 'node:fs'
 import path from 'node:path'
+
+import type { UpgradeProgressEvent } from '../shared/codex'
 
 const DEFAULT_BREW_BINARY_CANDIDATES = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew']
 
-export interface HomebrewCaskUpgradeLaunch {
-  logFilePath: string
-  statusFilePath: string
+export interface HomebrewUpgradeRunResult {
+  success: boolean
+  exitCode: number | null
+  command?: string
+  errorMessage?: string
 }
 
-function shellQuote(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`
+export type HomebrewUpgradeEmit = (event: UpgradeProgressEvent) => void
+
+export interface RunHomebrewCaskUpgradeOptions {
+  brewBinaryCandidates?: readonly string[]
+  caskToken?: string
+  logFilePath: string
+  emit: HomebrewUpgradeEmit
+  /**
+   * Called once after `brew fetch` completes successfully and before `brew upgrade`
+   * runs. The runner awaits the returned promise so the caller can flush the UI
+   * (e.g., wait for the renderer to acknowledge the install phase) before the
+   * destructive step.
+   */
+  beforeInstall?: () => Promise<void>
+  spawnImpl?: typeof spawn
+  appendLog?: (line: string) => void | Promise<void>
+}
+
+export interface IsHomebrewCaskInstalledOptions {
+  brewBinaryCandidates?: readonly string[]
+  caskToken?: string
+  spawnImpl?: typeof spawn
 }
 
 async function resolveExecutable(candidates: readonly string[]): Promise<string | null> {
   for (const candidate of candidates) {
     try {
-      await access(candidate, constants.X_OK)
+      await fsp.access(candidate, constants.X_OK)
       return candidate
     } catch {
       continue
@@ -28,9 +50,13 @@ async function resolveExecutable(candidates: readonly string[]): Promise<string 
   return null
 }
 
-async function waitForExitCode(command: string, args: readonly string[]): Promise<number | null> {
-  return await new Promise<number | null>((resolve) => {
-    const child = spawn(command, [...args], {
+function waitForExitCode(
+  command: string,
+  args: readonly string[],
+  spawnImpl: typeof spawn = spawn
+): Promise<number | null> {
+  return new Promise<number | null>((resolve) => {
+    const child = spawnImpl(command, [...args], {
       stdio: 'ignore'
     })
 
@@ -39,14 +65,9 @@ async function waitForExitCode(command: string, args: readonly string[]): Promis
   })
 }
 
-function resolveAppBundlePath(executablePath: string): string {
-  return path.resolve(executablePath, '..', '..', '..')
-}
-
-export async function isHomebrewCaskInstalled(options?: {
-  brewBinaryCandidates?: readonly string[]
-  caskToken?: string
-}): Promise<boolean> {
+export async function isHomebrewCaskInstalled(
+  options?: IsHomebrewCaskInstalledOptions
+): Promise<boolean> {
   const brewBinary = await resolveExecutable(
     options?.brewBinaryCandidates ?? DEFAULT_BREW_BINARY_CANDIDATES
   )
@@ -54,89 +75,228 @@ export async function isHomebrewCaskInstalled(options?: {
     return false
   }
 
-  const exitCode = await waitForExitCode(brewBinary, [
-    'list',
-    '--cask',
-    options?.caskToken ?? 'codexdock'
-  ])
+  const exitCode = await waitForExitCode(
+    brewBinary,
+    ['list', '--cask', options?.caskToken ?? 'codexdock'],
+    options?.spawnImpl
+  )
   return exitCode === 0
 }
 
-export async function launchHomebrewCaskUpgrade(options?: {
-  appName?: string
-  appBundlePath?: string
-  appPid?: number
-  brewBinaryCandidates?: readonly string[]
-  caskToken?: string
-  executablePath?: string
-  logFilePath?: string
-  statusFilePath?: string
-}): Promise<HomebrewCaskUpgradeLaunch> {
-  const brewBinary = await resolveExecutable(
-    options?.brewBinaryCandidates ?? DEFAULT_BREW_BINARY_CANDIDATES
-  )
-  if (!brewBinary) {
-    throw new Error('Homebrew is not installed on this Mac.')
+interface SpawnStreamResult {
+  exitCode: number | null
+  /** Either 'spawn-error' or undefined */
+  spawnError?: Error
+}
+
+function streamCommand(
+  command: string,
+  args: readonly string[],
+  options: {
+    emit: HomebrewUpgradeEmit
+    appendLog?: (line: string) => void | Promise<void>
+    spawnImpl: typeof spawn
+    env?: NodeJS.ProcessEnv
   }
+): Promise<SpawnStreamResult> {
+  return new Promise<SpawnStreamResult>((resolve) => {
+    const child = options.spawnImpl(command, [...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: options.env
+    })
 
-  const caskToken = options?.caskToken?.trim() || 'codexdock'
-  const appName = options?.appName?.trim() || 'CodexDock'
-  const appBundlePath =
-    options?.appBundlePath?.trim() ||
-    resolveAppBundlePath(options?.executablePath?.trim() || process.execPath)
-  const logFilePath =
-    options?.logFilePath?.trim() || path.join(tmpdir(), `${caskToken}-homebrew-update.log`)
-  const statusFilePath =
-    options?.statusFilePath?.trim() || path.join(tmpdir(), `${caskToken}-homebrew-update.status`)
-  const appPid = Number.isInteger(options?.appPid) ? String(options?.appPid) : ''
-  const brewUpdateCommand = `${brewBinary} update`
-  const brewUpgradeCommand = `${brewBinary} upgrade --cask ${caskToken}`
+    let stdoutBuffer = ''
+    let stderrBuffer = ''
 
-  const script = [
-    `exec >>${shellQuote(logFilePath)} 2>&1`,
-    `status_file=${shellQuote(statusFilePath)}`,
-    `write_status() { /usr/bin/printf '%s\\t%s\\t%s\\t%s\\t%s\\n' "$1" "$2" "$3" "$4" "$(/bin/date -u +%Y-%m-%dT%H:%M:%SZ)" > "$status_file"; }`,
-    `echo "[${new Date().toISOString()}] Starting Homebrew update for ${caskToken}"`,
-    `write_status "starting" "" "Starting Homebrew update" ""`,
-    `write_status "brew-update" ${shellQuote(brewUpdateCommand)} "Running brew update" ""`,
-    `${shellQuote(brewBinary)} update`,
-    'update_status=$?',
-    'if [ "$update_status" -ne 0 ]; then',
-    `  write_status "error" ${shellQuote(brewUpdateCommand)} "brew update failed" "$update_status"`,
-    '  echo "[homebrew-updater] brew update exit status: ${update_status}"',
-    '  exit "$update_status"',
-    'fi',
-    `write_status "waiting-for-app-quit" "" "Waiting for ${appName} to close" ""`,
-    `app_pid=${shellQuote(appPid)}`,
-    'if [ -n "$app_pid" ]; then',
-    '  wait_count=0',
-    '  while /bin/kill -0 "$app_pid" >/dev/null 2>&1 && [ "$wait_count" -lt 300 ]; do',
-    '    /bin/sleep 0.2',
-    '    wait_count=$((wait_count + 1))',
-    '  done',
-    'fi',
-    `write_status "brew-upgrade" ${shellQuote(brewUpgradeCommand)} "Running brew upgrade --cask ${caskToken}" ""`,
-    `${shellQuote(brewBinary)} upgrade --cask ${shellQuote(caskToken)}`,
-    'status=$?',
-    'echo "[homebrew-updater] exit status: ${status}"',
-    'if [ "$status" -eq 0 ]; then',
-    `  write_status "reopening" "" "Reopening ${appName}" ""`,
-    `  /usr/bin/open ${shellQuote(appBundlePath)} >/dev/null 2>&1 || /usr/bin/open -a ${shellQuote(appName)} >/dev/null 2>&1 || true`,
-    `  write_status "success" "" "Homebrew update completed" "0"`,
-    'else',
-    `  write_status "error" ${shellQuote(brewUpgradeCommand)} "brew upgrade failed" "$status"`,
-    'fi',
-    'exit "$status"'
-  ].join('\n')
+    const handleLine = (line: string): void => {
+      if (!line) {
+        return
+      }
+      options.emit({ kind: 'log', text: line })
+      void Promise.resolve(options.appendLog?.(line)).catch(() => undefined)
+    }
 
-  const child = spawn('/bin/zsh', ['-lc', script], {
-    detached: true,
-    stdio: 'ignore'
+    const flushBuffer = (which: 'stdout' | 'stderr'): void => {
+      const remaining = which === 'stdout' ? stdoutBuffer : stderrBuffer
+      if (remaining) {
+        handleLine(remaining)
+      }
+      if (which === 'stdout') {
+        stdoutBuffer = ''
+      } else {
+        stderrBuffer = ''
+      }
+    }
+
+    const consumeChunk = (which: 'stdout' | 'stderr', chunk: Buffer | string): void => {
+      const text = typeof chunk === 'string' ? chunk : chunk.toString('utf8')
+      const buffer = which === 'stdout' ? stdoutBuffer + text : stderrBuffer + text
+      const lines = buffer.split(/\r?\n/)
+      const remainder = lines.pop() ?? ''
+      if (which === 'stdout') {
+        stdoutBuffer = remainder
+      } else {
+        stderrBuffer = remainder
+      }
+      for (const line of lines) {
+        if (line.length > 0) {
+          handleLine(line)
+        }
+      }
+    }
+
+    child.stdout?.on('data', (chunk) => consumeChunk('stdout', chunk))
+    child.stderr?.on('data', (chunk) => consumeChunk('stderr', chunk))
+
+    child.once('error', (error) => {
+      flushBuffer('stdout')
+      flushBuffer('stderr')
+      resolve({ exitCode: null, spawnError: error })
+    })
+
+    child.once('close', (code) => {
+      flushBuffer('stdout')
+      flushBuffer('stderr')
+      resolve({ exitCode: code })
+    })
   })
-  child.unref()
+}
 
-  return {
-    logFilePath,
-    statusFilePath
+function describeCommand(binary: string, args: readonly string[]): string {
+  return [binary, ...args].join(' ')
+}
+
+export async function runHomebrewCaskUpgrade(
+  options: RunHomebrewCaskUpgradeOptions
+): Promise<HomebrewUpgradeRunResult> {
+  const spawnImpl = options.spawnImpl ?? spawn
+  const brewBinary = await resolveExecutable(
+    options.brewBinaryCandidates ?? DEFAULT_BREW_BINARY_CANDIDATES
+  )
+  const caskToken = options.caskToken?.trim() || 'codexdock'
+
+  if (!brewBinary) {
+    const message = 'Homebrew is not installed on this Mac.'
+    options.emit({ kind: 'error', message })
+    return {
+      success: false,
+      exitCode: null,
+      errorMessage: message
+    }
   }
+
+  const sharedEnv: NodeJS.ProcessEnv = {
+    ...process.env,
+    HOMEBREW_NO_ANALYTICS: '1'
+  }
+
+  options.emit({ kind: 'phase', phase: 'download' })
+
+  const updateCommand = describeCommand(brewBinary, ['update'])
+  options.emit({ kind: 'log', text: `$ ${updateCommand}` })
+  void Promise.resolve(options.appendLog?.(`$ ${updateCommand}`)).catch(() => undefined)
+  const updateResult = await streamCommand(brewBinary, ['update'], {
+    emit: options.emit,
+    appendLog: options.appendLog,
+    spawnImpl,
+    env: sharedEnv
+  })
+
+  if (updateResult.spawnError || updateResult.exitCode !== 0) {
+    const message =
+      updateResult.spawnError?.message ??
+      `brew update failed with exit code ${updateResult.exitCode ?? 'unknown'}.`
+    options.emit({ kind: 'error', message })
+    options.emit({ kind: 'phase', phase: 'error', message })
+    return {
+      success: false,
+      exitCode: updateResult.exitCode ?? null,
+      command: updateCommand,
+      errorMessage: message
+    }
+  }
+
+  const fetchArgs = ['fetch', '--cask', caskToken]
+  const fetchCommand = describeCommand(brewBinary, fetchArgs)
+  options.emit({ kind: 'log', text: `$ ${fetchCommand}` })
+  void Promise.resolve(options.appendLog?.(`$ ${fetchCommand}`)).catch(() => undefined)
+  const fetchResult = await streamCommand(brewBinary, fetchArgs, {
+    emit: options.emit,
+    appendLog: options.appendLog,
+    spawnImpl,
+    env: sharedEnv
+  })
+
+  if (fetchResult.spawnError || fetchResult.exitCode !== 0) {
+    const message =
+      fetchResult.spawnError?.message ??
+      `brew fetch failed with exit code ${fetchResult.exitCode ?? 'unknown'}.`
+    options.emit({ kind: 'error', message })
+    options.emit({ kind: 'phase', phase: 'error', message })
+    return {
+      success: false,
+      exitCode: fetchResult.exitCode ?? null,
+      command: fetchCommand,
+      errorMessage: message
+    }
+  }
+
+  options.emit({ kind: 'phase', phase: 'install' })
+
+  if (options.beforeInstall) {
+    try {
+      await options.beforeInstall()
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : 'Failed to prepare the install phase.'
+      options.emit({ kind: 'error', message })
+      options.emit({ kind: 'phase', phase: 'error', message })
+      return {
+        success: false,
+        exitCode: null,
+        errorMessage: message
+      }
+    }
+  }
+
+  const upgradeArgs = ['upgrade', '--cask', caskToken]
+  const upgradeCommand = describeCommand(brewBinary, upgradeArgs)
+  options.emit({ kind: 'log', text: `$ ${upgradeCommand}` })
+  void Promise.resolve(options.appendLog?.(`$ ${upgradeCommand}`)).catch(() => undefined)
+  const upgradeResult = await streamCommand(brewBinary, upgradeArgs, {
+    emit: options.emit,
+    appendLog: options.appendLog,
+    spawnImpl,
+    env: sharedEnv
+  })
+
+  if (upgradeResult.spawnError || upgradeResult.exitCode !== 0) {
+    const message =
+      upgradeResult.spawnError?.message ??
+      `brew upgrade failed with exit code ${upgradeResult.exitCode ?? 'unknown'}.`
+    options.emit({ kind: 'error', message })
+    options.emit({ kind: 'phase', phase: 'error', message })
+    return {
+      success: false,
+      exitCode: upgradeResult.exitCode ?? null,
+      command: upgradeCommand,
+      errorMessage: message
+    }
+  }
+
+  options.emit({ kind: 'phase', phase: 'success' })
+  return {
+    success: true,
+    exitCode: 0,
+    command: upgradeCommand
+  }
+}
+
+export async function ensureLogDir(logFilePath: string): Promise<void> {
+  await fsp.mkdir(path.dirname(logFilePath), { recursive: true })
+}
+
+export async function appendLogLine(logFilePath: string, line: string): Promise<void> {
+  const timestamp = new Date().toISOString()
+  await fsp.appendFile(logFilePath, `[${timestamp}] ${line}\n`, 'utf8')
 }

@@ -249,6 +249,13 @@ export interface AppUpdateState {
   supported: boolean
 }
 
+export type UpgradeProgressPhase = 'download' | 'install' | 'success' | 'error'
+
+export type UpgradeProgressEvent =
+  | { kind: 'phase'; phase: UpgradeProgressPhase; message?: string }
+  | { kind: 'log'; text: string }
+  | { kind: 'error'; message: string }
+
 export interface CreditsSnapshot {
   hasCredits: boolean
   unlimited: boolean

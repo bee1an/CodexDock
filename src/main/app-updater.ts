@@ -1,20 +1,14 @@
 import type { AppUpdater, ProgressInfo, UpdateDownloadedEvent, UpdateInfo } from 'electron-updater'
 import { autoUpdater } from 'electron-updater'
-import { readFile } from 'node:fs/promises'
 
-import type {
-  AppSettings,
-  AppUpdateDelivery,
-  AppUpdateExternalAction,
-  AppUpdateState
-} from '../shared/codex'
+import type { AppSettings, AppUpdateDelivery, AppUpdateState } from '../shared/codex'
 
 const DEFAULT_INITIAL_CHECK_DELAY_MS = 10_000
 const DEFAULT_CHECK_INTERVAL_MS = 12 * 60 * 60 * 1000
 const RESET_UP_TO_DATE_DELAY_MS = 8_000
 
 type CheckMode = 'manual' | 'silent'
-type UpdateStrategyMode = 'auto' | 'external' | 'unsupported'
+type UpdateStrategyMode = 'auto' | 'unsupported'
 
 export interface AppUpdaterService {
   getState(): AppUpdateState
@@ -27,7 +21,7 @@ export interface AppUpdaterService {
   subscribe(listener: (state: AppUpdateState) => void): () => void
 }
 
-interface AppUpdaterLike {
+export interface AppUpdaterLike {
   autoDownload: boolean
   autoInstallOnAppQuit: boolean
   allowPrerelease: boolean
@@ -48,22 +42,11 @@ interface AppUpdaterLike {
   quitAndInstall(isSilent?: boolean, isForceRunAfter?: boolean): void
 }
 
-interface GithubReleaseSummary {
-  version: string
-  url: string
-}
-
-interface HomebrewCaskUpgradeLaunch {
-  logFilePath: string
-  statusFilePath: string
-}
-
-interface HomebrewCommandStatus {
-  phase: string
-  command?: string
+export interface HomebrewUpgradeOutcome {
+  success: boolean
   message?: string
-  exitCode?: number
-  updatedAt?: string
+  command?: string
+  logFilePath?: string
 }
 
 interface UpdateStrategy {
@@ -104,11 +87,17 @@ export interface CreateAppUpdaterServiceOptions {
   platform?: NodeJS.Platform
   env?: NodeJS.ProcessEnv
   updater?: AppUpdaterLike
-  fetchImpl?: typeof fetch
   initialCheckDelayMs?: number
   checkIntervalMs?: number
   isHomebrewCaskInstalled?: () => Promise<boolean>
-  launchHomebrewUpdate?: () => Promise<HomebrewCaskUpgradeLaunch | void>
+  /**
+   * Triggers the Homebrew upgrade flow (opens the progress window, runs the
+   * brew commands, etc.). Resolves once the upgrade completes (successfully or
+   * with an error). The resolved object describes the outcome.
+   */
+  runHomebrewUpgrade?: () => Promise<HomebrewUpgradeOutcome>
+  /** Called when the renderer should relaunch the app for a Homebrew install. */
+  performHomebrewRelaunch?: () => void
 }
 
 function createBaseState(
@@ -172,20 +161,12 @@ function resolveStrategy(
     }
   }
 
-  if (platform === 'darwin') {
-    const githubRepo = parseGithubRepository(githubUrl)
-    if (!githubRepo) {
-      return {
-        mode: 'unsupported',
-        delivery: 'external',
-        supported: false,
-        message: 'GitHub release URL is required for update checks on macOS.'
-      }
-    }
+  const githubRepo = parseGithubRepository(githubUrl)
 
+  if (platform === 'darwin') {
     return {
-      mode: 'external',
-      delivery: 'external',
+      mode: 'auto',
+      delivery: 'auto',
       supported: true,
       githubRepo
     }
@@ -195,7 +176,8 @@ function resolveStrategy(
     return {
       mode: 'auto',
       delivery: 'auto',
-      supported: true
+      supported: true,
+      githubRepo
     }
   }
 
@@ -204,7 +186,8 @@ function resolveStrategy(
       return {
         mode: 'auto',
         delivery: 'auto',
-        supported: true
+        supported: true,
+        githubRepo
       }
     }
 
@@ -233,101 +216,13 @@ function resolveStrategy(
   }
 }
 
-function normalizeVersion(value: string): string {
-  return value.trim().replace(/^v/i, '')
-}
-
-function compareVersions(left: string, right: string): number {
-  const leftParts = normalizeVersion(left).split(/[.-]/)
-  const rightParts = normalizeVersion(right).split(/[.-]/)
-  const maxLength = Math.max(leftParts.length, rightParts.length)
-
-  for (let index = 0; index < maxLength; index += 1) {
-    const leftPart = leftParts[index] ?? '0'
-    const rightPart = rightParts[index] ?? '0'
-    const leftNumber = Number(leftPart)
-    const rightNumber = Number(rightPart)
-    const bothNumeric = Number.isFinite(leftNumber) && Number.isFinite(rightNumber)
-
-    if (bothNumeric) {
-      if (leftNumber > rightNumber) {
-        return 1
-      }
-      if (leftNumber < rightNumber) {
-        return -1
-      }
-      continue
-    }
-
-    const lexical = leftPart.localeCompare(rightPart)
-    if (lexical !== 0) {
-      return lexical > 0 ? 1 : -1
-    }
-  }
-
-  return 0
-}
-
-async function fetchLatestGithubRelease(
-  strategy: UpdateStrategy,
-  fetchImpl: typeof fetch
-): Promise<GithubReleaseSummary> {
-  if (!strategy.githubRepo) {
-    throw new Error('GitHub repository is not configured.')
-  }
-
-  const response = await fetchImpl(
-    `https://api.github.com/repos/${strategy.githubRepo.owner}/${strategy.githubRepo.repo}/releases/latest`,
-    {
-      headers: {
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'CodexDock'
-      }
-    }
-  )
-
-  if (!response.ok) {
-    throw new Error(`GitHub release check failed with status ${response.status}.`)
-  }
-
-  const payload = (await response.json()) as {
-    tag_name?: string
-    html_url?: string
-    name?: string
-  }
-  const version = payload.tag_name?.trim() || payload.name?.trim()
-  const url = payload.html_url?.trim() || strategy.githubRepo.releasesUrl
-
-  if (!version) {
-    throw new Error('Latest GitHub release does not contain a version tag.')
-  }
-
-  return { version, url }
-}
-
-function parseHomebrewStatus(raw: string): HomebrewCommandStatus | null {
-  const [phase, command, message, exitCode, updatedAt] = raw.trim().split('\t')
-  if (!phase) {
-    return null
-  }
-
-  const parsedExitCode = exitCode ? Number(exitCode) : undefined
-
-  return {
-    phase,
-    command: command || undefined,
-    message: message || undefined,
-    exitCode: Number.isFinite(parsedExitCode) ? parsedExitCode : undefined,
-    updatedAt: updatedAt || undefined
-  }
-}
-
 export function createAppUpdaterService(
   options: CreateAppUpdaterServiceOptions
 ): AppUpdaterService {
+  const platform = options.platform ?? process.platform
   const strategy = resolveStrategy(
     options.isPackaged ?? false,
-    options.platform ?? process.platform,
+    platform,
     options.env ?? process.env,
     options.githubUrl
   )
@@ -335,7 +230,6 @@ export function createAppUpdaterService(
     strategy.mode === 'auto'
       ? ((options.updater ?? autoUpdater) as AppUpdaterLike)
       : createNoopUpdater()
-  const fetchImpl = options.fetchImpl ?? fetch
 
   let settings = options.initialSettings
   let state = createBaseState(options.currentVersion, strategy, strategy.message)
@@ -345,7 +239,7 @@ export function createAppUpdaterService(
   let initialTimer: ReturnType<typeof setTimeout> | null = null
   let intervalTimer: ReturnType<typeof setInterval> | null = null
   let resetTimer: ReturnType<typeof setTimeout> | null = null
-  let homebrewStatusTimer: ReturnType<typeof setInterval> | null = null
+  let homebrewUpgradePromise: Promise<AppUpdateState> | null = null
   const listeners = new Set<(nextState: AppUpdateState) => void>()
 
   function notify(): void {
@@ -403,142 +297,50 @@ export function createAppUpdaterService(
     }
   }
 
-  function clearHomebrewStatusTimer(): void {
-    if (!homebrewStatusTimer) {
-      return
+  function buildReleaseUrl(version: string): string | undefined {
+    if (!strategy.githubRepo) {
+      return undefined
     }
-
-    clearInterval(homebrewStatusTimer)
-    homebrewStatusTimer = null
+    return `${strategy.githubRepo.releasesUrl}/tag/v${version.replace(/^v/i, '')}`
   }
 
-  async function readHomebrewStatus(statusFilePath: string): Promise<HomebrewCommandStatus | null> {
-    try {
-      return parseHomebrewStatus(await readFile(statusFilePath, 'utf8'))
-    } catch {
-      return null
-    }
-  }
-
-  function applyHomebrewStatus(status: HomebrewCommandStatus, logFilePath?: string): void {
-    if (status.phase === 'success') {
-      clearHomebrewStatusTimer()
-    }
-
-    if (status.phase === 'error') {
-      clearHomebrewStatusTimer()
-      mergeState({
-        status: 'error',
-        checkedAt: new Date().toISOString(),
-        message: status.message ?? 'Homebrew update failed.',
-        downloadProgress: undefined,
-        externalCommand: status.command,
-        externalCommandStatus: status.phase,
-        externalLogFilePath: logFilePath
-      })
-      return
-    }
-
+  async function decorateAvailableUpdate(info: { version: string }): Promise<void> {
+    const baseDelivery: AppUpdateDelivery = platform === 'darwin' ? 'external' : 'auto'
+    const releaseUrl = buildReleaseUrl(info.version)
     mergeState({
-      status: 'downloading',
-      message: status.message,
+      status: 'available',
+      availableVersion: info.version,
+      checkedAt: new Date().toISOString(),
+      message: undefined,
       downloadProgress: undefined,
-      externalCommand: status.command,
-      externalCommandStatus: status.phase,
-      externalLogFilePath: logFilePath
+      delivery: baseDelivery,
+      externalDownloadUrl: platform === 'darwin' ? releaseUrl : undefined,
+      externalAction: undefined,
+      externalCommand: undefined,
+      externalCommandStatus: undefined,
+      externalLogFilePath: undefined
     })
+
+    if (platform === 'darwin') {
+      const homebrew = await detectHomebrewCask()
+      mergeState({
+        externalAction: homebrew ? 'homebrew' : 'release'
+      })
+    }
   }
 
-  async function startHomebrewStatusPolling(launch: HomebrewCaskUpgradeLaunch): Promise<void> {
-    clearHomebrewStatusTimer()
-
-    const applyLatest = async (): Promise<void> => {
-      const latest = await readHomebrewStatus(launch.statusFilePath)
-      if (latest) {
-        applyHomebrewStatus(latest, launch.logFilePath)
-      }
-    }
-
-    await applyLatest()
-    homebrewStatusTimer = setInterval(() => {
-      void applyLatest()
-    }, 300)
-  }
-
-  async function resolveExternalAction(): Promise<AppUpdateExternalAction> {
-    if (strategy.mode !== 'external' || (options.platform ?? process.platform) !== 'darwin') {
-      return 'release'
-    }
-
+  async function detectHomebrewCask(): Promise<boolean> {
     if (!options.isHomebrewCaskInstalled) {
-      return 'release'
+      return false
     }
 
     try {
-      return (await options.isHomebrewCaskInstalled()) ? 'homebrew' : 'release'
+      return await options.isHomebrewCaskInstalled()
     } catch (error) {
       const detail =
         error instanceof Error ? error.message : 'Failed to detect the Homebrew cask installation.'
       console.warn(`Homebrew update detection failed: ${detail}`)
-      return 'release'
-    }
-  }
-
-  async function runExternalCheck(mode: CheckMode): Promise<AppUpdateState> {
-    try {
-      const release = await fetchLatestGithubRelease(strategy, fetchImpl)
-      const hasUpdate = compareVersions(release.version, options.currentVersion) > 0
-
-      if (hasUpdate) {
-        const externalAction = await resolveExternalAction()
-        return mergeState({
-          status: 'available',
-          availableVersion: normalizeVersion(release.version),
-          checkedAt: new Date().toISOString(),
-          message: undefined,
-          downloadProgress: undefined,
-          externalDownloadUrl: release.url,
-          externalAction
-        })
-      }
-
-      if (mode === 'manual') {
-        mergeState({
-          status: 'up-to-date',
-          checkedAt: new Date().toISOString(),
-          availableVersion: undefined,
-          message: 'You are already using the latest version.',
-          downloadProgress: undefined,
-          externalDownloadUrl: undefined,
-          externalAction: undefined
-        })
-        scheduleUpToDateReset()
-        return state
-      }
-
-      return mergeState({
-        status: 'idle',
-        checkedAt: new Date().toISOString(),
-        availableVersion: undefined,
-        message: undefined,
-        downloadProgress: undefined,
-        externalDownloadUrl: undefined,
-        externalAction: undefined
-      })
-    } catch (error) {
-      const message =
-        error instanceof Error ? error.message : 'Failed to check GitHub releases for updates.'
-      if (mode === 'manual') {
-        return mergeState({
-          status: 'error',
-          checkedAt: new Date().toISOString(),
-          message,
-          downloadProgress: undefined
-        })
-      }
-
-      console.warn(`GitHub update check failed: ${message}`)
-      return state
+      return false
     }
   }
 
@@ -587,9 +389,7 @@ export function createAppUpdaterService(
       })
     }
 
-    checkPromise = (
-      strategy.mode === 'external' ? runExternalCheck(mode) : runAutoCheck(mode)
-    ).finally(() => {
+    checkPromise = runAutoCheck(mode).finally(() => {
       activeCheckMode = null
       checkPromise = null
     })
@@ -645,14 +445,7 @@ export function createAppUpdaterService(
         return
       }
 
-      mergeState({
-        status: 'available',
-        availableVersion: info.version,
-        checkedAt: new Date().toISOString(),
-        message: undefined,
-        downloadProgress: undefined,
-        externalDownloadUrl: undefined
-      })
+      void decorateAvailableUpdate(info)
     })
 
     updater.on('update-not-available', () => {
@@ -667,7 +460,11 @@ export function createAppUpdaterService(
           availableVersion: undefined,
           message: 'You are already using the latest version.',
           downloadProgress: undefined,
-          externalDownloadUrl: undefined
+          externalDownloadUrl: undefined,
+          externalAction: undefined,
+          externalCommand: undefined,
+          externalCommandStatus: undefined,
+          externalLogFilePath: undefined
         })
         scheduleUpToDateReset()
         return
@@ -679,7 +476,11 @@ export function createAppUpdaterService(
         availableVersion: undefined,
         message: undefined,
         downloadProgress: undefined,
-        externalDownloadUrl: undefined
+        externalDownloadUrl: undefined,
+        externalAction: undefined,
+        externalCommand: undefined,
+        externalCommandStatus: undefined,
+        externalLogFilePath: undefined
       })
     })
 
@@ -721,6 +522,63 @@ export function createAppUpdaterService(
     })
   }
 
+  async function performHomebrewUpgrade(): Promise<AppUpdateState> {
+    if (!options.runHomebrewUpgrade) {
+      return mergeState({
+        status: 'error',
+        checkedAt: new Date().toISOString(),
+        message: 'Homebrew update is not configured for this build.',
+        downloadProgress: undefined
+      })
+    }
+
+    mergeState({
+      status: 'downloading',
+      message: 'Starting Homebrew update…',
+      downloadProgress: undefined,
+      externalCommand: undefined,
+      externalCommandStatus: 'starting',
+      externalLogFilePath: undefined
+    })
+
+    let outcome: HomebrewUpgradeOutcome
+    try {
+      outcome = await options.runHomebrewUpgrade()
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Failed to start the Homebrew update.'
+      return mergeState({
+        status: 'error',
+        checkedAt: new Date().toISOString(),
+        message: detail,
+        downloadProgress: undefined
+      })
+    }
+
+    if (outcome.success) {
+      clearTimers()
+      return mergeState({
+        status: 'downloaded',
+        checkedAt: new Date().toISOString(),
+        downloadProgress: 100,
+        message: 'Homebrew update installed. Restart to use the new version.',
+        externalAction: 'homebrew',
+        externalCommand: outcome.command,
+        externalCommandStatus: 'success',
+        externalLogFilePath: outcome.logFilePath
+      })
+    }
+
+    return mergeState({
+      status: 'error',
+      checkedAt: new Date().toISOString(),
+      message: outcome.message ?? 'Homebrew update failed.',
+      downloadProgress: undefined,
+      externalCommand: outcome.command,
+      externalCommandStatus: 'error',
+      externalLogFilePath: outcome.logFilePath
+    })
+  }
+
   return {
     getState(): AppUpdateState {
       return state
@@ -737,7 +595,6 @@ export function createAppUpdaterService(
       started = false
       clearTimers()
       clearResetTimer()
-      clearHomebrewStatusTimer()
     },
     syncSettings(nextSettings): void {
       settings = nextSettings
@@ -753,46 +610,23 @@ export function createAppUpdaterService(
         return setState(createBaseState(options.currentVersion, strategy, strategy.message))
       }
 
-      if (strategy.mode === 'external') {
-        if (state.status !== 'available' || state.externalAction !== 'homebrew') {
-          return state
-        }
-
-        if (!options.launchHomebrewUpdate) {
-          return mergeState({
-            status: 'error',
-            checkedAt: new Date().toISOString(),
-            message: 'Homebrew update is not configured for this build.',
-            downloadProgress: undefined
-          })
-        }
-
-        try {
-          const launch = await options.launchHomebrewUpdate()
-          mergeState({
-            status: 'downloading',
-            message: 'Starting Homebrew update…',
-            downloadProgress: undefined,
-            externalCommand: undefined,
-            externalCommandStatus: 'starting',
-            externalLogFilePath: launch?.logFilePath
-          })
-          if (launch) {
-            await startHomebrewStatusPolling(launch)
-          }
-          return state
-        } catch (error) {
-          return mergeState({
-            status: 'error',
-            checkedAt: new Date().toISOString(),
-            message:
-              error instanceof Error ? error.message : 'Failed to start the Homebrew update.',
-            downloadProgress: undefined
-          })
-        }
+      if (state.status !== 'available') {
+        return state
       }
 
-      if (strategy.mode !== 'auto' || state.status !== 'available') {
+      if (state.delivery === 'external' && state.externalAction === 'homebrew') {
+        if (homebrewUpgradePromise) {
+          return homebrewUpgradePromise
+        }
+
+        homebrewUpgradePromise = performHomebrewUpgrade().finally(() => {
+          homebrewUpgradePromise = null
+        })
+        return homebrewUpgradePromise
+      }
+
+      if (state.delivery === 'external') {
+        // Caller should open the release URL; nothing for us to do here.
         return state
       }
 
@@ -817,7 +651,12 @@ export function createAppUpdaterService(
       return state
     },
     async installUpdate(): Promise<void> {
-      if (strategy.mode !== 'auto' || !strategy.supported || state.status !== 'downloaded') {
+      if (!strategy.supported || state.status !== 'downloaded') {
+        return
+      }
+
+      if (state.delivery === 'external' && state.externalAction === 'homebrew') {
+        options.performHomebrewRelaunch?.()
         return
       }
 

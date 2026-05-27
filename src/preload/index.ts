@@ -62,6 +62,7 @@ import type {
   UpdateAccountHealthInput,
   UpdateAccountWakeScheduleInput,
   UpdateAccountTokensInput,
+  UpgradeProgressEvent,
   WakeAccountRateLimitsInput
 } from '../shared/codex'
 
@@ -261,6 +262,20 @@ const codexApp = {
   checkForUpdates: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:check-for-updates'),
   downloadUpdate: (): Promise<AppUpdateState> => ipcRenderer.invoke('codex:download-update'),
   installUpdate: (): Promise<void> => ipcRenderer.invoke('codex:install-update'),
+  upgradeProgressReady: (): Promise<void> => ipcRenderer.invoke('upgrade:ready'),
+  upgradeProgressInstallRendered: (): Promise<void> =>
+    ipcRenderer.invoke('upgrade:installRendered'),
+  upgradeRestart: (): Promise<void> => ipcRenderer.invoke('upgrade:restart'),
+  upgradeCancel: (): Promise<void> => ipcRenderer.invoke('upgrade:cancel'),
+  upgradeOpenReleases: (): Promise<void> => ipcRenderer.invoke('upgrade:openReleases'),
+  onUpgradeEvent: (callback: (event: UpgradeProgressEvent) => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, payload: UpgradeProgressEvent): void =>
+      callback(payload)
+    ipcRenderer.on('upgrade:event', listener)
+    return (): void => {
+      ipcRenderer.removeListener('upgrade:event', listener)
+    }
+  },
   startLogin: (method: LoginMethod) => ipcRenderer.invoke('codex:start-login', method),
   getLoginPortOccupant: (): Promise<PortOccupant | null> =>
     ipcRenderer.invoke('codex:get-login-port-occupant'),

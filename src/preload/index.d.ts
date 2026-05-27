@@ -63,6 +63,7 @@ import type {
   UpdateAccountTokensInput,
   UpdatePromptInput,
   UpdateSkillLibraryInput,
+  UpgradeProgressEvent,
   WakeAccountRateLimitsInput,
   WakeAccountRateLimitsResult,
   UpdateCustomProviderInput
@@ -188,6 +189,12 @@ interface CodexDesktopApi {
   checkForUpdates: () => Promise<AppUpdateState>
   downloadUpdate: () => Promise<AppUpdateState>
   installUpdate: () => Promise<void>
+  upgradeProgressReady: () => Promise<void>
+  upgradeProgressInstallRendered: () => Promise<void>
+  upgradeRestart: () => Promise<void>
+  upgradeCancel: () => Promise<void>
+  upgradeOpenReleases: () => Promise<void>
+  onUpgradeEvent: (callback: (event: UpgradeProgressEvent) => void) => () => void
   startLogin: (method: LoginMethod) => Promise<LoginAttempt>
   getLoginPortOccupant: () => Promise<PortOccupant | null>
   killLoginPortOccupant: () => Promise<PortOccupant | null>

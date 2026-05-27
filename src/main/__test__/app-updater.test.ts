@@ -1,7 +1,4 @@
 import { EventEmitter } from 'node:events'
-import { mkdtemp, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -31,16 +28,12 @@ function createSettings(overrides: Partial<AppSettings> = {}): AppSettings {
 }
 
 describe('app updater service', () => {
-  let tempDirs: string[] = []
-
   beforeEach(() => {
     vi.useFakeTimers()
-    tempDirs = []
   })
 
-  afterEach(async () => {
+  afterEach(() => {
     vi.useRealTimers()
-    await Promise.all(tempDirs.map((dir) => rm(dir, { recursive: true, force: true })))
   })
 
   it('falls back to unsupported for unpackaged builds', async () => {
@@ -63,54 +56,43 @@ describe('app updater service', () => {
     expect(updater.checkForUpdates).not.toHaveBeenCalled()
   })
 
-  it('runs the initial and interval silent checks on macOS via GitHub releases when enabled', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            tag_name: 'v0.2.2',
-            html_url: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.2'
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-    ) as typeof fetch
+  it('runs the initial and interval silent checks via electron-updater on macOS', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-not-available', { version: '0.2.1' })
+    })
+
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
       githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl,
+      updater,
       initialCheckDelayMs: 1_000,
       checkIntervalMs: 5_000
     })
 
     service.start()
     await vi.advanceTimersByTimeAsync(999)
-    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1)
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(1)
 
     await vi.advanceTimersByTimeAsync(5_000)
-    expect(fetchImpl).toHaveBeenCalledTimes(2)
+    expect(updater.checkForUpdates).toHaveBeenCalledTimes(2)
   })
 
   it('stops scheduled checks when the startup setting is disabled', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(JSON.stringify({ tag_name: 'v0.2.2' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' }
-        })
-    ) as typeof fetch
+    const updater = new FakeUpdater()
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
       githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl,
+      updater,
       initialCheckDelayMs: 1_000,
       checkIntervalMs: 5_000
     })
@@ -119,7 +101,7 @@ describe('app updater service', () => {
     service.syncSettings(createSettings({ checkForUpdatesOnStartup: false }))
     await vi.advanceTimersByTimeAsync(6_000)
 
-    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(updater.checkForUpdates).not.toHaveBeenCalled()
   })
 
   it('tracks manual checks, downloads, and install actions on Windows', async () => {
@@ -160,24 +142,19 @@ describe('app updater service', () => {
     expect(updater.quitAndInstall).toHaveBeenCalledWith(false, true)
   })
 
-  it('shows up-to-date briefly for manual GitHub checks without an update', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            tag_name: 'v0.2.1',
-            html_url: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.1'
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-    ) as typeof fetch
+  it('shows up-to-date briefly for manual checks without an update', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-not-available', { version: '0.2.1' })
+    })
+
     const service = createAppUpdaterService({
       currentVersion: '0.2.1',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
       githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl
+      updater
     })
 
     await service.checkForUpdates()
@@ -187,127 +164,160 @@ describe('app updater service', () => {
     expect(service.getState().status).toBe('idle')
   })
 
-  it('returns an external download URL for macOS release checks', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            tag_name: 'v0.2.5',
-            html_url: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.5'
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-    ) as typeof fetch
+  it('detects Homebrew cask and sets externalAction to homebrew on macOS', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.5' })
+    })
+
     const service = createAppUpdaterService({
       currentVersion: '0.2.4',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
       githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl
+      updater,
+      isHomebrewCaskInstalled: async () => true
     })
 
     await service.checkForUpdates()
-    expect(service.getState()).toMatchObject({
-      status: 'available',
-      delivery: 'external',
-      availableVersion: '0.2.5',
-      externalAction: 'release',
-      externalDownloadUrl: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.5'
-    })
-  })
+    // Wait for async decorateAvailableUpdate to resolve
+    await vi.advanceTimersByTimeAsync(0)
 
-  it('prefers Homebrew updates for macOS cask installs and starts the upgrade flow', async () => {
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            tag_name: 'v0.2.5',
-            html_url: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.5'
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-    ) as typeof fetch
-    const launchHomebrewUpdate = vi.fn(async () => undefined)
-    const service = createAppUpdaterService({
-      currentVersion: '0.2.4',
-      initialSettings: createSettings(),
-      isPackaged: true,
-      platform: 'darwin',
-      githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl,
-      isHomebrewCaskInstalled: async () => true,
-      launchHomebrewUpdate
-    })
-
-    await service.checkForUpdates()
     expect(service.getState()).toMatchObject({
       status: 'available',
       delivery: 'external',
       availableVersion: '0.2.5',
       externalAction: 'homebrew'
     })
-
-    await service.downloadUpdate()
-    expect(launchHomebrewUpdate).toHaveBeenCalledOnce()
-    expect(service.getState()).toMatchObject({
-      status: 'downloading',
-      externalAction: 'homebrew'
-    })
   })
 
-  it('exposes Homebrew command status while updating', async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'codexdock-updater-test-'))
-    tempDirs.push(dir)
-    const statusFilePath = join(dir, 'homebrew.status')
-    const logFilePath = join(dir, 'homebrew.log')
-    const fetchImpl = vi.fn(
-      async () =>
-        new Response(
-          JSON.stringify({
-            tag_name: 'v0.2.5',
-            html_url: 'https://github.com/bee1an/CodexDock/releases/tag/v0.2.5'
-          }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } }
-        )
-    ) as typeof fetch
-    const launchHomebrewUpdate = vi.fn(async () => {
-      await writeFile(
-        statusFilePath,
-        [
-          'brew-update',
-          '/opt/homebrew/bin/brew update',
-          'Running brew update',
-          '',
-          '2026-04-23T00:00:00Z'
-        ].join('\t'),
-        'utf8'
-      )
-      return {
-        statusFilePath,
-        logFilePath
-      }
+  it('falls back to release action when Homebrew is not installed on macOS', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.5' })
     })
+
     const service = createAppUpdaterService({
       currentVersion: '0.2.4',
       initialSettings: createSettings(),
       isPackaged: true,
       platform: 'darwin',
       githubUrl: 'https://github.com/bee1an/CodexDock',
-      fetchImpl,
-      isHomebrewCaskInstalled: async () => true,
-      launchHomebrewUpdate
+      updater,
+      isHomebrewCaskInstalled: async () => false
     })
 
     await service.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(service.getState()).toMatchObject({
+      status: 'available',
+      delivery: 'external',
+      availableVersion: '0.2.5',
+      externalAction: 'release'
+    })
+  })
+
+  it('runs Homebrew upgrade and transitions to downloaded on success', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.5' })
+    })
+
+    const runHomebrewUpgrade = vi.fn(async () => ({
+      success: true,
+      command: '/opt/homebrew/bin/brew upgrade --cask codexdock',
+      logFilePath: '/tmp/updater.log'
+    }))
+
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/CodexDock',
+      updater,
+      isHomebrewCaskInstalled: async () => true,
+      runHomebrewUpgrade
+    })
+
+    await service.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(0)
+
+    await service.downloadUpdate()
+    expect(runHomebrewUpgrade).toHaveBeenCalledOnce()
+    expect(service.getState()).toMatchObject({
+      status: 'downloaded',
+      externalAction: 'homebrew',
+      externalCommandStatus: 'success'
+    })
+  })
+
+  it('transitions to error when Homebrew upgrade fails', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.5' })
+    })
+
+    const runHomebrewUpgrade = vi.fn(async () => ({
+      success: false,
+      message: 'brew upgrade failed with exit code 1.',
+      command: '/opt/homebrew/bin/brew upgrade --cask codexdock',
+      logFilePath: '/tmp/updater.log'
+    }))
+
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/CodexDock',
+      updater,
+      isHomebrewCaskInstalled: async () => true,
+      runHomebrewUpgrade
+    })
+
+    await service.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(0)
+
     await service.downloadUpdate()
     expect(service.getState()).toMatchObject({
-      status: 'downloading',
-      externalCommandStatus: 'brew-update',
-      externalCommand: '/opt/homebrew/bin/brew update',
-      message: 'Running brew update',
-      externalLogFilePath: logFilePath
+      status: 'error',
+      message: 'brew upgrade failed with exit code 1.',
+      externalCommandStatus: 'error'
     })
+  })
+
+  it('calls performHomebrewRelaunch on installUpdate after Homebrew success', async () => {
+    const updater = new FakeUpdater()
+    updater.checkForUpdates.mockImplementation(async () => {
+      updater.emit('update-available', { version: '0.2.5' })
+    })
+
+    const performHomebrewRelaunch = vi.fn()
+    const service = createAppUpdaterService({
+      currentVersion: '0.2.4',
+      initialSettings: createSettings(),
+      isPackaged: true,
+      platform: 'darwin',
+      githubUrl: 'https://github.com/bee1an/CodexDock',
+      updater,
+      isHomebrewCaskInstalled: async () => true,
+      runHomebrewUpgrade: async () => ({
+        success: true,
+        command: 'brew upgrade --cask codexdock'
+      }),
+      performHomebrewRelaunch
+    })
+
+    await service.checkForUpdates()
+    await vi.advanceTimersByTimeAsync(0)
+    await service.downloadUpdate()
+    await service.installUpdate()
+
+    expect(performHomebrewRelaunch).toHaveBeenCalledOnce()
+    expect(updater.quitAndInstall).not.toHaveBeenCalled()
   })
 
   it('clears a stale manual-check error after a later silent success', async () => {
