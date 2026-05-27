@@ -3,6 +3,7 @@ import {
   shell,
   BrowserWindow,
   ipcMain,
+  nativeTheme,
   Tray,
   dialog,
   nativeImage,
@@ -364,6 +365,7 @@ function createWindow(): void {
     minWidth: 1100,
     minHeight: 760,
     show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0a0a0a' : '#ffffff',
     autoHideMenuBar: true,
     ...(process.platform === 'darwin'
       ? {

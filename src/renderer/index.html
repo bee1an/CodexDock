@@ -8,9 +8,20 @@
       http-equiv="Content-Security-Policy"
       content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
     />
+    <style>
+      html,body{overflow:hidden}
+      #splash{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;background:#ffffff;-webkit-app-region:drag}
+      @media(prefers-color-scheme:dark){#splash{background:#0a0a0a}}
+      #splash svg{width:20px;height:20px;animation:spin .8s linear infinite}
+      #splash circle{stroke:#0d0d0d;opacity:.15}
+      #splash path{stroke:#0d0d0d}
+      @media(prefers-color-scheme:dark){#splash circle{stroke:#fff;opacity:.15}#splash path{stroke:#fff}}
+      @keyframes spin{to{transform:rotate(360deg)}}
+    </style>
   </head>
 
   <body>
+    <div id="splash"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke-width="2.5"/><path d="M12 2a10 10 0 0 1 10 10" stroke-width="2.5" stroke-linecap="round"/></svg></div>
     <div id="app"></div>
     <script type="module" src="/src/main.ts"></script>
   </body>

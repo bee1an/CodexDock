@@ -115,6 +115,7 @@
   let showCallbackLoginDetails = true
   let showDeviceLoginDetails = true
   let refreshingAllUsage = false
+  let appReady = false
   let pageError = ''
   let pageErrorTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -775,7 +776,10 @@
     prefersDark = darkMedia.matches
     document.body.classList.add(...bodyClasses)
     applyTheme(snapshot.settings.theme, prefersDark)
-    void refreshSnapshot()
+    void refreshSnapshot().then(() => {
+      appReady = true
+      document.getElementById('splash')?.remove()
+    })
     void refreshAppMeta()
     void refreshUpdateState()
 
@@ -847,6 +851,7 @@
     windowFocused = false
   }}
 />
+
 
 <div class={`app-shell ${isTrayView ? 'min-h-screen' : 'h-screen overflow-hidden'} flex flex-col`}>
   {#if !isTrayView && appMeta.platform === 'darwin' && !windowFocused}
