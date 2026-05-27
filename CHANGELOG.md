@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.14 - 2026-05-27
+
+Homebrew upgrade now runs in-process with a dedicated progress window showing real-time logs and phase transitions.
+
+- Added a standalone upgrade progress window that streams brew command output, shows download/install/success/error phases, and offers restart or cancel actions.
+- Rewrote the Homebrew updater from a detached shell script to sequential in-process `brew update → fetch → upgrade` with structured event emission.
+- Unified macOS update checks to use electron-updater instead of a separate GitHub release polling path, simplifying the update strategy.
+- Added a `beforeInstall` hook so the progress UI can acknowledge the install phase before the destructive `brew upgrade` step runs.
+
 ## 0.4.13 - 2026-05-26
 
 This release adds batch token refresh with a multi-account selection dialog, extracts the app shell into dedicated Host components, and normalizes base styles.
