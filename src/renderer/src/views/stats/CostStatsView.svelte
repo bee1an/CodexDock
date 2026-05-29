@@ -487,7 +487,7 @@
     if (trendChart) {
       trendChart.data = config.data
       trendChart.options = config.options ?? {}
-      trendChart.update()
+      trendChart.update('none')
       return
     }
 
@@ -610,7 +610,7 @@
     if (modelChart) {
       modelChart.data = config.data
       modelChart.options = config.options ?? {}
-      modelChart.update()
+      modelChart.update('none')
       return
     }
 
@@ -732,7 +732,7 @@
     if (instanceChart) {
       instanceChart.data = config.data
       instanceChart.options = config.options ?? {}
-      instanceChart.update()
+      instanceChart.update('none')
       return
     }
 
