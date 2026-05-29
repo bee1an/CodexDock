@@ -782,12 +782,7 @@
 
   function accountRefreshDisabled(account: AccountSummary): boolean {
     const usageLoading = Boolean(usageLoadingByAccountId[sortableAccountId(account)])
-    return (
-      loginActionBusy ||
-      usageLoading ||
-      accountHealthBlocked(account) ||
-      isLocalMockAccount(account)
-    )
+    return loginActionBusy || usageLoading || isLocalMockAccount(account)
   }
 
   function wakeDialogDisabled(account: AccountSummary): boolean {

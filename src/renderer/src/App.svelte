@@ -46,6 +46,8 @@
     UpdateCustomProviderInput
   } from '../../shared/codex'
   import {
+    isAccountHealthBlocking,
+    isLocalMockAccount,
     normalizeStatsDisplaySettings,
     resolveBestAccount,
     shouldAutoPollUsage
@@ -223,6 +225,9 @@
     )
 
   const canAutoPollUsage = (accountId: string): boolean => {
+    if (isAccountHealthBlocking(snapshot.accountHealthByAccountId?.[accountId])) {
+      return false
+    }
     if (usageErrorByAccountId[accountId]) {
       return true
     }
@@ -756,7 +761,12 @@
   }
 
   const refreshAllRateLimits = async (accounts?: AccountSummary[]): Promise<void> => {
-    const targets = accounts ?? snapshot.accounts
+    const sourceAccounts = accounts ?? snapshot.accounts
+    const targets = sourceAccounts.filter(
+      (account) =>
+        !isLocalMockAccount(account) &&
+        !isAccountHealthBlocking(snapshot.accountHealthByAccountId?.[account.id])
+    )
     if (!targets.length || refreshingAllUsage) {
       return
     }
