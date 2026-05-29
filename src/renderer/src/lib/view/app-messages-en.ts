@@ -381,6 +381,8 @@ export const enMessages = {
   costStatus: 'Cost status',
   costStatusAllKnown: 'Fully calculable',
   costStatusPartialUnknown: 'Partial pricing unknown',
+  costKnownTotal: 'Calculated cost',
+  costUnpricedTokens: 'Unpriced tokens',
   costStatusNoCost: 'No cost data',
   costUnknown: 'Price unknown',
   topModel: 'Top model',

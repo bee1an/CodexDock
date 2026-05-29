@@ -357,6 +357,8 @@ export const zhMessages = {
   costStatus: '用量状态',
   costStatusAllKnown: '全部可计算',
   costStatusPartialUnknown: '部分价格未知',
+  costKnownTotal: '已计算费用',
+  costUnpricedTokens: '未定价 Tokens',
   costStatusNoCost: '暂无用量',
   costUnknown: '价格未知',
   topModel: '主要消耗模型',

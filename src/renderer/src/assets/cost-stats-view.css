@@ -24,10 +24,18 @@
 
   .stats-info-rail {
     border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+    background: color-mix(in srgb, var(--line-strong) 18%, transparent);
     box-shadow:
       inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
       0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+  }
+
+  .stats-rail-cell {
+    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
+  }
+
+  .stats-rail-row + .stats-rail-row {
+    border-top: 1px solid color-mix(in srgb, var(--line-strong) 28%, transparent);
   }
 
   .account-usage-row {

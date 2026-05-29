@@ -878,6 +878,13 @@
     if (!hasKnown) return copy.costStatusNoCost
     return copy.costStatusAllKnown
   })()
+  $: knownCostTotal = modelBreakdowns
+    .filter((m) => m.costUSD !== null)
+    .reduce((sum, m) => sum + m.costUSD!, 0)
+  $: unpricedTokensTotal = modelBreakdowns
+    .filter((m) => m.costUSD === null)
+    .reduce((sum, m) => sum + m.totalTokens, 0)
+  $: hasUnpricedModels = modelBreakdowns.some((m) => m.costUSD === null)
   $: modelChartHeight = Math.max(280, modelBreakdowns.length * 38)
   $: instanceChartHeight = Math.max(280, instanceUsageRows.length * 38)
   $: trendChartSyncKey = [
@@ -1071,116 +1078,52 @@
       </div>
 
       <div
-        class="stats-info-rail grid gap-3 rounded-[0.45rem] border px-4 py-4 sm:px-5"
+        class="stats-info-rail grid gap-0 rounded-[0.45rem] border overflow-hidden"
         data-motion-item
       >
-        <div class="grid gap-1">
-          <p class="text-[11px] font-bold uppercase tracking-[0.2em] text-faint">
-            {copy.updatedAt}
-          </p>
-          <p class="text-sm font-medium tabular-nums text-carbon">
-            {formatUpdatedAt(selectedSummary?.updatedAt)}
-          </p>
-        </div>
-
-        <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.statsDays}
-            </p>
-            <p class="text-sm font-medium text-carbon">{chartDaily.length}</p>
+        <div class="grid grid-cols-2 gap-px bg-arcticMist/30">
+          <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+            <span class="text-[15px] font-semibold tabular-nums text-carbon">{chartDaily.length}</span>
+            <span class="text-[10px] tracking-wide text-faint">{copy.statsDays}</span>
           </div>
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.modelsUsedCount}
-            </p>
-            <p class="text-sm font-medium text-carbon">{allModelsUsed.length}</p>
+          <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+            <span class="text-[15px] font-semibold tabular-nums text-carbon">{allModelsUsed.length}</span>
+            <span class="text-[10px] tracking-wide text-faint">{copy.modelsUsedCount}</span>
           </div>
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.dailyAvgTokens}
-            </p>
-            <p class="text-sm font-medium tabular-nums text-carbon">
-              {formatTokens(dailyAvgTokens)}
-            </p>
+          <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+            <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatTokens(dailyAvgTokens)}</span>
+            <span class="text-[10px] tracking-wide text-faint">{copy.dailyAvgTokens}</span>
           </div>
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.dailyAvgCost}
-            </p>
-            <p class="text-sm font-medium tabular-nums text-carbon">{formatCost(dailyAvgCost)}</p>
+          <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+            <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatCost(dailyAvgCost)}</span>
+            <span class="text-[10px] tracking-wide text-faint">{copy.dailyAvgCost}</span>
           </div>
           {#if peakDayEntry}
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.peakDay}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatDayLabel(peakDayEntry.date)}
-              </p>
+            <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+              <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatDayLabel(peakDayEntry.date)}</span>
+              <span class="text-[10px] tracking-wide text-faint">{copy.peakDay}</span>
             </div>
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.peakDayTokens}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatTokens(peakDayEntry.totalTokens)}
-              </p>
+            <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+              <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatTokens(peakDayEntry.totalTokens)}</span>
+              <span class="text-[10px] tracking-wide text-faint">{copy.peakDayTokens}</span>
             </div>
           {/if}
-          <div class="grid gap-1">
-            <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-              {copy.costStatus}
-            </p>
-            <p class="text-sm font-medium text-carbon">{costStatusLabel}</p>
-          </div>
+          {#if hasUnpricedModels}
+            <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+              <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatCost(knownCostTotal)}</span>
+              <span class="text-[10px] tracking-wide text-faint">{copy.costKnownTotal}</span>
+            </div>
+            <div class="stats-rail-cell grid gap-0.5 px-3.5 py-2.5">
+              <span class="text-[15px] font-semibold tabular-nums text-carbon">{formatTokens(unpricedTokensTotal)}</span>
+              <span class="text-[10px] tracking-wide text-faint">{copy.costUnpricedTokens}</span>
+            </div>
+          {/if}
         </div>
 
-        {#if todayEntry}
-          <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.today}
-                {copy.inputTokens}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatTokens(todayEntry.inputTokens)}
-              </p>
-            </div>
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.today}
-                {copy.outputTokens}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatTokens(todayEntry.outputTokens)}
-              </p>
-            </div>
-          </div>
-        {/if}
-
-        {#if chartDaily.length}
-          <div class="grid grid-cols-2 gap-3 border-t border-arcticMist/70 pt-3">
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.last30Days}
-                {copy.inputTokens}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatTokens(last30InputTokens)}
-              </p>
-            </div>
-            <div class="grid gap-1">
-              <p class="text-[10px] font-bold uppercase tracking-[0.18em] text-faint">
-                {copy.last30Days}
-                {copy.outputTokens}
-              </p>
-              <p class="text-sm font-medium tabular-nums text-carbon">
-                {formatTokens(last30OutputTokens)}
-              </p>
-            </div>
-          </div>
-        {/if}
+        <div class="flex items-center justify-between gap-3 border-t border-arcticMist/50 px-3.5 py-2">
+          <span class="text-[11px] tabular-nums text-faint">{formatUpdatedAt(selectedSummary?.updatedAt)}</span>
+          <span class="text-[11px] text-faint">{costStatusLabel}</span>
+        </div>
 
         {#if detailError}
           <div
