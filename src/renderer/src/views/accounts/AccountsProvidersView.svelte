@@ -50,6 +50,9 @@
   let showCreateDialog = false
   let showEditDialog = false
   let editDialogProvider: CustomProviderSummary | null = null
+  let editProbingModels = false
+  let editProbeError = ''
+  let editProbedModels: string[] = []
 
   function isSortShadowProvider(provider: CustomProviderSummary): boolean {
     const sortable = provider as CustomProviderSummary & Record<string, unknown>
@@ -139,6 +142,9 @@
   function openEditDialog(provider: CustomProviderSummary): void {
     editDialogProvider = provider
     showEditDialog = true
+    editProbingModels = false
+    editProbeError = ''
+    editProbedModels = []
     void startEditingProvider(provider)
   }
 
@@ -146,7 +152,33 @@
     if (savingProviderId) return
     showEditDialog = false
     editDialogProvider = null
+    editProbingModels = false
+    editProbeError = ''
+    editProbedModels = []
     cancelEditingProvider()
+  }
+
+  async function handleEditProbeModels(): Promise<void> {
+    if (!editDialogProvider) return
+    const draft = providerDrafts[editDialogProvider.id]
+    if (!draft) return
+    const baseUrl = draft.baseUrl.trim()
+    const apiKey = draft.apiKey.trim()
+    if (!baseUrl || !apiKey || editProbingModels || !!savingProviderId) return
+    editProbingModels = true
+    editProbeError = ''
+    editProbedModels = []
+    try {
+      const result = await probeProviderModels({ baseUrl, apiKey, protocol: 'openai' })
+      editProbedModels = result.availableModels
+      if (!result.ok) {
+        editProbeError = result.error || copy.providerModelProbeFailed
+      }
+    } catch (error) {
+      editProbeError = error instanceof Error ? error.message : copy.providerModelProbeFailed
+    } finally {
+      editProbingModels = false
+    }
   }
 
   async function handleSaveProvider(provider: CustomProviderSummary): Promise<void> {
@@ -338,10 +370,24 @@
     </div>
   </div>
 {:else}
-  <div
-    class="theme-tag-empty mx-4 mb-4 flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.4rem] border border-dashed border-[var(--empty-border)] bg-[var(--surface-soft)] px-4 py-8 text-center"
-  >
-    <p class="text-sm text-muted-strong">{copy.noProviders}</p>
+  <div class="providers-empty">
+    <div class="providers-empty-icon">
+      <span class="i-lucide-plug-zap h-7 w-7"></span>
+    </div>
+    <p class="providers-empty-title">{copy.noProviders}</p>
+    <p class="providers-empty-hint">{copy.providerCreateDialogDescription}</p>
+    <div class="providers-empty-actions">
+      <AppButton
+        variant="primary"
+        size="sm"
+        onclick={openCreateDialog}
+        disabled={loginActionBusy || providerMutationBusy}
+        ariaLabel={copy.createProvider}
+      >
+        <span class="i-lucide-plus h-3.5 w-3.5" aria-hidden="true"></span>
+        <span>{copy.createProvider}</span>
+      </AppButton>
+    </div>
   </div>
 {/if}
 
@@ -472,7 +518,7 @@
     closeLabel={copy.closeDialog}
     showClose
     scrollable
-    closeDisabled={!!savingProviderId}
+    closeDisabled={!!savingProviderId || editProbingModels}
     maxWidthClass="max-w-2xl"
     onclose={closeEditDialog}
   >
@@ -481,18 +527,23 @@
         <AppInput
           bind:value={providerDrafts[editDialogProvider.id].name}
           placeholder={copy.providerNamePlaceholder}
-          disabled={!!savingProviderId}
+          disabled={!!savingProviderId || editProbingModels}
         />
         <AppInput
           bind:value={providerDrafts[editDialogProvider.id].baseUrl}
           placeholder={copy.providerBaseUrlPlaceholder}
-          disabled={!!savingProviderId}
+          disabled={!!savingProviderId || editProbingModels}
         />
         <AppInput
           type="password"
           bind:value={providerDrafts[editDialogProvider.id].apiKey}
           placeholder={copy.providerApiKeyPlaceholder}
-          disabled={!!savingProviderId}
+          disabled={!!savingProviderId || editProbingModels}
+          onkeydown={(event) => {
+            if (event.key === 'Enter') {
+              void handleEditProbeModels()
+            }
+          }}
         />
         <AppInput
           bind:value={providerDrafts[editDialogProvider.id].model}
@@ -505,6 +556,53 @@
           }}
         />
       </div>
+
+      <div class="flex flex-wrap items-center gap-2" data-dialog-motion>
+        <AppButton
+          variant="secondary"
+          size="sm"
+          onclick={() => void handleEditProbeModels()}
+          disabled={!!savingProviderId ||
+            editProbingModels ||
+            !providerDrafts[editDialogProvider.id].baseUrl.trim() ||
+            !providerDrafts[editDialogProvider.id].apiKey.trim()}
+        >
+          <span
+            class={`${editProbingModels ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-search'} h-3.5 w-3.5`}
+            aria-hidden="true"
+          ></span>
+          <span>{editProbingModels ? copy.providerModelProbeLoading : copy.providerModelProbe}</span>
+        </AppButton>
+        {#if editProbedModels.length}
+          <span class="text-xs text-muted-strong">
+            {copy.providerModelProbeFound(editProbedModels.length)}
+          </span>
+        {/if}
+      </div>
+
+      {#if editProbeError}
+        <p class="text-sm text-danger" role="alert" data-dialog-motion>{editProbeError}</p>
+      {/if}
+
+      {#if editProbedModels.length}
+        <div class="flex max-h-36 flex-wrap gap-1.5 overflow-y-auto pr-1" data-dialog-motion>
+          {#each editProbedModels as model (model)}
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected={providerDrafts[editDialogProvider.id].model === model}
+              ariaPressed={providerDrafts[editDialogProvider.id].model === model}
+              onclick={() => {
+                if (editDialogProvider) {
+                  providerDrafts[editDialogProvider.id].model = model
+                }
+              }}
+            >
+              <span class="font-mono">{model}</span>
+            </AppButton>
+          {/each}
+        </div>
+      {/if}
     </div>
 
     <svelte:fragment slot="footer">
@@ -512,7 +610,7 @@
         variant="secondary"
         size="sm"
         onclick={closeEditDialog}
-        disabled={!!savingProviderId}
+        disabled={!!savingProviderId || editProbingModels}
       >
         {copy.cancel}
       </AppButton>
@@ -520,7 +618,7 @@
         variant="primary"
         size="sm"
         onclick={() => editDialogProvider && void handleSaveProvider(editDialogProvider)}
-        disabled={!!savingProviderId || !providerDrafts[editDialogProvider.id].baseUrl.trim()}
+        disabled={!!savingProviderId || editProbingModels || !providerDrafts[editDialogProvider.id].baseUrl.trim()}
       >
         <span
           class={`${savingProviderId ? 'i-lucide-loader-circle animate-spin' : 'i-lucide-check'} h-3.5 w-3.5`}
@@ -535,7 +633,13 @@
 <style>
   .theme-provider-divider {
     height: 1px;
-    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
+    margin-right: 0.75rem;
+    margin-left: 3.25rem;
+    background: var(--card-border);
+  }
+
+  :global(.theme-provider-card) {
+    border-radius: 0.5rem;
   }
 
   .provider-drag-button {
@@ -547,7 +651,7 @@
     min-width: 1.5rem;
     height: 1.5rem;
     min-height: 1.5rem;
-    border: 1px solid color-mix(in srgb, var(--color-arctic-mist) 82%, transparent);
+    border: 1px solid var(--card-border);
     border-radius: 0.38rem;
     background: transparent;
     color: var(--ink-faint);
@@ -592,5 +696,54 @@
     :global(.theme-provider-card.is-dnd-shadow) + .theme-provider-card {
       transform: none;
     }
+  }
+
+  .providers-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.65rem;
+    min-height: 14rem;
+    margin: 0 1rem 1rem;
+    padding: 2rem 1.25rem;
+    border: 1px dashed var(--card-border);
+    border-radius: 0.65rem;
+    background: var(--panel-rise);
+    text-align: center;
+  }
+
+  .providers-empty-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 999px;
+    border: 1px solid var(--card-border);
+    background: var(--panel-rise-strong);
+    color: var(--ink-soft-strong);
+  }
+
+  .providers-empty-title {
+    font-size: 0.875rem;
+    font-weight: 650;
+    color: var(--color-carbon);
+    letter-spacing: -0.01em;
+  }
+
+  .providers-empty-hint {
+    max-width: 26rem;
+    font-size: 0.75rem;
+    line-height: 1.55;
+    color: var(--ink-soft-strong);
+  }
+
+  .providers-empty-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 0.4rem;
   }
 </style>

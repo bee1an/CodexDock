@@ -1972,11 +1972,17 @@
     </div>
   </div>
 {:else}
-  <div
-    class="theme-tag-empty flex min-h-0 flex-1 items-center justify-center overflow-y-auto rounded-[0.875rem] border border-dashed border-[var(--empty-border)] bg-[var(--empty-bg)] px-4 py-8 text-center"
-  >
-    <p class="text-sm text-muted-strong">
+  <div class="accounts-empty">
+    <div class="accounts-empty-icon">
+      <span class="i-lucide-users-round h-7 w-7"></span>
+    </div>
+    <p class="accounts-empty-title">
       {normalizedAccountSearch ? copy.noAccountsForSearch : copy.noAccountsForFilter}
     </p>
+    {#if !normalizedAccountSearch}
+      <p class="accounts-empty-hint">
+        {copy.callbackLogin} · {copy.deviceLogin} · {copy.importCurrent}
+      </p>
+    {/if}
   </div>
 {/if}
