@@ -621,6 +621,18 @@ describe('normalizeLocalGatewaySettings', () => {
     expect(result.allowedProviderIds).toEqual(['prov-1', 'prov-2'])
   })
 
+  it('defaults disabledAccountIds to empty array when not provided', () => {
+    const result = normalizeLocalGatewaySettings({})
+    expect(result.disabledAccountIds).toEqual([])
+  })
+
+  it('preserves and deduplicates disabledAccountIds', () => {
+    const result = normalizeLocalGatewaySettings({
+      disabledAccountIds: ['acc-1', 'acc-1', 'acc-2']
+    })
+    expect(result.disabledAccountIds).toEqual(['acc-1', 'acc-2'])
+  })
+
   it('migrates legacy routingMode provider + providerId to allowedProviderIds', () => {
     const result = normalizeLocalGatewaySettings({
       routingMode: 'provider',

@@ -76,6 +76,7 @@
     updateLocalGatewayModelMappings(mappings: LocalGatewayModelMapping[]): Promise<void>
     updateLocalGatewayAllowedGroups(groupIds: string[]): Promise<void>
     updateLocalGatewayAllowedAccounts(accountIds: string[]): Promise<void>
+    updateLocalGatewayDisabledAccounts(accountIds: string[]): Promise<void>
     updateLocalGatewayAllowedProviders(providerIds: string[]): Promise<void>
     updateLocalGatewayPort(port: number): Promise<void>
     updateLocalGatewayAutoStart(autoStart: boolean): Promise<void>

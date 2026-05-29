@@ -434,7 +434,8 @@ function createTray(): void {
               modelMappings: [],
               allowedGroupIds: [],
               allowedAccountIds: [],
-              allowedProviderIds: []
+              allowedProviderIds: [],
+              disabledAccountIds: []
             }
           },
           usageByAccountId: {},

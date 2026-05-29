@@ -719,6 +719,11 @@ export const enMessages = {
   accountDetailsSectionSubscription: 'Subscription & plan',
   accountDetailsSectionTokens: 'Token status',
   accountDetailsSectionTimestamps: 'Timestamps & wake',
+  accountProxyDisabledLabel: 'Bypass local gateway',
+  accountProxyEnableLabel: 'Use local gateway',
+  accountProxyDisabledHint:
+    'When enabled, this account is never proxied by the local gateway, even if its group is allowed.',
+  accountProxyDisabledBadge: 'Proxy bypassed',
   accountDetailsFieldEmail: 'Email',
   accountDetailsFieldName: 'Name',
   accountDetailsFieldAccountId: 'Account ID',

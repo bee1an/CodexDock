@@ -28,6 +28,12 @@ export interface LocalGatewaySettings {
   allowedGroupIds: string[]
   allowedAccountIds: string[]
   allowedProviderIds: string[]
+  /**
+   * Account ids excluded from the local gateway proxy. Acts as a hard
+   * override: if an account is listed here it will never be proxied, even
+   * when one of its groups is in `allowedGroupIds`.
+   */
+  disabledAccountIds: string[]
   visibleColumns?: string[]
 }
 
@@ -1045,7 +1051,8 @@ export function defaultLocalGatewaySettings(): LocalGatewaySettings {
     modelMappings: [],
     allowedGroupIds: [],
     allowedAccountIds: [],
-    allowedProviderIds: []
+    allowedProviderIds: [],
+    disabledAccountIds: []
   }
 }
 
@@ -1135,6 +1142,10 @@ function normalizeAllowedProviderIds(value: unknown): string[] {
   return normalizeSettingsIdList(value)
 }
 
+function normalizeDisabledAccountIds(value: unknown): string[] {
+  return normalizeSettingsIdList(value)
+}
+
 export function normalizeLocalGatewaySettings(
   settings?: Partial<LocalGatewaySettings> | null
 ): LocalGatewaySettings {
@@ -1178,6 +1189,7 @@ export function normalizeLocalGatewaySettings(
     allowedGroupIds: normalizeAllowedGroupIds(settings?.allowedGroupIds),
     allowedAccountIds: normalizeAllowedAccountIds(settings?.allowedAccountIds),
     allowedProviderIds,
+    disabledAccountIds: normalizeDisabledAccountIds(settings?.disabledAccountIds),
     visibleColumns: Array.isArray(settings?.visibleColumns)
       ? settings.visibleColumns.filter((c): c is string => typeof c === 'string' && c.trim() !== '')
       : undefined

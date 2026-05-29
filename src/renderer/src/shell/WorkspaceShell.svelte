@@ -142,12 +142,16 @@
   export let localGatewayAllowedGroupIds: string[] = []
   export let localGatewayAllowedAccountIds: string[] = []
   export let localGatewayAllowedProviderIds: string[] = []
+  export let localGatewayDisabledAccountIds: string[] = []
   export let updateLocalGatewayAllowedGroups: (groupIds: string[]) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedAccounts: (
     accountIds: string[]
   ) => Promise<void> = async () => {}
   export let updateLocalGatewayAllowedProviders: (
     providerIds: string[]
+  ) => Promise<void> = async () => {}
+  export let updateLocalGatewayDisabledAccounts: (
+    accountIds: string[]
   ) => Promise<void> = async () => {}
   export let localGatewayPortOccupant: PortOccupant | null = null
   export let killingLocalGatewayPortOccupant = false
@@ -752,6 +756,16 @@
       {removeAccount}
       {removeAccounts}
       {exportSelectedAccounts}
+      proxyDisabledAccountIds={localGatewayDisabledAccountIds}
+      setAccountProxyDisabled={async (account, disabled) => {
+        const next = new Set(localGatewayDisabledAccountIds)
+        if (disabled) {
+          next.add(account.id)
+        } else {
+          next.delete(account.id)
+        }
+        await updateLocalGatewayDisabledAccounts([...next])
+      }}
       usagePollingMinutes={appSettings.usagePollingMinutes}
       {updatePollingInterval}
     />

@@ -128,6 +128,11 @@
   export let removeAccount: (account: AccountSummary) => void
   export let removeAccounts: (accountIds: string[]) => Promise<void>
   export let exportSelectedAccounts: (accountIds: string[]) => Promise<void>
+  export let proxyDisabledAccountIds: string[] = []
+  export let setAccountProxyDisabled: (
+    account: AccountSummary,
+    disabled: boolean
+  ) => Promise<void> = async () => {}
   export let getAccountTokens: (accountId: string) => Promise<AccountTokensDetail>
   export let tagVisibility: TagVisibilitySettings = {}
   export let updateTagVisibility: (
@@ -1475,6 +1480,20 @@
                 </button>
               {/if}
 
+              {#if proxyDisabledAccountIds.includes(accountId)}
+                <button
+                  transition:fly={{ x: -8, duration: 180 }}
+                  class="theme-proxy-disabled-pill inline-flex min-w-0 max-w-full items-center rounded-[0.32rem] border border-amber-500/22 bg-amber-500/12 px-2 py-0.75 text-[10px] text-amber-700 transition-colors duration-140 hover:bg-amber-500/18"
+                  type="button"
+                  onclick={() => void setAccountProxyDisabled(actionAccount, false)}
+                  disabled={loginActionBusy}
+                  title={copy.accountProxyDisabledHint}
+                >
+                  <span class="i-lucide-shield-off mr-1.5 h-3.5 w-3.5 flex-none"></span>
+                  <span class="truncate">{copy.accountProxyDisabledBadge}</span>
+                </button>
+              {/if}
+
               {#if tagVisibility.groups !== false}
                 {#each accountGroupsForDisplay(groups, account) as group (group.id)}
                   {@const groupLinkKey = `${accountId}:${group.id}`}
@@ -1869,6 +1888,35 @@
                       <span class="i-lucide-refresh-cw h-4 w-4"></span>
                     </span>
                     <span class="flex-1">{copy.forceRefreshTokensButton}</span>
+                  </button>
+
+                  <div class="mx-2 my-1.5 border-t border-[var(--color-arctic-mist)]"></div>
+
+                  <button
+                    class="theme-tag-picker-item group flex w-full appearance-none items-center gap-2.5 rounded-[0.75rem] border-0 bg-transparent px-2 py-1.5 text-left text-[13px] font-medium text-carbon shadow-none outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] active:scale-[0.98] disabled:opacity-50 disabled:active:scale-100"
+                    type="button"
+                    title={copy.accountProxyDisabledHint}
+                    onclick={() => {
+                      void setAccountProxyDisabled(
+                        actionAccount,
+                        !proxyDisabledAccountIds.includes(accountId)
+                      )
+                      closeAccountActionMenu()
+                    }}
+                    disabled={loginActionBusy}
+                  >
+                    <span
+                      class="flex h-7 w-7 flex-none items-center justify-center rounded-md bg-[var(--surface-soft)] text-[var(--ink-faint)] transition-colors duration-140 group-hover:bg-[var(--color-snow)] group-hover:text-carbon"
+                    >
+                      <span
+                        class={`${proxyDisabledAccountIds.includes(accountId) ? 'i-lucide-toggle-right' : 'i-lucide-toggle-left'} h-4 w-4`}
+                      ></span>
+                    </span>
+                    <span class="flex-1">
+                      {proxyDisabledAccountIds.includes(accountId)
+                        ? copy.accountProxyEnableLabel
+                        : copy.accountProxyDisabledLabel}
+                    </span>
                   </button>
 
                   <button

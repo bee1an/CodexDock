@@ -131,6 +131,20 @@
     )
   }
 
+  export const updateLocalGatewayDisabledAccounts = async (
+    accountIds: string[]
+  ): Promise<void> => {
+    const currentGateway = snapshot.settings.localGateway
+    await runAction('settings:gateway-disabled-accounts', () =>
+      window.codexApp.updateSettings({
+        localGateway: {
+          ...(currentGateway ?? {}),
+          disabledAccountIds: accountIds
+        }
+      })
+    )
+  }
+
   export const updateLocalGatewayAllowedProviders = async (
     providerIds: string[]
   ): Promise<void> => {

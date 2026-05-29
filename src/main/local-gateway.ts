@@ -1267,7 +1267,8 @@ export class CodexLocalGatewayService {
     const signature = JSON.stringify({
       groups: [...settings.allowedGroupIds].sort(),
       accounts: [...settings.allowedAccountIds].sort(),
-      providers: [...settings.allowedProviderIds].sort()
+      providers: [...settings.allowedProviderIds].sort(),
+      disabledAccounts: [...settings.disabledAccountIds].sort()
     })
 
     if (this.allowedTargetsSignature && this.allowedTargetsSignature !== signature) {
@@ -2459,6 +2460,7 @@ export class CodexLocalGatewayService {
   private async allowedTargetSets(): Promise<{
     groupIds: Set<string>
     accountIds: Set<string>
+    disabledAccountIds: Set<string>
   } | null> {
     const settings = await this.settings()
     if (!settings.allowedGroupIds.length && !settings.allowedAccountIds.length) {
@@ -2466,15 +2468,23 @@ export class CodexLocalGatewayService {
     }
     return {
       groupIds: new Set(settings.allowedGroupIds),
-      accountIds: new Set(settings.allowedAccountIds)
+      accountIds: new Set(settings.allowedAccountIds),
+      disabledAccountIds: new Set(settings.disabledAccountIds)
     }
   }
 
   private matchesAllowedTargets(
     account: AccountSummary,
-    allowed: { groupIds: Set<string>; accountIds: Set<string> } | null
+    allowed: {
+      groupIds: Set<string>
+      accountIds: Set<string>
+      disabledAccountIds: Set<string>
+    } | null
   ): boolean {
     if (!allowed) {
+      return false
+    }
+    if (allowed.disabledAccountIds.has(account.id)) {
       return false
     }
     return (

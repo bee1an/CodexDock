@@ -45,6 +45,7 @@
     updateLocalGatewayModelMappings(mappings: LocalGatewayModelMapping[]): Promise<void>
     updateLocalGatewayAllowedGroups(groupIds: string[]): Promise<void>
     updateLocalGatewayAllowedAccounts(accountIds: string[]): Promise<void>
+    updateLocalGatewayDisabledAccounts(accountIds: string[]): Promise<void>
     updateLocalGatewayAllowedProviders(providerIds: string[]): Promise<void>
     updateLocalGatewayPort(port: number): Promise<void>
     updateLocalGatewayAutoStart(autoStart: boolean): Promise<void>
@@ -118,7 +119,7 @@
   export let updateTagVisibility: (tagVisibility: TagVisibilitySettings) => Promise<void>
   export let startLogin: (method: LoginMethod) => Promise<void>
   export let runAction: (key: string, task: () => Promise<AppSnapshot>) => Promise<void>
-  export let refreshAllRateLimits: () => Promise<void>
+  export let refreshAllRateLimits: (accounts?: AccountSummary[]) => Promise<void>
   export let bestAccount: () => AccountSummary | null
   export let updateLanguage: (language: 'zh-CN' | 'en') => Promise<void>
   export let updateTheme: (theme: AppTheme, origin?: ThemeTransitionOrigin) => Promise<void>
@@ -160,6 +161,7 @@
   localGatewayModelMappings={snapshot.settings.localGateway?.modelMappings ?? []}
   localGatewayAllowedGroupIds={snapshot.settings.localGateway?.allowedGroupIds ?? []}
   localGatewayAllowedAccountIds={snapshot.settings.localGateway?.allowedAccountIds ?? []}
+  localGatewayDisabledAccountIds={snapshot.settings.localGateway?.disabledAccountIds ?? []}
   groups={snapshot.groups}
   activeAccountId={snapshot.activeAccountId}
   {usageByAccountId}
@@ -206,6 +208,8 @@
     localGatewayActions?.updateLocalGatewayAllowedGroups(groupIds)}
   updateLocalGatewayAllowedAccounts={(accountIds) =>
     localGatewayActions?.updateLocalGatewayAllowedAccounts(accountIds)}
+  updateLocalGatewayDisabledAccounts={(accountIds) =>
+    localGatewayActions?.updateLocalGatewayDisabledAccounts(accountIds)}
   localGatewayAllowedProviderIds={snapshot.settings.localGateway?.allowedProviderIds ?? []}
   updateLocalGatewayAllowedProviders={(providerIds) =>
     localGatewayActions?.updateLocalGatewayAllowedProviders(providerIds)}

@@ -1261,7 +1261,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['group-1'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1318,7 +1319,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['group-1'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1361,7 +1363,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['group-1'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1417,7 +1420,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['group-1'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1482,7 +1486,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: ['account-1'],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1556,7 +1561,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [snapshot.accounts[0].id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1620,7 +1626,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [account.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1682,7 +1689,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [account.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1759,7 +1767,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [account.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1806,7 +1815,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['group-1'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -1823,7 +1833,8 @@ describe('createCodexServices', () => {
           modelMappings: [],
           allowedGroupIds: [],
           allowedAccountIds: [],
-          allowedProviderIds: []
+          allowedProviderIds: [],
+          disabledAccountIds: []
         }
       })
 
@@ -1905,7 +1916,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [accountA!.id, accountB!.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2011,7 +2023,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [accountA!.id, accountB!.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2111,7 +2124,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [accountA!.id, accountB!.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2195,7 +2209,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [accountA!.id, accountB!.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2422,7 +2437,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: ['all'],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2520,7 +2536,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [],
-        allowedProviderIds: [providerId]
+        allowedProviderIds: [providerId],
+        disabledAccountIds: []
       }
     })
 
@@ -2599,7 +2616,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [account.id],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2661,7 +2679,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [],
-        allowedProviderIds: [allowedProvider.id]
+        allowedProviderIds: [allowedProvider.id],
+        disabledAccountIds: []
       }
     })
 
@@ -2689,7 +2708,8 @@ describe('createCodexServices', () => {
           modelMappings: [],
           allowedGroupIds: ['empty-group'],
           allowedAccountIds: [],
-          allowedProviderIds: []
+          allowedProviderIds: [],
+          disabledAccountIds: []
         }
       })
 
@@ -2735,7 +2755,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [],
-        allowedProviderIds: [openAiProvider.id]
+        allowedProviderIds: [openAiProvider.id],
+        disabledAccountIds: []
       }
     })
 
@@ -2762,7 +2783,8 @@ describe('createCodexServices', () => {
           modelMappings: [],
           allowedGroupIds: ['empty-group'],
           allowedAccountIds: [],
-          allowedProviderIds: []
+          allowedProviderIds: [],
+          disabledAccountIds: []
         }
       })
 
@@ -2800,7 +2822,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [],
-        allowedProviderIds: []
+        allowedProviderIds: [],
+        disabledAccountIds: []
       }
     })
 
@@ -2839,7 +2862,8 @@ describe('createCodexServices', () => {
         modelMappings: [],
         allowedGroupIds: [],
         allowedAccountIds: [],
-        allowedProviderIds: [providerId]
+        allowedProviderIds: [providerId],
+        disabledAccountIds: []
       }
     })
 
