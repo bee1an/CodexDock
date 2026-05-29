@@ -201,7 +201,7 @@
   export let importCurrent: () => void
   export let importAccountsFile: () => void = () => {}
   export let exportAccountsFile: () => void = () => {}
-  export let refreshAllRateLimits: () => void = () => {}
+  export let refreshAllRateLimits: (accounts?: AccountSummary[]) => void = () => {}
   export let refreshingAllUsage = false
   export let wakeAllBusy = false
   export let refreshTokensBatchBusy = false

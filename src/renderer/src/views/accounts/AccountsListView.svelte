@@ -99,7 +99,7 @@
   export let importCurrent: () => void = () => {}
   export let importAccountsFile: () => void = () => {}
   export let exportAccountsFile: () => void = () => {}
-  export let refreshAllRateLimits: () => void = () => {}
+  export let refreshAllRateLimits: (accounts?: AccountSummary[]) => void = () => {}
   export let activateBestAccount: () => void = () => {}
   export let activeGroupFilter = 'all'
   export let selectedAccountIds: string[] = []
@@ -934,7 +934,10 @@
     <AppButton
       variant="secondary"
       size="xs"
-      onclick={refreshAllRateLimits}
+      onclick={() =>
+        refreshAllRateLimits(
+          activeGroupFilter === 'all' ? undefined : groupFilteredAccounts
+        )}
       disabled={loginActionBusy || refreshingAllUsage}
       ariaLabel={copy.refreshAllQuota}
       title={copy.refreshAllQuota}

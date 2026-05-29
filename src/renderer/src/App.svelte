@@ -755,8 +755,9 @@
     await window.codexApp.installUpdate()
   }
 
-  const refreshAllRateLimits = async (): Promise<void> => {
-    if (!snapshot.accounts.length || refreshingAllUsage) {
+  const refreshAllRateLimits = async (accounts?: AccountSummary[]): Promise<void> => {
+    const targets = accounts ?? snapshot.accounts
+    if (!targets.length || refreshingAllUsage) {
       return
     }
 
@@ -764,9 +765,18 @@
     refreshingAllUsage = true
 
     try {
-      for (const account of snapshot.accounts) {
-        await readRateLimits(account, { force: true })
+      const concurrency = 6
+      const queue = [...targets]
+      const runWorker = async (): Promise<void> => {
+        while (queue.length) {
+          const account = queue.shift()
+          if (!account) return
+          await readRateLimits(account, { force: true })
+        }
       }
+      await Promise.all(
+        Array.from({ length: Math.min(concurrency, targets.length) }, () => runWorker())
+      )
     } finally {
       refreshingAllUsage = false
     }
