@@ -2383,7 +2383,7 @@ describe('createCodexServices', () => {
       pushLog(input: Omit<LocalGatewayLogEntry, 'id' | 'timestamp'>): Promise<void>
     }
 
-    for (let index = 0; index < 85; index += 1) {
+    for (let index = 0; index < 1005; index += 1) {
       await writableGateway.pushLog({
         method: 'GET',
         path: `/v1/models/${index}`,
@@ -2396,11 +2396,11 @@ describe('createCodexServices', () => {
     const reloaded = createLocalGatewayForTest(env, platform)
     const logs = (await reloaded.status()).logs ?? []
 
-    expect(logs).toHaveLength(80)
+    expect(logs).toHaveLength(1000)
     expect(logs[0]).toMatchObject({
       method: 'GET',
-      path: '/v1/models/84',
-      model: 'model-84'
+      path: '/v1/models/1004',
+      model: 'model-1004'
     })
     expect(logs.at(-1)?.path).toBe('/v1/models/5')
   })

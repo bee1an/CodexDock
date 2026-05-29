@@ -61,6 +61,7 @@ type GatewayLogMeta = Pick<
 
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 const NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE = 'No available Codex account for local gateway.'
+const LOCAL_GATEWAY_LOG_LIMIT = 1000
 
 function logTargetFromAccount(account: AccountSummary): string {
   return account.email || account.name || account.id
@@ -2668,7 +2669,7 @@ export class CodexLocalGatewayService {
       this.requestLogs = entries
         .map((entry) => this.normalizePersistedLog(entry))
         .filter((entry): entry is LocalGatewayLogEntry => Boolean(entry))
-        .slice(0, 80)
+        .slice(0, LOCAL_GATEWAY_LOG_LIMIT)
       this.requestLogSeq = this.requestLogs.length
     } catch {
       this.requestLogs = []
@@ -2735,7 +2736,7 @@ export class CodexLocalGatewayService {
       timestamp: new Date().toISOString(),
       ...input
     }
-    this.requestLogs = [entry, ...this.requestLogs].slice(0, 80)
+    this.requestLogs = [entry, ...this.requestLogs].slice(0, LOCAL_GATEWAY_LOG_LIMIT)
     return this.persistLogs()
   }
 }
