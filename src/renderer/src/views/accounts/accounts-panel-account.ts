@@ -5,7 +5,12 @@ import type { LocalizedCopy } from '$lib/view/app-view'
 
 export const ungroupedFilterId = '__ungrouped__'
 
-export type AccountUsageSortField = 'primary' | 'secondary' | 'accessTokenExpiry'
+export type AccountUsageSortField =
+  | 'primary'
+  | 'secondary'
+  | 'primaryReset'
+  | 'secondaryReset'
+  | 'accessTokenExpiry'
 export type AccountUsageSortDirection = 'asc' | 'desc'
 
 export interface PersistedUsageSortOrder {
@@ -94,6 +99,12 @@ function usageRemainingForSort(
 ): number | null {
   if (field === 'accessTokenExpiry') {
     return null
+  }
+  if (field === 'primaryReset') {
+    return usageByAccountId[accountId]?.primary?.resetsAt ?? null
+  }
+  if (field === 'secondaryReset') {
+    return usageByAccountId[accountId]?.secondary?.resetsAt ?? null
   }
   const window = usageByAccountId[accountId]?.[field]
   return window ? remainingPercent(window.usedPercent) : null

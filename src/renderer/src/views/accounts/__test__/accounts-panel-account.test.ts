@@ -191,6 +191,42 @@ describe('accounts panel account helpers', () => {
     ).toEqual(['acct-late', 'acct-mid', 'acct-soon', 'acct-none'])
   })
 
+  it('sorts accounts by primary/secondary reset time with missing values trailing', () => {
+    const sortableAccounts = [
+      { ...accounts[0], id: 'acct-late' },
+      { ...accounts[0], id: 'acct-soon' },
+      { ...accounts[0], id: 'acct-none' }
+    ]
+    const usageByAccountId: Record<string, AccountRateLimits> = {
+      'acct-late': createUsage({
+        primary: { usedPercent: 50, windowDurationMins: 300, resetsAt: 3_000 },
+        secondary: { usedPercent: 50, windowDurationMins: 10080, resetsAt: 1_000 }
+      }),
+      'acct-soon': createUsage({
+        primary: { usedPercent: 50, windowDurationMins: 300, resetsAt: 1_000 },
+        secondary: { usedPercent: 50, windowDurationMins: 10080, resetsAt: 3_000 }
+      }),
+      'acct-none': createUsage({ primary: null, secondary: null })
+    }
+
+    expect(
+      sortAccountsByUsage(sortableAccounts, usageByAccountId, 'primaryReset', 'asc').map((a) => a.id)
+    ).toEqual(['acct-soon', 'acct-late', 'acct-none'])
+    expect(
+      sortAccountsByUsage(sortableAccounts, usageByAccountId, 'primaryReset', 'desc').map((a) => a.id)
+    ).toEqual(['acct-late', 'acct-soon', 'acct-none'])
+    expect(
+      sortAccountsByUsage(sortableAccounts, usageByAccountId, 'secondaryReset', 'asc').map(
+        (a) => a.id
+      )
+    ).toEqual(['acct-late', 'acct-soon', 'acct-none'])
+    expect(
+      sortAccountsByUsage(sortableAccounts, usageByAccountId, 'secondaryReset', 'desc').map(
+        (a) => a.id
+      )
+    ).toEqual(['acct-soon', 'acct-late', 'acct-none'])
+  })
+
   it('selects accounts whose access token expires within the threshold', () => {
     const now = 10_000
     const candidates = [

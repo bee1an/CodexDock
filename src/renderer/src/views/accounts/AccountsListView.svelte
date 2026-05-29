@@ -243,6 +243,18 @@
       label: () => copy.accountSortPrimaryDesc
     },
     {
+      field: 'primaryReset',
+      direction: 'asc',
+      icon: 'i-lucide-clock-arrow-down',
+      label: () => copy.accountSortPrimaryResetAsc
+    },
+    {
+      field: 'primaryReset',
+      direction: 'desc',
+      icon: 'i-lucide-clock-arrow-up',
+      label: () => copy.accountSortPrimaryResetDesc
+    },
+    {
       field: 'secondary',
       direction: 'asc',
       icon: 'i-lucide-arrow-up-narrow-wide',
@@ -253,6 +265,18 @@
       direction: 'desc',
       icon: 'i-lucide-arrow-down-wide-narrow',
       label: () => copy.accountSortSecondaryDesc
+    },
+    {
+      field: 'secondaryReset',
+      direction: 'asc',
+      icon: 'i-lucide-clock-arrow-down',
+      label: () => copy.accountSortSecondaryResetAsc
+    },
+    {
+      field: 'secondaryReset',
+      direction: 'desc',
+      icon: 'i-lucide-clock-arrow-up',
+      label: () => copy.accountSortSecondaryResetDesc
     },
     {
       field: 'accessTokenExpiry',

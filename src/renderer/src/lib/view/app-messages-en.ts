@@ -445,8 +445,12 @@ export const enMessages = {
   accountSortByUsage: 'Sort by usage',
   accountSortPrimaryAsc: 'First window remaining ascending',
   accountSortPrimaryDesc: 'First window remaining descending',
+  accountSortPrimaryResetAsc: 'First window resetting soonest first',
+  accountSortPrimaryResetDesc: 'First window resetting latest first',
   accountSortSecondaryAsc: 'Second window remaining ascending',
   accountSortSecondaryDesc: 'Second window remaining descending',
+  accountSortSecondaryResetAsc: 'Second window resetting soonest first',
+  accountSortSecondaryResetDesc: 'Second window resetting latest first',
   accountSortAccessTokenExpiryAsc: 'Access token expiring soonest first',
   accountSortAccessTokenExpiryDesc: 'Access token expiring latest first',
   deleteGroupConfirm: (name: string) =>
