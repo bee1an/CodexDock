@@ -222,6 +222,9 @@
   let removingSelection = false
   let removingGroupLink = ''
   let updatingHealthAccountId = ''
+  let copiedEmailAccountId = ''
+  let copyEmailFailedAccountId = ''
+  let copyEmailFeedbackTimer: ReturnType<typeof setTimeout> | null = null
 
   type AccountStatusFilter = 'all' | 'normal' | 'issue' | 'auth_error' | 'rate_limited'
 
@@ -574,6 +577,46 @@
 
   function accountHealthBlocked(account: AccountSummary): boolean {
     return isAccountHealthBlocking(accountHealth(sortableAccountId(account)))
+  }
+
+  function copyEmailFeedbackTitle(accountId: string): string {
+    if (copiedEmailAccountId === accountId) return copy.accountEmailCopied
+    if (copyEmailFailedAccountId === accountId) return copy.accountEmailCopyFailed
+    return copy.accountEmailCopy
+  }
+
+  async function handleCopyAccountEmail(account: AccountSummary): Promise<void> {
+    const value = accountEmail(account, copy)
+    if (!value) return
+    if (copyEmailFeedbackTimer) {
+      clearTimeout(copyEmailFeedbackTimer)
+      copyEmailFeedbackTimer = null
+    }
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(value)
+      } else {
+        const helper = document.createElement('textarea')
+        helper.value = value
+        helper.setAttribute('readonly', '')
+        helper.style.position = 'fixed'
+        helper.style.opacity = '0'
+        document.body.appendChild(helper)
+        helper.select()
+        document.execCommand('copy')
+        document.body.removeChild(helper)
+      }
+      copiedEmailAccountId = account.id
+      copyEmailFailedAccountId = ''
+    } catch {
+      copyEmailFailedAccountId = account.id
+      copiedEmailAccountId = ''
+    }
+    copyEmailFeedbackTimer = setTimeout(() => {
+      copiedEmailAccountId = ''
+      copyEmailFailedAccountId = ''
+      copyEmailFeedbackTimer = null
+    }, 1500)
   }
 
   function accountHealthTitle(health: AccountHealth | undefined): string {
@@ -1548,6 +1591,21 @@
               <p class="min-w-0 truncate text-sm font-medium leading-5 text-carbon">
                 {accountEmail(account, copy)}
               </p>
+              <AppButton
+                variant="icon"
+                size="xs"
+                onclick={() => handleCopyAccountEmail(account)}
+                ariaLabel={`${copy.accountEmailCopy} · ${accountEmail(account, copy)}`}
+                title={copyEmailFeedbackTitle(accountId)}
+              >
+                {#if copiedEmailAccountId === accountId}
+                  <span class="i-lucide-check h-3.5 w-3.5 text-emerald-600"></span>
+                {:else if copyEmailFailedAccountId === accountId}
+                  <span class="i-lucide-x h-3.5 w-3.5 text-red-600"></span>
+                {:else}
+                  <span class="i-lucide-copy h-3.5 w-3.5"></span>
+                {/if}
+              </AppButton>
             </div>
 
             <div class="mt-[-2px] flex min-w-0 flex-wrap items-center gap-1.5">
