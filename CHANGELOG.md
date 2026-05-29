@@ -2,6 +2,19 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.15 - 2026-05-29
+
+This release adds per-account local gateway bypass, two new account sort orders by reset time, and parallelizes the refresh-all action; surfaces across the app are also rebuilt for clearer dark-mode elevation.
+
+- Added a per-account toggle that takes the account out of the local gateway proxy even when its group is allowed; surfaced as a menu item in the account row dropdown and as an inline pill on the row itself.
+- Added two new account sort options: by first window reset time and by second window reset time, each with ascending and descending orders.
+- Refreshing rate limits now runs up to 6 accounts in parallel; in a group view the refresh button only refreshes the accounts visible under that group.
+- Reworked the visual elevation system across the app: introduced `--panel-rise` tokens, flattened the soft panel, lifted skill library cards, rebuilt the accounts empty state, restyled the local gateway and settings surfaces.
+- Rebuilt the sessions instance filter as a row of tabs and the cost stats info rail as a compact two-column grid.
+- Collapsed the auto-wake targets section into a disclosure and adjusted related settings surfaces for clarity.
+- Added a theme-aware splash screen to eliminate the startup flash.
+- Skipped animations on chart updates to remove cost stats re-render flicker.
+
 ## 0.4.14 - 2026-05-27
 
 Homebrew upgrade now runs in-process with a dedicated progress window showing real-time logs and phase transitions.
