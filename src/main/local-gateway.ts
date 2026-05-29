@@ -18,6 +18,7 @@ import {
   GATEWAY_USAGE_UNKNOWN_INSTANCE_ID,
   isLocalMockAccount,
   isAccountHealthBlocking,
+  accountHealthStatus,
   localGatewayBaseUrl,
   maskLocalGatewayApiKey,
   normalizeLocalGatewaySettings,
@@ -62,6 +63,64 @@ type GatewayLogMeta = Pick<
 const DEFAULT_CHATGPT_BASE_URL = 'https://chatgpt.com/backend-api'
 const NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE = 'No available Codex account for local gateway.'
 const LOCAL_GATEWAY_LOG_LIMIT = 1000
+
+type NoAccountReason =
+  | 'mock'
+  | 'health_auth_error'
+  | 'health_rate_limited'
+  | 'not_allowed'
+  | 'disabled'
+  | 'previously_attempted'
+
+interface NoAccountDiagnosis {
+  totalAccounts: number
+  allowedTargetsConfigured: boolean
+  excludedAccountIds: string[]
+  filtered: Array<{
+    id: string
+    label: string
+    reason: NoAccountReason
+  }>
+  summary: string
+}
+
+class NoAvailableCodexAccountError extends Error {
+  readonly diagnosis: NoAccountDiagnosis
+  constructor(diagnosis: NoAccountDiagnosis) {
+    super(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE)
+    this.diagnosis = diagnosis
+  }
+}
+
+function summarizeNoAccountDiagnosis(input: {
+  total: number
+  allowedTargetsConfigured: boolean
+  excluded: number
+  filtered: NoAccountDiagnosis['filtered']
+}): string {
+  const counters: Record<NoAccountReason, number> = {
+    mock: 0,
+    health_auth_error: 0,
+    health_rate_limited: 0,
+    not_allowed: 0,
+    disabled: 0,
+    previously_attempted: 0
+  }
+  for (const entry of input.filtered) {
+    counters[entry.reason] += 1
+  }
+  const parts: string[] = []
+  parts.push(`total=${input.total}`)
+  parts.push(`allowed_configured=${input.allowedTargetsConfigured ? 'yes' : 'no'}`)
+  if (input.excluded) parts.push(`previously_attempted=${input.excluded}`)
+  if (counters.mock) parts.push(`mock=${counters.mock}`)
+  if (counters.health_auth_error) parts.push(`auth_error=${counters.health_auth_error}`)
+  if (counters.health_rate_limited)
+    parts.push(`rate_limited=${counters.health_rate_limited}`)
+  if (counters.disabled) parts.push(`disabled_proxy=${counters.disabled}`)
+  if (counters.not_allowed) parts.push(`not_allowed=${counters.not_allowed}`)
+  return parts.join(', ')
+}
 
 function logTargetFromAccount(account: AccountSummary): string {
   return account.email || account.name || account.id
@@ -110,7 +169,8 @@ function resolveCodexResponsesUrl(): string {
 function openAiError(
   message: string,
   status = 400,
-  code?: string
+  code?: string,
+  details?: unknown
 ): { status: number; body: unknown } {
   return {
     status,
@@ -118,14 +178,22 @@ function openAiError(
       error: {
         message,
         type: 'invalid_request_error',
-        code: code ?? null
+        code: code ?? null,
+        ...(details === undefined ? {} : { details })
       }
     }
   }
 }
 
 function isNoAvailableCodexAccountError(error: unknown): boolean {
+  if (error instanceof NoAvailableCodexAccountError) {
+    return true
+  }
   return error instanceof Error && error.message === NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE
+}
+
+function diagnosisFromError(error: unknown): NoAccountDiagnosis | null {
+  return error instanceof NoAvailableCodexAccountError ? error.diagnosis : null
 }
 
 async function readRequestBody(request: IncomingMessage): Promise<Buffer> {
@@ -1088,6 +1156,7 @@ export class CodexLocalGatewayService {
   private logsPersistTask: Promise<void> | null = null
   private stickyTargets = new Map<string, StickyTarget>()
   private allowedTargetsSignature = ''
+  private lastNoAccountDiagnosis: NoAccountDiagnosis | null = null
 
   constructor(
     private readonly options: {
@@ -1591,7 +1660,7 @@ export class CodexLocalGatewayService {
           response,
           503,
           isNoAvailableCodexAccountError(error)
-            ? openAiError(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE, 503, 'no_account').body
+            ? this.noAccountErrorBody(error)
             : openAiError('No available provider for local gateway.', 503, 'no_provider').body
         )
       }
@@ -1663,7 +1732,7 @@ export class CodexLocalGatewayService {
       writeJson(
         response,
         503,
-        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+        this.noAccountErrorBody()
       )
       return
     }
@@ -1758,7 +1827,7 @@ export class CodexLocalGatewayService {
         writeJson(
           response,
           503,
-          openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+          this.noAccountErrorBody()
         )
       }
       return
@@ -1869,7 +1938,7 @@ export class CodexLocalGatewayService {
       writeJson(
         response,
         503,
-        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+        this.noAccountErrorBody()
       )
       return
     }
@@ -1939,7 +2008,7 @@ export class CodexLocalGatewayService {
       writeJson(
         response,
         503,
-        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+        this.noAccountErrorBody()
       )
       return
     }
@@ -2076,7 +2145,7 @@ export class CodexLocalGatewayService {
       writeJson(
         response,
         503,
-        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+        this.noAccountErrorBody()
       )
       return
     }
@@ -2146,7 +2215,7 @@ export class CodexLocalGatewayService {
       writeJson(
         response,
         503,
-        openAiError('No available Codex account for local gateway.', 503, 'no_account').body
+        this.noAccountErrorBody()
       )
       return
     }
@@ -2199,12 +2268,16 @@ export class CodexLocalGatewayService {
     let lastRateLimitAttempt: { upstream: Response; account: AccountSummary } | null = null
 
     while (true) {
-      const account = await this.selectAccountForCodexRequest(stickyKey, attemptedAccountIds)
+      const selection = await this.selectAccountForCodexRequest(stickyKey, attemptedAccountIds)
+      const account = selection.account
       if (!account) {
         if (lastRateLimitAttempt) {
           return lastRateLimitAttempt
         }
-        throw new Error(NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE)
+        console.warn(
+          `[LocalGateway] no Codex account available: ${selection.diagnosis.summary}`
+        )
+        throw new NoAvailableCodexAccountError(selection.diagnosis)
       }
 
       attemptedAccountIds.add(account.id)
@@ -2259,7 +2332,7 @@ export class CodexLocalGatewayService {
   private async selectAccountForCodexRequest(
     stickyKey: string | null,
     excludedAccountIds: Set<string>
-  ): Promise<AccountSummary | null> {
+  ): Promise<{ account: AccountSummary | null; diagnosis: NoAccountDiagnosis }> {
     if (stickyKey) {
       const sticky = this.resolveSticky(stickyKey, 'openai')
       if (sticky?.kind === 'account') {
@@ -2268,14 +2341,23 @@ export class CodexLocalGatewayService {
         } else {
           const stickyAccount = await this.accountById(sticky.id)
           if (stickyAccount) {
-            return stickyAccount
+            return {
+              account: stickyAccount,
+              diagnosis: {
+                totalAccounts: 1,
+                allowedTargetsConfigured: true,
+                excludedAccountIds: [...excludedAccountIds],
+                filtered: [],
+                summary: 'sticky_hit'
+              }
+            }
           }
           this.evictSticky(stickyKey)
         }
       }
     }
 
-    return this.bestAccount(excludedAccountIds)
+    return this.bestAccountWithDiagnosis(excludedAccountIds)
   }
 
   private async fetchCodexWithAccountAndRefresh(
@@ -2420,26 +2502,111 @@ export class CodexLocalGatewayService {
     return provider.name || provider.id
   }
 
-  private async bestAccount(
+  private async bestAccountWithDiagnosis(
     excludedAccountIds = new Set<string>()
-  ): Promise<AccountSummary | null> {
+  ): Promise<{ account: AccountSummary | null; diagnosis: NoAccountDiagnosis }> {
     const snapshot = await this.options.store.getSnapshot(false)
     const accountHealthByAccountId = snapshot.accountHealthByAccountId ?? {}
     this.evictStickyForUnhealthyAccounts(accountHealthByAccountId)
     const allowed = await this.allowedTargetSets()
-    const accounts = snapshot.accounts.filter(
-      (account) =>
-        !excludedAccountIds.has(account.id) &&
-        !isLocalMockAccount(account) &&
-        !isAccountHealthBlocking(accountHealthByAccountId[account.id]) &&
-        this.matchesAllowedTargets(account, allowed)
-    )
-    return resolveBestAccount(
-      accounts,
+    const filtered: NoAccountDiagnosis['filtered'] = []
+    const candidates: AccountSummary[] = []
+    for (const account of snapshot.accounts) {
+      const reason = this.classifyAccountForGateway(
+        account,
+        excludedAccountIds,
+        accountHealthByAccountId,
+        allowed
+      )
+      if (reason) {
+        filtered.push({
+          id: account.id,
+          label: logTargetFromAccount(account),
+          reason
+        })
+      } else {
+        candidates.push(account)
+      }
+    }
+    const account = resolveBestAccount(
+      candidates,
       snapshot.usageByAccountId,
       snapshot.activeAccountId,
       accountHealthByAccountId
     )
+    const diagnosis: NoAccountDiagnosis = {
+      totalAccounts: snapshot.accounts.length,
+      allowedTargetsConfigured: allowed !== null,
+      excludedAccountIds: [...excludedAccountIds],
+      filtered,
+      summary: summarizeNoAccountDiagnosis({
+        total: snapshot.accounts.length,
+        allowedTargetsConfigured: allowed !== null,
+        excluded: excludedAccountIds.size,
+        filtered
+      })
+    }
+    if (!account) {
+      this.lastNoAccountDiagnosis = diagnosis
+    }
+    return { account, diagnosis }
+  }
+
+  private consumeNoAccountDiagnosis(error?: unknown): NoAccountDiagnosis | null {
+    const fromError = diagnosisFromError(error)
+    if (fromError) {
+      this.lastNoAccountDiagnosis = null
+      return fromError
+    }
+    const cached = this.lastNoAccountDiagnosis
+    this.lastNoAccountDiagnosis = null
+    return cached
+  }
+
+  private noAccountErrorBody(error?: unknown): unknown {
+    const diagnosis = this.consumeNoAccountDiagnosis(error)
+    return openAiError(
+      NO_AVAILABLE_CODEX_ACCOUNT_MESSAGE,
+      503,
+      'no_account',
+      diagnosis ?? undefined
+    ).body
+  }
+
+  private classifyAccountForGateway(
+    account: AccountSummary,
+    excludedAccountIds: Set<string>,
+    accountHealthByAccountId: Record<string, AccountHealth | null | undefined>,
+    allowed: {
+      groupIds: Set<string>
+      accountIds: Set<string>
+      disabledAccountIds: Set<string>
+    } | null
+  ): NoAccountReason | null {
+    if (excludedAccountIds.has(account.id)) {
+      return 'previously_attempted'
+    }
+    if (isLocalMockAccount(account)) {
+      return 'mock'
+    }
+    const health = accountHealthByAccountId[account.id]
+    if (isAccountHealthBlocking(health)) {
+      const status = accountHealthStatus(health)
+      return status === 'auth_error' ? 'health_auth_error' : 'health_rate_limited'
+    }
+    if (!allowed) {
+      return 'not_allowed'
+    }
+    if (allowed.disabledAccountIds.has(account.id)) {
+      return 'disabled'
+    }
+    if (
+      !allowed.accountIds.has(account.id) &&
+      !account.groupIds.some((groupId) => allowed.groupIds.has(groupId))
+    ) {
+      return 'not_allowed'
+    }
+    return null
   }
 
   private async accountById(accountId: string): Promise<AccountSummary | null> {
