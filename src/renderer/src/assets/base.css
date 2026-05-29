@@ -151,6 +151,10 @@
   --card-hover-bg: var(--surface-hover);
   --row-divider: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
 
+  /* Elevated panel background — kept identical to card surface in light mode */
+  --panel-rise: var(--color-snow);
+  --panel-rise-strong: var(--color-snow);
+
   /* Workbench / toolbar */
   --workbench-bg: transparent;
   --workbench-border: color-mix(in srgb, var(--line-strong) 64%, transparent);
@@ -375,9 +379,13 @@ body {
 
   /* Card / row surfaces */
   --card-bg: var(--panel-strong);
-  --card-border: color-mix(in srgb, var(--color-frost-white) 18%, transparent);
+  --card-border: color-mix(in srgb, var(--color-frost-white) 28%, transparent);
   --card-hover-bg: var(--surface-hover);
   --row-divider: var(--color-arctic-mist);
+
+  /* Elevated panel background — sits above workbench bg in dark mode */
+  --panel-rise: color-mix(in srgb, var(--color-frost-white) 5%, var(--panel-strong));
+  --panel-rise-strong: color-mix(in srgb, var(--color-frost-white) 8%, var(--panel-strong));
 
   /* Workbench / toolbar */
   --workbench-bg: color-mix(in srgb, var(--surface-soft) 90%, var(--color-fog) 10%);

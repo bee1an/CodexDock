@@ -80,11 +80,11 @@
     background: color-mix(in srgb, black 34%, transparent) !important;
   }
 
-  .theme-toolbar),
+  .theme-toolbar,
   .theme-soft-panel {
-    border-color: color-mix(in srgb, var(--color-arctic-mist) 82%, transparent) !important;
-    background: color-mix(in srgb, var(--panel-strong) 78%, var(--surface-soft)) !important;
-    box-shadow: none;
+    border-color: color-mix(in srgb, var(--line-strong) 62%, transparent) !important;
+    background: var(--panel-rise) !important;
+    box-shadow: none !important;
   }
 
   .workspace-topbar {
@@ -121,14 +121,7 @@
   }
 
   .theme-account-row + .theme-account-row::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: 0.75rem;
-    left: 3.25rem;
-    height: 1px;
-    background: color-mix(in srgb, var(--color-arctic-mist) 62%, transparent);
-    pointer-events: none;
+    content: none !important;
   }
 
   .theme-account-row:has(.theme-checkbox-input:checked) {
@@ -176,7 +169,6 @@
     box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 62%, transparent) inset;
   }
 
-  .theme-provider-card),
   .theme-tag-manager-card {
     border: 0 !important;
     outline: 0 !important;
@@ -184,11 +176,6 @@
     background: transparent !important;
     box-shadow: none;
     position: relative;
-  }
-
-  .theme-provider-card::before),
-  .theme-provider-card::after {
-    content: none !important;
   }
 
   .theme-tag-empty),
