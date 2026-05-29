@@ -304,44 +304,45 @@
           </span>
         </label>
 
-        <div class="grid gap-2 rounded-[0.4rem] border border-[var(--card-border)] px-3 py-2.5">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <div class="grid gap-1">
-              <span class="text-xs font-medium text-carbon">{copy.autoWakeTargets}</span>
-              <span class="text-[11px] leading-4 text-muted-strong">
-                {copy.autoWakeTargetsDescription}
-              </span>
-            </div>
-            <div class="flex flex-wrap items-center gap-2">
-              <span class="theme-version-pill rounded-md px-2 py-0.5 text-[10px] text-muted-strong">
-                {copy.autoWakeTargetSelectedCount(
-                  autoWakeTargetMode === 'all'
-                    ? accounts.length
-                    : autoWakeSelectedAccountIds.length,
-                  accounts.length
-                )}
-              </span>
-              <AppButtonGroup ariaLabel={copy.autoWakeTargets}>
-                <AppButton
-                  variant="filter"
-                  size="xs"
-                  selected={autoWakeTargetMode === 'all'}
-                  ariaPressed={autoWakeTargetMode === 'all'}
-                  onclick={() => setAutoWakeTargetMode('all')}
-                >
-                  {copy.autoWakeTargetAll}
-                </AppButton>
-                <AppButton
-                  variant="filter"
-                  size="xs"
-                  selected={autoWakeTargetMode === 'selected'}
-                  ariaPressed={autoWakeTargetMode === 'selected'}
-                  onclick={() => setAutoWakeTargetMode('selected')}
-                >
-                  {copy.autoWakeTargetCustom}
-                </AppButton>
-              </AppButtonGroup>
-            </div>
+        <details class="settings-disclosure group">
+          <summary class="settings-disclosure-trigger flex cursor-pointer items-center gap-2 select-none">
+            <span class="settings-disclosure-caret i-lucide-chevron-right h-3.5 w-3.5 text-muted-strong transition-transform duration-140 group-open:rotate-90"></span>
+            <span class="text-[11px] font-medium text-muted-strong">{copy.autoWakeTargets}</span>
+            <span class="theme-version-pill rounded-md px-2 py-0.5 text-[10px] text-muted-strong">
+              {copy.autoWakeTargetSelectedCount(
+                autoWakeTargetMode === 'all'
+                  ? accounts.length
+                  : autoWakeSelectedAccountIds.length,
+                accounts.length
+              )}
+            </span>
+          </summary>
+
+        <div class="mt-2 grid gap-2 rounded-[0.4rem] border border-[var(--card-border)] px-3 py-2.5">
+          <div class="flex flex-wrap items-center justify-between gap-2">
+            <span class="text-[11px] leading-4 text-muted-strong">
+              {copy.autoWakeTargetsDescription}
+            </span>
+            <AppButtonGroup ariaLabel={copy.autoWakeTargets}>
+              <AppButton
+                variant="filter"
+                size="xs"
+                selected={autoWakeTargetMode === 'all'}
+                ariaPressed={autoWakeTargetMode === 'all'}
+                onclick={() => setAutoWakeTargetMode('all')}
+              >
+                {copy.autoWakeTargetAll}
+              </AppButton>
+              <AppButton
+                variant="filter"
+                size="xs"
+                selected={autoWakeTargetMode === 'selected'}
+                ariaPressed={autoWakeTargetMode === 'selected'}
+                onclick={() => setAutoWakeTargetMode('selected')}
+              >
+                {copy.autoWakeTargetCustom}
+              </AppButton>
+            </AppButtonGroup>
           </div>
 
           {#if autoWakeTargetMode === 'selected'}
@@ -518,6 +519,7 @@
             />
           </label>
         </div>
+        </details>
       </div>
     </div>
   </section>
@@ -610,18 +612,41 @@
     scrollbar-color: color-mix(in srgb, var(--ink-faint) 46%, transparent) transparent;
   }
 
+  .settings-section {
+    background: color-mix(in srgb, var(--surface-soft) 64%, var(--panel-strong)) !important;
+    border-color: color-mix(in srgb, var(--color-arctic-mist) 100%, transparent) !important;
+    box-shadow:
+      0 2px 6px color-mix(in srgb, var(--edge-dark) 18%, transparent),
+      0 8px 24px -8px color-mix(in srgb, var(--edge-dark) 14%, transparent) !important;
+  }
+
   .settings-section-icon {
-    border-color: color-mix(in srgb, var(--line-strong) 76%, transparent);
-    background: color-mix(in srgb, var(--surface-soft) 72%, transparent);
+    border-color: color-mix(in srgb, var(--line-strong) 86%, transparent);
+    background: color-mix(in srgb, var(--surface-soft) 92%, transparent);
     color: var(--ink-soft-strong);
-    box-shadow: 0 1px 0 color-mix(in srgb, var(--edge-light) 58%, transparent) inset;
   }
 
   .settings-row {
-    border-color: color-mix(in srgb, var(--line-strong) 68%, transparent);
-    background: color-mix(in srgb, var(--panel-strong) 84%, var(--surface-soft));
-    box-shadow:
-      inset 0 1px 0 color-mix(in srgb, var(--edge-light) 44%, transparent),
-      0 1px 0 color-mix(in srgb, var(--edge-dark) 12%, transparent);
+    border-color: color-mix(in srgb, var(--line-strong) 52%, transparent);
+    background: color-mix(in srgb, var(--panel-strong) 72%, transparent);
+    box-shadow: inset 0 1px 4px color-mix(in srgb, var(--edge-dark) 16%, transparent);
+  }
+
+  .settings-disclosure summary {
+    list-style: none;
+  }
+
+  .settings-disclosure summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .settings-disclosure-trigger {
+    padding: 0.3rem 0;
+    border-radius: 0.3rem;
+    transition: color 140ms ease;
+  }
+
+  .settings-disclosure-trigger:hover {
+    color: var(--color-carbon);
   }
 </style>
