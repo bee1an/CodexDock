@@ -173,7 +173,7 @@ describe('AccountsProvidersView', () => {
       }
     })
 
-    await fireEvent.click(screen.getByRole('button', { name: copy.createProvider }))
+    await fireEvent.click(screen.getAllByRole('button', { name: copy.createProvider })[0])
     await fireEvent.input(screen.getByPlaceholderText(copy.providerNamePlaceholder), {
       target: { value: 'Mirror' }
     })
