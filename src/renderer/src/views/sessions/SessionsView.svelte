@@ -20,6 +20,7 @@
   } from '../../../../shared/codex'
   import type { LocalizedCopy } from '$lib/view/app-view'
   import AppButton from '$lib/ui/AppButton.svelte'
+  import AppButtonGroup from '$lib/ui/AppButtonGroup.svelte'
   import AppDialog from '$lib/ui/AppDialog.svelte'
   import AppInput from '$lib/ui/AppInput.svelte'
   import FloatingSelect, { type FloatingSelectOption } from '$lib/ui/FloatingSelect.svelte'
@@ -125,6 +126,8 @@
 
   const floatingSelectButtonClass =
     'theme-select flex h-11 w-full items-center justify-between rounded-[0.4rem] border border-[var(--empty-border)] bg-transparent px-3 py-2 text-sm text-carbon outline-none transition-colors duration-140 hover:bg-[var(--surface-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60'
+  const floatingSelectCompactButtonClass =
+    'sessions-status-select inline-flex h-8 w-auto items-center justify-between gap-2 rounded-[0.4rem] px-2.5 text-[12px] font-medium text-carbon outline-none transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60'
   const floatingSelectMenuClass = 'theme-tag-picker-surface z-[999] rounded-[0.75rem] p-1.5'
   const floatingSelectOptionClass =
     'theme-menu-choice flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm text-muted-strong transition-colors duration-140 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]'
@@ -703,15 +706,12 @@
       ? allKnownInstances
       : allKnownInstances.filter((instance) => instance.id === selectedInstanceId)
 
-  $: instanceFilterOptions = [
-    { value: 'all', label: copy.sessionsAllInstances },
-    ...allKnownInstances.map(
-      (instance): FloatingSelectOption => ({
-        value: instance.id,
-        label: instanceLabel(instance)
-      })
-    )
-  ]
+  $: sessionCountByInstance = projects.reduce<Record<string, number>>((acc, project) => {
+    acc[project.instanceId] = (acc[project.instanceId] ?? 0) + project.sessionCount
+    return acc
+  }, {})
+
+  $: totalSessionCount = projects.reduce((acc, project) => acc + project.sessionCount, 0)
 
   $: statusFilterOptions = [
     { value: 'all', label: copy.sessionsStatusAll },
@@ -768,7 +768,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-4 pb-4">
   <section
-    class="theme-soft-panel grid gap-4 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+    class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
   >
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div class="grid gap-1">
@@ -781,7 +781,7 @@
         {/if}
       </div>
       <AppButton
-        variant="secondary"
+        variant="toolbar"
         size="sm"
         onclick={() => void loadProjects()}
         disabled={loading}
@@ -794,28 +794,53 @@
       </AppButton>
     </div>
 
-    <div class="grid gap-3 md:grid-cols-[220px_180px]">
-      <FloatingSelect
-        options={instanceFilterOptions}
-        value={selectedInstanceId}
-        ariaLabel={copy.sessionsAllInstances}
-        disabled={loading || detailLoading}
-        buttonClass={floatingSelectButtonClass}
-        menuClass={floatingSelectMenuClass}
-        optionClass={floatingSelectOptionClass}
-        activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
-        inactiveOptionClass="bg-transparent hover:bg-[var(--surface-hover)]"
-        on:change={(event) => {
-          selectedInstanceId = event.detail
-        }}
-      />
+    <div class="flex min-h-8 flex-wrap items-center gap-2 pt-1">
+      <AppButtonGroup
+        class="sessions-filter-shell inline-flex min-w-0 max-w-full items-center gap-0 overflow-x-auto rounded-[0.4rem] p-0.5"
+      >
+        <AppButton
+          variant="filter"
+          size="sm"
+          selected={selectedInstanceId === 'all'}
+          ariaPressed={selectedInstanceId === 'all'}
+          onclick={() => {
+            selectedInstanceId = 'all'
+          }}
+        >
+          <span>{copy.sessionsAllInstances}</span>
+          {#if totalSessionCount > 0}
+            <span class="sessions-tab-count">{totalSessionCount}</span>
+          {/if}
+        </AppButton>
+        {#each allKnownInstances as instance (instance.id)}
+          {@const instanceSessionCount = sessionCountByInstance[instance.id] ?? 0}
+          {#if instanceSessionCount > 0 || instance.isDefault}
+            <AppButton
+              variant="filter"
+              size="sm"
+              selected={selectedInstanceId === instance.id}
+              ariaPressed={selectedInstanceId === instance.id}
+              onclick={() => {
+                selectedInstanceId = instance.id
+              }}
+            >
+              <span class="max-w-[8rem] truncate">{instanceLabel(instance)}</span>
+              {#if instanceSessionCount > 0}
+                <span class="sessions-tab-count">{instanceSessionCount}</span>
+              {/if}
+            </AppButton>
+          {/if}
+        {/each}
+      </AppButtonGroup>
+
+      <div class="flex-1"></div>
 
       <FloatingSelect
         options={statusFilterOptions}
         value={statusFilter}
         ariaLabel={copy.sessionsStatusAll}
         disabled={loading || detailLoading}
-        buttonClass={floatingSelectButtonClass}
+        buttonClass={floatingSelectCompactButtonClass}
         menuClass={floatingSelectMenuClass}
         optionClass={floatingSelectOptionClass}
         activeOptionClass="theme-menu-choice-active bg-[var(--surface-soft)]"
@@ -1024,8 +1049,8 @@
       {copy.sessionsEmpty}
     </section>
   {:else}
-    <div class="grid gap-3">
-      {#each visibleInstances as instance (instance.id)}
+    <div class="session-instance-list grid gap-0 overflow-hidden rounded-[0.55rem] border border-[var(--card-border)]">
+      {#each visibleInstances as instance, instanceIndex (instance.id)}
         {@const projectGroups = projectGroupsForInstance(
           instance.id,
           projects,
@@ -1040,9 +1065,9 @@
           0
         )}
         <section
-          class="theme-soft-panel grid gap-3 rounded-[0.55rem] border border-[var(--card-border)] px-4 py-4"
+          class={`session-instance-row grid gap-2.5 px-4 ${!instanceCollapsed ? 'is-expanded pb-3 pt-2.5' : 'py-2.5'} ${instanceIndex > 0 ? 'session-instance-row-border' : ''}`}
         >
-          <div class="flex flex-wrap items-start justify-between gap-3">
+          <div class="flex items-center justify-between gap-3">
             <button
               class="tree-toggle min-w-0 flex-1 text-left"
               type="button"
@@ -1054,30 +1079,18 @@
                 }
               }}
             >
-              <div class="flex flex-wrap items-center gap-2">
+              <div class="flex items-center gap-2">
                 <span class={`tree-caret ${instanceCollapsed ? '' : 'is-open'}`}>›</span>
-                <span class="text-sm font-semibold text-carbon">{instanceLabel(instance)}</span>
-                <span
-                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
-                >
-                  {copy.sessionsCount(instanceSessionCount)}
-                </span>
-                <span
-                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
-                >
-                  {copy.sessionsProjectCount(projectGroups.length)}
-                </span>
-                <span
-                  class="theme-version-pill rounded-[0.3rem] border border-[var(--soft-panel-border)] px-1.5 py-0.5 text-[10px] text-muted-strong"
-                >
-                  {copy.sessionsProviderCount(providerGroups.length)}
-                </span>
+                <span class="text-[13px] font-semibold text-carbon">{instanceLabel(instance)}</span>
+                <span class="session-instance-pill">{copy.sessionsCount(instanceSessionCount)}</span>
+                <span class="session-instance-pill">{copy.sessionsProjectCount(projectGroups.length)}</span>
+                <span class="session-instance-pill">{copy.sessionsProviderCount(providerGroups.length)}</span>
               </div>
-              <p class="mt-1 truncate text-xs text-faint">{instance.codexHome}</p>
             </button>
+            <span class="hidden truncate text-[11px] text-faint sm:block max-w-[40%]" title={instance.codexHome}>{instance.codexHome}</span>
             {#if errorsByInstanceId[instance.id]}
               <div
-                class="max-w-xl rounded-[0.4rem] border border-danger/18 bg-danger/8 px-3 py-2 text-xs text-danger"
+                class="max-w-xl rounded-[0.4rem] border border-danger/18 bg-danger/8 px-3 py-1.5 text-xs text-danger"
               >
                 {errorsByInstanceId[instance.id]}
               </div>
