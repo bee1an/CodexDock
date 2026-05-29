@@ -240,13 +240,25 @@ function mockListSessions(
 }
 
 async function openDefaultInstance(): Promise<void> {
-  await waitFor(() => expect(screen.getByRole('button', { name: /Default/ })).toBeTruthy())
-  await fireEvent.click(screen.getByRole('button', { name: /Default/ }))
+  await waitFor(() => {
+    const buttons = screen.getAllByRole('button', { name: /Default/ })
+    const toggle = buttons.find((el) => el.classList.contains('tree-toggle'))
+    expect(toggle).toBeTruthy()
+  })
+  const buttons = screen.getAllByRole('button', { name: /Default/ })
+  const toggle = buttons.find((el) => el.classList.contains('tree-toggle'))
+  await fireEvent.click(toggle!)
 }
 
 async function openProviderInstance(): Promise<void> {
-  await waitFor(() => expect(screen.getByRole('button', { name: /Provider jaycode/ })).toBeTruthy())
-  await fireEvent.click(screen.getByRole('button', { name: /Provider jaycode/ }))
+  await waitFor(() => {
+    const buttons = screen.getAllByRole('button', { name: /Provider jaycode/ })
+    const toggle = buttons.find((el) => el.classList.contains('tree-toggle'))
+    expect(toggle).toBeTruthy()
+  })
+  const buttons = screen.getAllByRole('button', { name: /Provider jaycode/ })
+  const toggle = buttons.find((el) => el.classList.contains('tree-toggle'))
+  await fireEvent.click(toggle!)
 }
 
 describe('SessionsView', () => {
@@ -272,8 +284,11 @@ describe('SessionsView', () => {
     await openDefaultInstance()
     await waitFor(() => expect(screen.getByText('/repo/default')).toBeTruthy())
 
-    await fireEvent.click(screen.getByRole('button', { name: copy.sessionsAllInstances }))
-    await fireEvent.click(screen.getByRole('option', { name: 'Provider jaycode' }))
+    await fireEvent.click(
+      screen
+        .getAllByRole('button', { name: /Provider jaycode/ })
+        .find((el) => !el.classList.contains('tree-toggle'))!
+    )
     await openProviderInstance()
     await fireEvent.click(screen.getByRole('button', { name: copy.sessionsStatusAll }))
     await fireEvent.click(screen.getByRole('option', { name: copy.sessionsStatusArchived }))
