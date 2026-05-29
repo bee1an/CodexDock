@@ -561,12 +561,32 @@
           </div>
         </section>
       {:else if !skills.length}
-        <section
-          class="theme-soft-panel rounded-[0.55rem] border border-[var(--card-border)] px-4 py-8 text-center text-sm text-muted-strong"
-        >
-          <div class="flex flex-col items-center justify-center gap-2">
-            <span class="i-lucide-book-open h-5 w-5 text-faint"></span>
-            <p>{copy.skillLibraryEmpty}</p>
+        <section class="skill-lib-empty">
+          <div class="skill-lib-empty-icon">
+            <span class="i-lucide-sparkles h-7 w-7"></span>
+          </div>
+          <p class="skill-lib-empty-title">{copy.skillLibraryEmpty}</p>
+          <p class="skill-lib-empty-hint">{copy.skillLibraryDescription}</p>
+          <div class="skill-lib-empty-actions">
+            <AppButton
+              variant="primary"
+              size="sm"
+              onclick={() => {
+                createMode = true
+                currentSkill = null
+              }}
+            >
+              <span class="i-lucide-plus h-3.5 w-3.5"></span>
+              <span>{copy.skillLibraryCreate}</span>
+            </AppButton>
+            <AppButton variant="toolbar" size="sm" onclick={handleImport}>
+              <span class="i-lucide-download h-3.5 w-3.5"></span>
+              <span>{copy.skillLibraryImport}</span>
+            </AppButton>
+            <AppButton variant="toolbar" size="sm" onclick={openCollect}>
+              <span class="i-lucide-package h-3.5 w-3.5"></span>
+              <span>{copy.skillLibraryCollect}</span>
+            </AppButton>
           </div>
         </section>
       {:else}
