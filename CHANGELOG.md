@@ -2,6 +2,17 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.16 - 2026-05-29
+
+This release polishes the accounts list with a status filter and a copy-email shortcut, restores manual usage refresh on unhealthy accounts, auto-refreshes usage when a rate limit window expires, and surfaces actionable diagnosis details on local gateway 503s.
+
+- Added an account-list status filter (all / normal / issue / auth error / rate limited) with live counts that hides under-the-hood states when no account is in them.
+- Added a one-click copy icon next to each account email with success/failure feedback.
+- Manual single-account usage refresh stays clickable on auth-error and rate-limited accounts; the batch refresh and the auto poll continue to skip them.
+- Scheduled an automatic usage refresh as soon as the rate-limit window expires so the displayed quota immediately reflects the recovered state.
+- Local gateway `no_account` 503 responses now include a `details` payload (per-account exclusion reasons and a one-line summary), and the same summary is logged to stderr.
+- Raised retained local gateway request log entries from 80 to 1000 and extracted the limit into a constant.
+
 ## 0.4.15 - 2026-05-29
 
 This release adds per-account local gateway bypass, two new account sort orders by reset time, and parallelizes the refresh-all action; surfaces across the app are also rebuilt for clearer dark-mode elevation.
