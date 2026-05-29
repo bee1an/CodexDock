@@ -147,6 +147,7 @@
   let usageByAccountId: Record<string, AccountRateLimits> = {}
   let usageLoadingByAccountId: Record<string, boolean> = {}
   let usageErrorByAccountId: Record<string, string> = {}
+  const rateLimitRecoveryTimers = new Map<string, ReturnType<typeof setTimeout>>()
   let wakingAccountId = ''
   let wakeAllRunning = false
   let refreshTokensBatchPhase: 'idle' | 'confirming' | 'running' | 'done' = 'idle'
@@ -290,6 +291,54 @@
     usageByAccountId = nextUsageByAccountId
     usageErrorByAccountId = nextUsageErrorByAccountId
     syncUsageState(visibleSnapshot.accounts)
+    scheduleRateLimitRecoveryRefresh()
+  }
+
+  const RATE_LIMIT_RECOVERY_GRACE_MS = 5_000
+
+  const clearRateLimitRecoveryTimers = (keepAccountIds?: Set<string>): void => {
+    for (const [accountId, timer] of rateLimitRecoveryTimers) {
+      if (keepAccountIds && keepAccountIds.has(accountId)) continue
+      clearTimeout(timer)
+      rateLimitRecoveryTimers.delete(accountId)
+    }
+  }
+
+  const scheduleRateLimitRecoveryRefresh = (): void => {
+    const healthMap = snapshot.accountHealthByAccountId ?? {}
+    const accountsById = new Map(snapshot.accounts.map((account) => [account.id, account]))
+    const keepIds = new Set<string>()
+    const now = Date.now()
+
+    for (const [accountId, health] of Object.entries(healthMap)) {
+      if (!health || health.status !== 'rate_limited' || !health.retryAt) continue
+      const account = accountsById.get(accountId)
+      if (!account) continue
+      const retryAtMs = Date.parse(health.retryAt)
+      if (Number.isNaN(retryAtMs)) continue
+      const delay = retryAtMs - now + RATE_LIMIT_RECOVERY_GRACE_MS
+      if (delay <= 0) {
+        clearTimeout(rateLimitRecoveryTimers.get(accountId))
+        rateLimitRecoveryTimers.delete(accountId)
+        void readRateLimits(account, { force: true })
+        continue
+      }
+      const existingTimer = rateLimitRecoveryTimers.get(accountId)
+      if (existingTimer) {
+        clearTimeout(existingTimer)
+      }
+      keepIds.add(accountId)
+      const timer = setTimeout(() => {
+        rateLimitRecoveryTimers.delete(accountId)
+        const refreshedAccount = snapshot.accounts.find((entry) => entry.id === accountId)
+        if (refreshedAccount) {
+          void readRateLimits(refreshedAccount, { force: true })
+        }
+      }, delay)
+      rateLimitRecoveryTimers.set(accountId, timer)
+    }
+
+    clearRateLimitRecoveryTimers(keepIds)
   }
 
   const clearUsageError = (accountId: string): void => {
@@ -855,6 +904,7 @@
       disposeSnapshot()
       disposeUpdateState()
       disposeLogin()
+      clearRateLimitRecoveryTimers()
     }
   })
 </script>
