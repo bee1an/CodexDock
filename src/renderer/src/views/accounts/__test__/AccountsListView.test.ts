@@ -180,6 +180,36 @@ describe('AccountsListView', () => {
     expect(screen.getByText(copy.noAccountsForSearch)).toBeTruthy()
   })
 
+  it('filters visible accounts by current health status', async () => {
+    renderAccountsListView({
+      accountHealthByAccountId: {
+        'acct-2': {
+          status: 'auth_error',
+          reason: 'Refresh token invalidated',
+          source: 'gateway',
+          markedAt: '2026-05-29T00:00:00.000Z',
+          httpStatus: 401
+        }
+      }
+    })
+
+    expect(screen.getByRole('button', { name: '正常 · 1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '异常 · 1' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '账号异常 · 1' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /限额暂停/ })).toBeNull()
+
+    await fireEvent.click(screen.getByRole('button', { name: '正常 · 1' }))
+
+    expect(screen.getByText('grouped@example.com')).toBeTruthy()
+    expect(screen.queryByText('ungrouped@example.com')).toBeNull()
+    expect(screen.getByText(copy.accountSearchResult(1, 2))).toBeTruthy()
+
+    await fireEvent.click(screen.getByRole('button', { name: '异常 · 1' }))
+
+    expect(screen.queryByText('grouped@example.com')).toBeNull()
+    expect(screen.getByText('ungrouped@example.com')).toBeTruthy()
+  })
+
   it('sorts visible accounts by usage and persists the order', async () => {
     const reorderAccounts = vi.fn().mockResolvedValue(undefined)
     renderAccountsListView({

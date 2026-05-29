@@ -12,6 +12,7 @@
 
   import type {
     AccountHealth,
+    AccountHealthStatus,
     AccountRateLimits,
     AccountSummary,
     AccountGroup,
@@ -24,6 +25,7 @@
   } from '../../../../shared/codex'
   import {
     formatRelativeReset,
+    accountHealthStatus,
     isFreePlan,
     isAccountHealthBlocking,
     isLocalMockAccount,
@@ -221,6 +223,16 @@
   let removingGroupLink = ''
   let updatingHealthAccountId = ''
 
+  type AccountStatusFilter = 'all' | 'normal' | 'issue' | 'auth_error' | 'rate_limited'
+
+  interface AccountStatusFilterOption {
+    id: AccountStatusFilter
+    label: string
+    count: number
+  }
+
+  let activeAccountStatusFilter: AccountStatusFilter = 'all'
+
   $: if (
     activeGroupFilter !== 'all' &&
     activeGroupFilter !== ungroupedFilterId &&
@@ -299,14 +311,24 @@
 
   $: normalizedAccountSearch = accountSearchDraft.trim()
   $: groupFilteredAccounts = visibleAccountsForFilter(accounts, activeGroupFilter, groups)
-  $: visibleAccounts = filterAccountsBySearch(
+  $: statusFilterCounts = accountStatusFilterCounts(groupFilteredAccounts)
+  $: availableStatusFilters = accountStatusFilterOptions(statusFilterCounts)
+  $: if (!availableStatusFilters.some((filter) => filter.id === activeAccountStatusFilter)) {
+    activeAccountStatusFilter = 'all'
+  }
+  $: statusFilteredAccounts = filterAccountsByStatus(
     groupFilteredAccounts,
+    activeAccountStatusFilter
+  )
+  $: visibleAccounts = filterAccountsBySearch(
+    statusFilteredAccounts,
     groups,
     accountSearchDraft,
     copy
   )
   $: dragSortDisabled =
     Boolean(normalizedAccountSearch) ||
+    activeAccountStatusFilter !== 'all' ||
     usageSortSaving ||
     activeGroupFilter === ungroupedFilterId ||
     (activeGroupFilter !== 'all' && !groups.some((group) => group.id === activeGroupFilter))
@@ -455,6 +477,99 @@
 
   function accountHealth(accountId: string): AccountHealth | undefined {
     return accountHealthByAccountId[accountId]
+  }
+
+  function effectiveAccountHealthStatus(accountId: string): AccountHealthStatus {
+    return accountHealthStatus(accountHealth(accountId))
+  }
+
+  function accountStatusFilterCounts(filteredAccounts: AccountSummary[]): Record<
+    AccountStatusFilter,
+    number
+  > {
+    return filteredAccounts.reduce<Record<AccountStatusFilter, number>>(
+      (counts, account) => {
+        const status = effectiveAccountHealthStatus(account.id)
+        counts.all += 1
+        counts[status] += 1
+        if (status !== 'normal') {
+          counts.issue += 1
+        }
+        return counts
+      },
+      {
+        all: 0,
+        normal: 0,
+        issue: 0,
+        auth_error: 0,
+        rate_limited: 0
+      }
+    )
+  }
+
+  function accountStatusFilterLabel(label: string, count: number): string {
+    return count > 0 ? `${label} · ${count}` : label
+  }
+
+  function accountStatusFilterOptions(
+    counts: Record<AccountStatusFilter, number>
+  ): AccountStatusFilterOption[] {
+    const options: AccountStatusFilterOption[] = [
+      {
+        id: 'all',
+        label: accountStatusFilterLabel(copy.accountStatusFilterAll, counts.all),
+        count: counts.all
+      },
+      {
+        id: 'normal',
+        label: accountStatusFilterLabel(copy.accountHealthNormal, counts.normal),
+        count: counts.normal
+      }
+    ]
+
+    if (counts.issue > 0) {
+      options.push({
+        id: 'issue',
+        label: accountStatusFilterLabel(copy.accountStatusFilterIssues, counts.issue),
+        count: counts.issue
+      })
+    }
+    if (counts.auth_error > 0) {
+      options.push({
+        id: 'auth_error',
+        label: accountStatusFilterLabel(copy.accountHealthAuthError, counts.auth_error),
+        count: counts.auth_error
+      })
+    }
+    if (counts.rate_limited > 0) {
+      options.push({
+        id: 'rate_limited',
+        label: accountStatusFilterLabel(copy.accountHealthRateLimited, counts.rate_limited),
+        count: counts.rate_limited
+      })
+    }
+
+    return options
+  }
+
+  function filterAccountsByStatus(
+    filteredAccounts: AccountSummary[],
+    statusFilter: AccountStatusFilter
+  ): AccountSummary[] {
+    if (statusFilter === 'all') {
+      return filteredAccounts
+    }
+
+    return filteredAccounts.filter((account) => {
+      const status = effectiveAccountHealthStatus(account.id)
+      if (statusFilter === 'normal') {
+        return status === 'normal'
+      }
+      if (statusFilter === 'issue') {
+        return status !== 'normal'
+      }
+      return status === statusFilter
+    })
   }
 
   function accountHealthBlocked(account: AccountSummary): boolean {
@@ -1126,6 +1241,27 @@
               {/each}
             </AppPopover>
           </div>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-2">
+        <span class="text-[10px] font-medium uppercase tracking-wide text-faint">
+          {copy.accountStatusFilter}
+        </span>
+        <div class="flex flex-wrap gap-1.5">
+          {#each availableStatusFilters as filter (filter.id)}
+            <AppButton
+              variant="filter"
+              size="xs"
+              selected={activeAccountStatusFilter === filter.id}
+              ariaPressed={activeAccountStatusFilter === filter.id}
+              onclick={() => {
+                activeAccountStatusFilter = filter.id
+              }}
+            >
+              {filter.label}
+            </AppButton>
+          {/each}
         </div>
       </div>
 
