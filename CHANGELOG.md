@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## 0.4.17 - 2026-06-04
+
+This patch release restores true isolated Codex multi-open on macOS and makes launch actions responsive again.
+
+- Restored isolated Codex launches on macOS by assigning each managed instance its own Electron user-data directory, so opening another account no longer collapses into the existing browser session.
+- Applied the same isolation flow to account, provider, local gateway, and service-created multi-open launches, keeping all managed Codex entry points consistent.
+- Improved desktop open and multi-open responsiveness by returning an immediate snapshot first and refreshing heavier usage and gateway summaries in the background.
+- Kept desktop and CLI launch behavior aligned through the shared main-process launch pipeline, so no separate CLI follow-up is required for this fix.
+
 ## 0.4.16 - 2026-05-29
 
 This release polishes the accounts list with a status filter and a copy-email shortcut, restores manual usage refresh on unhealthy accounts, auto-refreshes usage when a rate limit window expires, and surfaces actionable diagnosis details on local gateway 503s.
