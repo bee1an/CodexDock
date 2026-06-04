@@ -216,6 +216,8 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     }
   }
 
+  const getImmediateSnapshot = async (): Promise<AppSnapshot> => getBaseSnapshot()
+
   const recordWakeState = async (
     accountId: string,
     source: WakeAccountSource,
@@ -694,11 +696,11 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
       probeModels: probeProviderModels,
       open: async (providerId, workspacePath = options.defaultWorkspacePath) => {
         await startDirectProviderInstance(providerId, workspacePath)
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       openIsolated: async (providerId, workspacePath = options.defaultWorkspacePath) => {
         await startProviderInstance(providerId, workspacePath)
-        return getSnapshot()
+        return getImmediateSnapshot()
       }
     },
     doctor: {
@@ -966,17 +968,17 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
     codex: {
       show: async (workspacePath = options.defaultWorkspacePath) => {
         await showDefaultCodex(workspacePath)
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       open: async (accountId, workspacePath = options.defaultWorkspacePath) => {
         const resolvedAccountId = accountId ? await resolveAccountIdOrThrow(accountId) : undefined
         await startDefaultInstance(workspacePath, resolvedAccountId)
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       openIsolated: async (accountId, workspacePath = options.defaultWorkspacePath) => {
         const resolvedAccountId = await resolveAccountIdOrThrow(accountId)
         await startAccountInstance(resolvedAccountId, workspacePath)
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       openLocalGateway: async (workspacePath = options.defaultWorkspacePath) => {
         const status = await localGatewayService.status()
@@ -989,7 +991,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
           apiKey,
           workspacePath
         })
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       openLocalGatewayIsolated: async (workspacePath = options.defaultWorkspacePath) => {
         const status = await localGatewayService.status()
@@ -1002,7 +1004,7 @@ export function createCodexServices(options: CreateCodexServicesOptions): CodexS
           apiKey,
           workspacePath
         })
-        return getSnapshot()
+        return getImmediateSnapshot()
       },
       openFromService,
       instances: {

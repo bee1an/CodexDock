@@ -307,8 +307,7 @@ function buildTrayMenu(snapshot: AppSnapshot): ReturnType<typeof Menu.buildFromT
   ])
 }
 
-async function refreshTrayTitle(): Promise<AppSnapshot> {
-  const snapshot = await codexServices.getSnapshot()
+function applySnapshotState(snapshot: AppSnapshot): AppSnapshot {
   lastSnapshot = snapshot
   if (tray) {
     tray.setImage(buildTrayImage(snapshot))
@@ -328,6 +327,10 @@ async function refreshTrayTitle(): Promise<AppSnapshot> {
   return snapshot
 }
 
+async function refreshTrayTitle(): Promise<AppSnapshot> {
+  return applySnapshotState(await codexServices.getSnapshot())
+}
+
 function emitUpdateState(updateState: AppUpdateState): void {
   if (tray && lastSnapshot) {
     tray.setContextMenu(buildTrayMenu(lastSnapshot))
@@ -336,6 +339,13 @@ function emitUpdateState(updateState: AppUpdateState): void {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('codex:update-state', updateState)
   }
+}
+
+function refreshTrayTitleInBackground(context: string): void {
+  void refreshTrayTitle().catch((error) => {
+    const detail = error instanceof Error ? error.message : 'Unknown error'
+    console.warn(`Failed to refresh snapshot in background after ${context}: ${detail}`)
+  })
 }
 
 async function triggerUpdateDownload(): Promise<AppUpdateState> {
@@ -894,28 +904,34 @@ app.whenReady().then(async () => {
     codexServices.providers.probeModels(input)
   )
   ipcMain.handle('codex:open-provider-in-codex', async (_, providerId: string) => {
-    await codexServices.providers.open(providerId)
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.providers.open(providerId))
+    refreshTrayTitleInBackground('open-provider-in-codex')
+    return snapshot
   })
   ipcMain.handle('codex:open-provider-isolated-in-codex', async (_, providerId: string) => {
-    await codexServices.providers.openIsolated(providerId)
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.providers.openIsolated(providerId))
+    refreshTrayTitleInBackground('open-provider-isolated-in-codex')
+    return snapshot
   })
   ipcMain.handle('codex:open-local-gateway-in-codex', async () => {
-    await codexServices.codex.openLocalGateway()
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.codex.openLocalGateway())
+    refreshTrayTitleInBackground('open-local-gateway-in-codex')
+    return snapshot
   })
   ipcMain.handle('codex:open-local-gateway-isolated-in-codex', async () => {
-    await codexServices.codex.openLocalGatewayIsolated()
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.codex.openLocalGatewayIsolated())
+    refreshTrayTitleInBackground('open-local-gateway-isolated-in-codex')
+    return snapshot
   })
   ipcMain.handle('codex:open-account-in-codex', async (_, accountId: string) => {
-    await codexServices.codex.open(accountId)
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.codex.open(accountId))
+    refreshTrayTitleInBackground('open-account-in-codex')
+    return snapshot
   })
   ipcMain.handle('codex:open-account-in-isolated-codex', async (_, accountId: string) => {
-    await codexServices.codex.openIsolated(accountId)
-    return refreshTrayTitle()
+    const snapshot = applySnapshotState(await codexServices.codex.openIsolated(accountId))
+    refreshTrayTitleInBackground('open-account-in-isolated-codex')
+    return snapshot
   })
   ipcMain.handle('codex:list-instances', () => codexServices.codex.instances.list())
   ipcMain.handle('codex:get-instance-defaults', () => codexServices.codex.instances.getDefaults())
