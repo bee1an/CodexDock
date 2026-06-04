@@ -14,6 +14,7 @@ import type { PersistedCodexInstance, PersistedDefaultCodexInstance } from './co
 import {
   launchCodexDesktop,
   revealCodexDesktop,
+  resolveCodexElectronUserDataDir,
   resolveAnyCodexDesktopPid,
   resolveManagedCodexPid,
   stopCodexProcess,
@@ -500,7 +501,8 @@ export function createCodexServicesInstanceRuntime(
       extraArgs: input.extraArgs,
       preferAppBundle: input.preferAppBundle,
       requireDesktopExecutable: input.requireDesktopExecutable,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
+      desktopExecutablePath: await getDesktopExecutablePathOverride(),
+      electronUserDataDir: resolveCodexElectronUserDataDir(input.codexHome)
     })
   }
 
@@ -694,7 +696,8 @@ export function createCodexServicesInstanceRuntime(
       extraArgs: instance.extraArgs,
       preferAppBundle: true,
       requireDesktopExecutable: true,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
+      desktopExecutablePath: await getDesktopExecutablePathOverride(),
+      electronUserDataDir: resolveCodexElectronUserDataDir(instance.codexHome)
     })
 
     return toInstanceSummary(await instanceStore.markLaunched(instance.id, pid))
@@ -758,7 +761,8 @@ export function createCodexServicesInstanceRuntime(
       extraArgs: instance.extraArgs,
       preferAppBundle: true,
       requireDesktopExecutable: true,
-      desktopExecutablePath: await getDesktopExecutablePathOverride()
+      desktopExecutablePath: await getDesktopExecutablePathOverride(),
+      electronUserDataDir: resolveCodexElectronUserDataDir(instance.codexHome)
     })
 
     await instanceStore.markLaunched(instance.id, pid)

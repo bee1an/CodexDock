@@ -210,6 +210,29 @@ function resolveMacosAppBundlePath(value?: string): string | undefined {
   return normalized.slice(0, bundleEnd + '.app'.length)
 }
 
+function resolveUserDataDirArg(args: string[]): string | undefined {
+  for (let index = 0; index < args.length; index += 1) {
+    const current = args[index]?.trim()
+    if (!current) {
+      continue
+    }
+
+    if (current.startsWith('--user-data-dir=')) {
+      return current.slice('--user-data-dir='.length).trim() || undefined
+    }
+
+    if (current === '--user-data-dir') {
+      return args[index + 1]?.trim() || undefined
+    }
+  }
+
+  return undefined
+}
+
+export function resolveCodexElectronUserDataDir(codexHome: string): string {
+  return join(resolve(codexHome), '.electron-user-data')
+}
+
 export async function revealCodexDesktop(options?: {
   desktopExecutablePath?: string
 }): Promise<boolean> {
@@ -299,20 +322,43 @@ export async function launchCodexDesktop(options: {
   preferAppBundle?: boolean
   requireDesktopExecutable?: boolean
   desktopExecutablePath?: string
+  electronUserDataDir?: string
 }): Promise<number> {
   const launchCommand = await resolveCodexLaunchCommand({
     preferAppBundle: options.preferAppBundle,
     requireDesktopExecutable: options.requireDesktopExecutable,
     desktopExecutablePath: options.desktopExecutablePath
   })
-  const args = [...parseExtraArgs(options.extraArgs), 'app', options.workspacePath]
+  const parsedExtraArgs = parseExtraArgs(options.extraArgs)
+  const explicitUserDataDir = resolveUserDataDirArg(parsedExtraArgs)
+  const electronUserDataDir = (
+    explicitUserDataDir ||
+    options.electronUserDataDir?.trim() ||
+    undefined
+  )
+    ? resolve(explicitUserDataDir || options.electronUserDataDir?.trim() || '')
+    : undefined
+  const args = [...parsedExtraArgs, 'app', options.workspacePath]
+
+  if (electronUserDataDir && !explicitUserDataDir) {
+    args.push(`--user-data-dir=${electronUserDataDir}`)
+  }
+
+  if (electronUserDataDir) {
+    await fs.mkdir(electronUserDataDir, { recursive: true })
+  }
 
   return await new Promise<number>((resolveLaunch, rejectLaunch) => {
     const child = spawn(launchCommand, args, {
       cwd: options.workspacePath,
       env: {
         ...process.env,
-        CODEX_HOME: options.codexHome
+        CODEX_HOME: options.codexHome,
+        ...(electronUserDataDir
+          ? {
+              CODEX_ELECTRON_USER_DATA_PATH: electronUserDataDir
+            }
+          : {})
       },
       detached: true,
       stdio: 'ignore'
